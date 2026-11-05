@@ -85,6 +85,11 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.getByRole("button", { name: "Simular lead do anúncio" }).click();
   await admin.locator("[name=name]").fill("Cliente de demonstração");
   await admin.locator("[name=phone]").fill("5511999991234");
+  await admin.locator("[name=state_picker]").selectOption("RS");
+  await admin.locator("[name=city_id]").selectOption("4302105");
+  await admin
+    .locator("[name=instagram]")
+    .fill("https://www.instagram.com/saisblue/");
   await admin
     .locator("[name=body]")
     .fill("Olá, vi o anúncio da Sais Blue. Quero saber mais!");
@@ -150,6 +155,75 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .waitFor();
   await member.locator("[data-view=inbox]").click();
   await member.locator(".inbox-item").first().waitFor();
+  // The map groups clients in the same municipality and keeps unlocated leads visible.
+  await admin.evaluate(async () => {
+    await api("/api/contacts", {
+      name: "Segundo cliente de Bento",
+      phone: "5554999990001",
+      city_id: "4302105",
+      instagram: "@cliente_bento",
+    });
+    await api("/api/contacts", {
+      name: "Cliente de São Paulo",
+      phone: "5511999990002",
+      city_id: "3550308",
+    });
+    await api("/api/simulate", {
+      name: "Lead sem localização",
+      phone: "5521999990003",
+      body: "Vim do anúncio",
+    });
+  });
+  await member.reload();
+  await member.locator("[data-view=map]").click();
+  await member
+    .locator("#map-count")
+    .filter({ hasText: "3 lead(s) em 2 cidade(s)" })
+    .waitFor();
+  assert.equal(await member.locator(".lead-pin").count(), 2);
+  await member.locator(".lead-pin").filter({ hasText: "2" }).click();
+  await member
+    .locator(".city-popup")
+    .getByRole("button", { name: "Segundo cliente de Bento · Novo contato" })
+    .waitFor();
+  await member.locator("#map-state").selectOption("RS");
+  await member
+    .locator("#map-count")
+    .filter({ hasText: "2 lead(s) em 1 cidade(s)" })
+    .waitFor();
+  assert.equal(await member.locator(".lead-pin").count(), 1);
+  await member
+    .getByRole("button", { name: "Lead sem localização Preencher cidade / UF" })
+    .click();
+  await member.locator(".location-warning").waitFor();
+  await member.locator("[name=state_picker]").selectOption("RS");
+  await member.locator("[name=city_id]").selectOption("4302105");
+  await member.locator("#detail-form [name=instagram]").fill("@lead_mapeado");
+  await member.getByRole("button", { name: "Salvar oportunidade" }).click();
+  await member.getByText("Oportunidade atualizada.", { exact: true }).waitFor();
+  assert.equal(await member.locator(".location-warning").count(), 0);
+  await member.locator("#close-detail").click();
+  await member.locator("#map-state").selectOption("");
+  await member
+    .locator("#map-count")
+    .filter({ hasText: "4 lead(s) em 2 cidade(s)" })
+    .waitFor();
+  await member.screenshot({
+    path: __dirname + "/preview-map.png",
+    fullPage: true,
+  });
+  await member.setViewportSize({ width: 390, height: 844 });
+  await member.screenshot({
+    path: __dirname + "/preview-map-mobile.png",
+    fullPage: true,
+  });
+  assert.equal(
+    await member.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+    false,
+  );
+  await member.setViewportSize({ width: 1440, height: 1000 });
   await member.locator("[data-view=reports]").click();
   await member.getByText("Distribuição no funil", { exact: true }).waitFor();
   await member.locator("[data-view=settings]").click();
@@ -176,7 +250,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: dois usuários, convite, edição compartilhada, conflito, histórico, notas, persistência, logout e mobile.",
+    "UI OK: equipe, conflitos, cidade/UF, Instagram, mapa, filtros, pendências, persistência e mobile.",
   );
 })()
   .catch((e) => {

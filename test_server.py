@@ -41,7 +41,7 @@ class CRMTest(unittest.TestCase):
         return (client or self.client).post(path, json=data, headers={'X-CSRF-Token':csrf or self.admin_csrf})
 
     def simulate(self):
-        r = self.post('/api/simulate', {'name':'Lead teste', 'phone':'5511999991234', 'body':'Vim do anúncio'})
+        r = self.post('/api/simulate', {'name':'Lead teste', 'phone':'5511999991234', 'body':'Vim do anúncio','city_id':'4302105'})
         self.assertEqual(r.status_code, 200)
         return self.client.get('/api/contacts').json['contacts'][0]
 
@@ -58,8 +58,8 @@ class CRMTest(unittest.TestCase):
         for path in ['/api/contacts','/api/team','/api/status','/api/me']:
             self.assertEqual(anonymous.get(path).status_code, 401)
         self.assertEqual(anonymous.post('/api/messages',json={'body':'test'}).status_code,401)
-        self.assertEqual(self.client.post('/api/contacts',json={'name':'A','phone':'5511999991111'}).status_code,403)
-        r = self.post('/api/contacts', {'name':'A','phone':'5511999991111'})
+        self.assertEqual(self.client.post('/api/contacts',json={'name':'A','phone':'5511999991111','city_id':'4302105'}).status_code,403)
+        r = self.post('/api/contacts', {'name':'A','phone':'5511999991111','city_id':'4302105'})
         self.assertEqual(r.status_code,200)
         self.assertEqual(self.post('/api/logout', {}).status_code,200)
         self.assertEqual(self.client.get('/api/contacts').status_code,401)
@@ -71,7 +71,7 @@ class CRMTest(unittest.TestCase):
         self.assertIn('HttpOnly',cookie)
         self.assertIn('Secure',cookie)
         self.assertIn('SameSite=Lax',cookie)
-        r = self.member.post('/api/contacts',json={'name':'A','phone':'5511999991111'},headers={'X-CSRF-Token':self.member_csrf,'Origin':'https://evil.test'})
+        r = self.member.post('/api/contacts',json={'name':'A','phone':'5511999991111','city_id':'4302105'},headers={'X-CSRF-Token':self.member_csrf,'Origin':'https://evil.test'})
         self.assertEqual(r.status_code,403)
 
     def test_capture_dedup_and_shared_member_edit(self):
@@ -199,6 +199,40 @@ class CRMTest(unittest.TestCase):
         with sqlite3.connect(backup) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM contacts').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM users').fetchone()[0],3)
+
+    def test_required_location_and_instagram_normalization(self):
+        fields={'name':'Cliente de Bento','phone':'5554999992222'}
+        self.assertEqual(self.post('/api/contacts',fields).status_code,400)
+        self.assertEqual(self.post('/api/contacts',{**fields,'city_id':'invalid'}).status_code,400)
+        response=self.post('/api/contacts',{**fields,'city_id':'4302105','city':'Cidade inventada','state':'XX','instagram':'https://www.instagram.com/SaisBlue/?utm_source=test'})
+        self.assertEqual(response.status_code,200)
+        row=self.client.get('/api/contacts').json['contacts'][0]
+        self.assertEqual(row['city'],'Bento Gonçalves')
+        self.assertEqual(row['state'],'RS')
+        self.assertEqual(row['instagram'],'saisblue')
+        self.assertFalse(row['location_pending'])
+        self.assertAlmostEqual(row['latitude'],-29.1662,places=3)
+        self.assertEqual(self.post('/api/update',{'id':row['id'],'revision':row['revision'],'city_id':''}).status_code,400)
+        self.assertEqual(self.post('/api/update',{'id':row['id'],'revision':row['revision'],'instagram':'https://evil.test/saisblue'}).status_code,400)
+        self.assertEqual(self.post('/api/update',{'id':row['id'],'revision':row['revision'],'instagram':'javascript:alert(1)'}).status_code,400)
+        self.assertEqual(self.post('/api/update',{'id':row['id'],'revision':row['revision'],'city_id':'3550308','instagram':'@outro.perfil'}).status_code,200)
+        row=self.client.get('/api/contacts').json['contacts'][0]
+        self.assertEqual((row['city'],row['state'],row['instagram']),('São Paulo','SP','outro.perfil'))
+        self.assertEqual(row['audit'][0]['actor'],'admin')
+
+    def test_whatsapp_without_location_is_preserved_and_must_be_completed(self):
+        self.assertEqual(self.signed(self.meta_payload()).status_code,200)
+        row=self.client.get('/api/contacts').json['contacts'][0]
+        self.assertTrue(row['location_pending'])
+        self.assertIsNone(row['latitude'])
+        self.assertEqual(len(row['messages']),1)
+        self.assertEqual(self.post('/api/update',{'id':row['id'],'revision':row['revision'],'stage':'Em atendimento'}).status_code,400)
+        self.assertEqual(self.post('/api/update',{'id':row['id'],'revision':row['revision'],'city_id':'4302105','stage':'Em atendimento'}).status_code,200)
+        self.signed(self.meta_payload())
+        row=self.client.get('/api/contacts').json['contacts'][0]
+        self.assertFalse(row['location_pending'])
+        self.assertEqual(len(row['messages']),1)
+        self.assertEqual(row['city'],'Bento Gonçalves')
 
     def test_existing_prototype_migrates_without_data_loss(self):
         legacy=Path(self.temp.name)/'legacy.db'

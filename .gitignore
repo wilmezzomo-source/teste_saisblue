@@ -7,7 +7,7 @@ test-results/
 
 .venv/
 backups/
-data/
+/data/
 *.env.local
 
 META-CONFIGURACAO-LOCAL.txt

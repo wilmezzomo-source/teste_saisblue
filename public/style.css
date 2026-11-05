@@ -986,3 +986,241 @@ button:disabled {
   border-radius: 7px;
   margin-top: 15px;
 }
+.required {
+  color: #db7c41;
+}
+.card-location {
+  font-size: 10px;
+  color: #6c859b;
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+.missing-location {
+  color: #b47b21;
+}
+.location-warning {
+  margin: 15px 0 0;
+  padding: 12px 15px;
+  background: #fff6e5;
+  border: 1px solid #f4e1b8;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #997329;
+}
+.instagram-link {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: 12px;
+}
+.instagram-link a,
+.table-wrap a {
+  color: var(--blue);
+  font-size: 12px;
+  text-decoration: none;
+}
+.map-toolbar {
+  flex-wrap: wrap;
+}
+.map-filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.map-filters select {
+  margin: 0;
+  padding: 9px;
+  font-size: 11px;
+  width: auto;
+  max-width: 170px;
+}
+.map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 265px;
+  gap: 18px;
+  margin-top: 18px;
+}
+.map-canvas-wrap {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+#lead-map {
+  height: 540px;
+  width: 100%;
+  background: #e9eff5;
+  z-index: 0;
+}
+.map-summary {
+  padding: 20px;
+  max-height: 540px;
+  overflow: auto;
+}
+.map-summary h3 {
+  font-size: 17px;
+  line-height: 1.5;
+}
+.map-summary p {
+  font-size: 11px;
+}
+#map-status {
+  position: absolute;
+  bottom: 28px;
+  left: 12px;
+  right: 12px;
+  width: fit-content;
+  font-size: 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #ffffffed;
+  padding: 7px 10px;
+  z-index: 450;
+  color: #5b6f88;
+  pointer-events: none;
+}
+.map-city,
+.pending-lead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 12px 0;
+  background: white;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font-size: 11px;
+  color: var(--navy);
+  gap: 8px;
+}
+.map-city b {
+  background: #edf4ff;
+  color: var(--blue);
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+}
+.pending-lead {
+  display: block;
+  color: #9e772d;
+}
+.pending-lead small {
+  display: block;
+  font-size: 9px;
+  color: #a2aab6;
+  margin-top: 5px;
+}
+.map-footnote {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+.lead-pin-wrap {
+  background: none;
+  border: 0;
+}
+.lead-pin {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  background: var(--blue);
+  border: 3px solid white;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  box-shadow: 0 3px 12px #10376945;
+}
+.lead-pin span {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(45deg);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+}
+.city-popup {
+  min-width: 185px;
+  font-family: inherit;
+}
+.city-popup > strong {
+  color: var(--navy);
+  font-size: 13px;
+}
+.city-popup p {
+  color: #8b96a8;
+  font-size: 10px;
+  margin: 7px 0 10px;
+}
+.popup-lead {
+  display: block;
+  width: 100%;
+  background: #f2f6fc;
+  color: #3d608c;
+  text-align: left;
+  border: 0;
+  border-radius: 5px;
+  padding: 10px;
+  font-size: 10px;
+  margin-top: 5px;
+}
+.leaflet-container {
+  font: inherit;
+}
+.leaflet-popup-content {
+  max-height: 270px;
+  overflow: auto;
+}
+.leaflet-control-attribution {
+  font-size: 9px !important;
+}
+.leaflet-control-layers {
+  font-size: 10px !important;
+}
+.leaflet-control-layers input {
+  display: inline;
+  width: auto;
+  margin: 0 4px 0 0;
+}
+@media (max-width: 1100px) {
+  .map-layout {
+    grid-template-columns: minmax(0, 1fr) 215px;
+  }
+  .map-summary {
+    padding: 16px;
+  }
+}
+@media (max-width: 700px) {
+  .map-layout {
+    grid-template-columns: 1fr;
+  }
+  .map-filters {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .map-filters select {
+    flex: 1;
+  }
+  #lead-map {
+    height: 400px;
+  }
+  .map-summary {
+    max-height: 350px;
+  }
+  .map-toolbar .toolbar-title span {
+    display: block;
+    margin: 6px 0 10px;
+    font-size: 10px;
+    line-height: 1.6;
+  }
+  .map-filters .secondary {
+    padding: 10px;
+  }
+  .map-canvas-wrap {
+    min-width: 0;
+  }
+}
+.state-label{background:transparent;border:0;box-shadow:none;color:#7b8da1;font-size:10px;font-weight:600}.state-label:before{display:none}

@@ -4,6 +4,10 @@ Versão própria para funil comercial e atendimento. Todas as pessoas com conta 
 
 **Estado real:** código implementado e testado localmente. Não publicado no domínio da Sais Blue, sem instalação no servidor Windows da empresa e sem conexão à conta real do WhatsApp. Não há administrador ou senha padrão no pacote. A integração com a Meta foi testada com eventos assinados e transporte de envio simulado, sem mensagens reais.
 
+## Localização e mapa
+
+Cidade/UF obrigatórias nos cadastros manuais, Instagram e aba Mapa com pins por município e filtros por UF/etapa. A migração preserva o banco; contatos antigos e mensagens WhatsApp sem cidade ficam sinalizados como pendentes. Confira `AJUSTES-LOCALIZACAO.md` para o fluxo, atualização Windows, fontes cartográficas e limites. A logo e as fontes oficiais ainda aguardam consulta ao site, bloqueada pela política de rede do ambiente.
+
 ## Funcionalidades
 
 - Login individual, senha com scrypt, sessão de 12 horas com cookie HttpOnly e CSRF; Secure em produção.

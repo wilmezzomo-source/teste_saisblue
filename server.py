@@ -19,6 +19,7 @@ from flask import Flask, g, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
+from locations import CITIES, CITY_BY_ID, STATES, location_fields, instagram_handle
 
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Proposta enviada', 'Negociação', 'Ganho', 'Perdido']
@@ -95,7 +96,7 @@ def init_db(app):
         ''')
         # Additive migration preserves the first prototype's data.
         for table, additions in {
-            'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0')],
+            'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''")],
             'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''")],
         }.items():
             existing = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
@@ -210,7 +211,7 @@ def create_app(config=None):
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['X-Frame-Options'] = 'DENY'
-        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         if app.config['SECURE_COOKIE']:
             response.headers['Strict-Transport-Security'] = 'max-age=31536000'
         return response
@@ -221,6 +222,8 @@ def create_app(config=None):
             return jsonify(error=exc.message), exc.status
         if isinstance(exc, sqlite3.IntegrityError):
             return jsonify(error='Registro duplicado ou contato inválido.'), 409
+        if isinstance(exc, ValueError) and request.path in ('/api/contacts','/api/update','/api/simulate'):
+            return jsonify(error=str(exc)), 400
         if isinstance(exc, (ValueError, TypeError, KeyError)):
             return jsonify(error='Dados inválidos. Confira os campos.'), 400
         if isinstance(exc, HTTPException):
@@ -241,6 +244,20 @@ def create_app(config=None):
         if name not in ('style.css', 'app.js', 'auth.js'):
             raise Problem('Página não encontrada.', 404)
         return send_from_directory(ROOT / 'public', name)
+
+    @app.get('/vendor/leaflet/<path:name>')
+    def leaflet_asset(name):
+        if name not in ('leaflet.js','leaflet.css','images/layers.png','images/layers-2x.png'):
+            raise Problem('Arquivo não encontrado.',404)
+        return send_from_directory(ROOT / 'public/vendor/leaflet',name)
+
+    @app.get('/data/brazil-states.geojson')
+    def map_boundaries():
+        return send_from_directory(ROOT / 'public/data','brazil-states.geojson')
+
+    @app.get('/api/cities')
+    def city_catalog():
+        return jsonify(cities=CITIES,states=STATES)
 
     @app.get('/healthz')
     def health():
@@ -363,6 +380,10 @@ def create_app(config=None):
         with database(app) as db:
             rows = [dict(r) for r in db.execute('SELECT * FROM contacts ORDER BY updated DESC')]
             for row in rows:
+                city = CITY_BY_ID.get(row['city_id'])
+                row['location_pending'] = city is None
+                row['latitude'] = city['lat'] if city else None
+                row['longitude'] = city['lng'] if city else None
                 row['messages'] = [dict(m) for m in db.execute('SELECT * FROM messages WHERE contact_id=? ORDER BY created,id', (row['id'],))]
                 row['audit'] = [dict(a) for a in db.execute('SELECT actor,action,details,created FROM audit WHERE contact_id=? ORDER BY id DESC LIMIT 30', (row['id'],))]
         return jsonify(contacts=rows, stages=STAGES)
@@ -371,12 +392,15 @@ def create_app(config=None):
     def new_contact():
         d = data()
         name, number = text(d.get('name', ''), 120), phone(d.get('phone', ''))
+        place = location_fields(d.get('city_id'))
+        instagram = instagram_handle(d.get('instagram',''))
         if not name:
             raise Problem('Informe o nome do contato.')
         cid = secrets.token_hex(12)
         with database(app) as db:
             db.execute('INSERT INTO contacts(id,name,phone,stage,source,created,updated) VALUES(?,?,?,?,?,?,?)', (cid, name, number, STAGES[0], 'Cadastro manual', now(), now()))
-            audit(db, 'Contato criado', cid)
+            db.execute('UPDATE contacts SET city_id=?,city=?,state=?,instagram=? WHERE id=?', (place['city_id'],place['city'],place['state'],instagram,cid))
+            audit(db, 'Contato criado', cid, {'city':place['city'],'state':place['state']})
         return jsonify(ok=True, id=cid)
 
     @app.post('/api/simulate')
@@ -385,17 +409,25 @@ def create_app(config=None):
             raise Problem('Simulações estão desabilitadas neste ambiente.', 403)
         d = data()
         body = text(d.get('body', ''))
+        place = location_fields(d['city_id']) if d.get('city_id') else None
+        instagram = instagram_handle(d.get('instagram',''))
         if not body:
             raise Problem('Informe a mensagem recebida.')
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
             ingest(db, d.get('phone', ''), text(d.get('name', ''), 120), body, secrets.token_hex(16), {'headline': 'Campanha de demonstração Sais Blue', 'source_type': 'ad'}, 'Anúncio Meta · simulado', channel='simulation')
+            if place:
+                db.execute('UPDATE contacts SET city_id=?,city=?,state=?,instagram=? WHERE phone=?', (place['city_id'],place['city'],place['state'],instagram,phone(d.get('phone',''))))
         return jsonify(ok=True)
 
     @app.post('/api/update')
     def update():
         d = data()
-        patch = {key: d[key] for key in ('stage', 'value', 'owner', 'note') if key in d}
+        patch = {key: d[key] for key in ('stage', 'value', 'owner', 'note', 'instagram') if key in d}
+        if 'city_id' in d:
+            patch.update(location_fields(d['city_id']))
+        if 'instagram' in patch:
+            patch['instagram'] = instagram_handle(patch['instagram'])
         if not patch or not isinstance(d.get('revision'), int):
             raise Problem('Atualize a página antes de editar.')
         if 'stage' in patch and patch['stage'] not in STAGES:
@@ -412,6 +444,8 @@ def create_app(config=None):
             row = db.execute('SELECT * FROM contacts WHERE id=?', (d.get('id'),)).fetchone()
             if not row:
                 raise Problem('Contato não encontrado.', 404)
+            if not patch.get('city_id',row['city_id']):
+                raise Problem('Preencha cidade e estado na ficha antes de alterar esta oportunidade.')
             if row['revision'] != d['revision']:
                 raise Problem('Este card foi atualizado por outra pessoa. Recarregue os dados e revise sua alteração.', 409)
             assignments = ','.join(key + '=?' for key in patch)

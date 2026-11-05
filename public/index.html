@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Sais Blue | CRM</title>
+    <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body data-auth="pending">
@@ -24,6 +25,7 @@
         ><button data-view="inbox">
           <span>◉</span> Atendimento <b id="inbox-count">0</b></button
         ><button data-view="contacts"><span>♧</span> Contatos</button
+        ><button data-view="map"><span>⌖</span> Mapa</button
         ><button data-view="team"><span>♧</span> Equipe</button
         ><button data-view="reports"><span>↑</span> Visão geral</button>
       </nav>
@@ -110,7 +112,14 @@
             name="phone"
             required
             inputmode="tel"
-            placeholder="55 11 99999-9999" /></label
+            placeholder="55 11 99999-9999"
+        /></label>
+        <div id="create-location-fields" class="detail-grid"></div>
+        <label
+          >Instagram<input
+            name="instagram"
+            placeholder="@usuario ou link do perfil"
+            maxlength="180" /></label
         ><label id="body-field" hidden
           >Mensagem recebida<textarea
             name="body"
@@ -126,6 +135,7 @@
     </dialog>
     <dialog id="detail-dialog"><div id="detail"></div></dialog>
     <div id="toast" role="status"></div>
+    <script src="/vendor/leaflet/leaflet.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>
