@@ -501,7 +501,7 @@ function sendView(c) {
 function bindSend(c) {
   const form = $("#send-form");
   if (!form) return;
-  const requestId = crypto.randomUUID();
+  const requestId = requestKey();
   form.onsubmit = async (e) => {
     e.preventDefault();
     const button = form.querySelector("button");
@@ -543,4 +543,9 @@ function auditDetails(raw) {
         `<p>${esc({ stage: "Etapa", owner: "Responsável", value: "Valor", note: "Observação" }[k] || k)}: ${esc(v.antes)} → ${esc(v.depois)}</p>`,
     )
     .join("");
+}
+
+// getRandomValues works on a private HTTP LAN address, where randomUUID may be unavailable.
+function requestKey() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
 }

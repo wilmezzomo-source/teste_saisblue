@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 ALLOWED = {'APP_ENV','APP_URL','CRM_DB','ALLOW_SIMULATION','META_APP_SECRET','META_VERIFY_TOKEN',
-           'META_ACCESS_TOKEN','META_PHONE_NUMBER_ID','META_API_VERSION','CRM_DOMAIN'}
+           'META_ACCESS_TOKEN','META_PHONE_NUMBER_ID','META_API_VERSION','CRM_DOMAIN','CRM_LISTEN_HOST'}
 
 
 def configure(path):
@@ -36,7 +36,13 @@ if __name__ == '__main__':
     from server import app
     if args.action == 'serve':
         from waitress import serve
-        serve(app, host='127.0.0.1', port=3000, threads=8, connection_limit=100,
+        host = os.environ.get('CRM_LISTEN_HOST', '127.0.0.1')
+        if host != '127.0.0.1':
+            from configure_connections import private_ip
+            private_ip(host)
+            if os.environ.get('APP_ENV') != 'lan' or os.environ.get('APP_URL') != f'http://{host}:3000':
+                raise RuntimeError('Acesso LAN exige configuração coerente do assistente de rede.')
+        serve(app, host=host, port=3000, threads=8, connection_limit=100,
               channel_timeout=30, max_request_body_size=1_000_000,
               trusted_proxy='127.0.0.1', trusted_proxy_count=1,
               trusted_proxy_headers={'x-forwarded-for','x-forwarded-proto'})

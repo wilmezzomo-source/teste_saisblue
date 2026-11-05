@@ -70,6 +70,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL("**/login");
   await login(admin, "admin@example.test", secret);
+  assert.match(await admin.evaluate(() => requestKey()), /^[a-f0-9]{32}$/);
   await admin.locator("[data-view=team]").click();
   await admin.locator("#invite-form [name=email]").fill("vendas@example.test");
   await admin.getByRole("button", { name: "Gerar convite" }).click();

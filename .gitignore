@@ -9,3 +9,6 @@ test-results/
 backups/
 data/
 *.env.local
+
+META-CONFIGURACAO-LOCAL.txt
+.crm-config-*

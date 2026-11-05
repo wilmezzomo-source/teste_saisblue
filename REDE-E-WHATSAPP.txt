@@ -1,0 +1,61 @@
+SAIS BLUE - ATUALIZACAO DO CRM JA INSTALADO
+
+1. Pare o CRM com Ctrl+C na janela onde ele esta rodando.
+2. Extraia o ZIP novo e copie os arquivos e subpastas para a pasta ORIGINAL do CRM,
+   aceitando substituir o codigo. Nao apague .env, .venv ou a pasta data.
+   O ZIP nao contem banco, senhas ou arquivo .env, e preserva os dados existentes.
+3. Na pasta original, clique com botao direito em ATIVAR-REDE-E-WHATSAPP.cmd
+   e escolha Executar como administrador.
+4. Escolha 1. Selecione a placa/IP da rede da empresa. O assistente salva o
+   endereco correto e cria uma regra de firewall somente para a sub-rede local,
+   perfis Private/Domain e o Python desta instalacao. Nao abre o roteador.
+5. Execute INICIAR-NO-WINDOWS.cmd novamente. Use o endereco mostrado pelo assistente
+   tanto no servidor quanto nos outros computadores, na mesma rede.
+6. Entre novamente nesse endereco e gere convites em Equipe para cada pessoa.
+   Os convites antigos com 127.0.0.1 devem ser substituidos.
+
+Este acesso LAN usa HTTP sem criptografia. Serve para validar a rede interna;
+para proteger dados e senhas em operacao, conclua HTTPS com o responsavel de TI.
+Se a rede do Windows estiver marcada Public ou houver segmentacao entre computadores,
+a TI precisa validar o acesso. O assistente nao muda o perfil da rede automaticamente.
+Reserve o IP do servidor no DHCP para o endereco nao mudar.
+
+WHATSAPP REAL
+
+Voce precisa de acesso a conta WhatsApp Business Platform e a um app da Meta.
+Apenas o acesso ao Business Suite ou o numero do celular nao substitui essa etapa.
+Nao remova o numero do aplicativo nem migre a conta sem verificar coexistencia/impacto.
+
+Quando tiver os dados oficiais, execute o assistente novamente e escolha 2:
+- Phone Number ID da Meta (nao e o telefone)
+- Token de acesso com permissao para a conta
+- App Secret do app Meta
+
+O assistente consulta a Meta e confere se o numero e +55 54 3443-6405 antes de salvar.
+Token e App Secret sao digitados sem aparecer no terminal, e ficam no servidor.
+Nao envie esses valores no chat, em capturas de tela ou no GitHub.
+
+Ainda e obrigatorio um webhook HTTPS publico para receber mensagens automaticamente.
+O endereco LAN nao e suficiente para isso. CRM_DOMAIN pode ser o subdominio aprovado
+pela empresa, por exemplo crm.saisblue.com.br, com DNS e portas configurados por TI/Telium.
+Esse exemplo NAO foi configurado por este pacote.
+
+Para manter o CRM somente na rede interna, deploy/Caddyfile-whatsapp-only publica
+apenas /webhooks/whatsapp e responde 404 nas outras rotas. O comando Proxy do roteiro
+Windows seleciona esse arquivo quando APP_ENV=lan. Nesse caso o backend continua no
+IP privado selecionado. A TI deve liberar o encaminhamento local do proxy conforme a
+politica do servidor e manter a porta 3000 inacessivel pela internet.
+
+Cadastre no app Meta a URL publica /webhooks/whatsapp e o token de verificacao local,
+e assine os eventos messages. O assistente gera META-CONFIGURACAO-LOCAL.txt para uso
+somente no servidor (nao enviar esse arquivo aqui). Em modo LAN, substitua o endereco
+local desse roteiro pela URL HTTPS publica aprovada ao cadastrar o webhook.
+
+Credenciais verificadas nao confirmam webhook ativo. Depois de configurar e reiniciar,
+um colega deve enviar uma mensagem real para o numero. Confirme que o contato apareceu
+no CRM e responda pela ficha. Verifique entrega no celular e historico no CRM.
+Fora da janela de 24 horas templates ainda nao estao implementados. Midias recebidas
+aparecem como indicacao de tipo; download/reproducao ainda nao estao implementados.
+
+Os testes automatizados deste pacote rodam no ambiente de desenvolvimento.
+Windows/firewall, DNS e conta Meta precisam ser confirmados no servidor e conta reais.

@@ -14,6 +14,12 @@ Versão própria para funil comercial e atendimento. Todas as pessoas com conta 
 - Adaptador oficial para responder texto na janela de 24h, identificador de pedido contra reenvio duplicado, estados de envio e atualizações de entrega/leitura.
 - Backup consistente do SQLite e kit de instalação Windows com tarefas de aplicação, HTTPS e backup diário.
 
+## Acesso na rede interna e configuração da Meta
+
+Para atualizar uma instalação que já está funcionando, veja `REDE-E-WHATSAPP.txt`. O novo assistente `ATIVAR-REDE-E-WHATSAPP.cmd` configura o IP privado e uma regra de firewall restrita à sub-rede, preservando banco e credenciais. Usa HTTP para validação na rede local; HTTPS continua necessário para proteger o acesso em operação. Execute na pasta original do CRM, como administrador para a regra do Windows. O assistente também verifica as credenciais diretamente na Meta e confere o número +55 54 3443-6405 antes de salvá-las. Não substitui a publicação/assinatura de um webhook HTTPS.
+
+Para manter o CRM restrito à rede interna e receber eventos reais da Meta, há o modelo `deploy/Caddyfile-whatsapp-only`, que expõe apenas `/webhooks/whatsapp`. DNS, certificado, proxy e conta Meta ainda precisam ser configurados no ambiente real. O comando Windows `Proxy` usa esse modelo quando `APP_ENV=lan`.
+
 ## Instalar no servidor Windows
 
 Para um primeiro teste no próprio Windows, extraia o pacote e abra `INICIAR-NO-WINDOWS.cmd`: o assistente instala as dependências, solicita nome/e-mail/senha e abre o CRM local. Requer Python 3.12+ com launcher `py`. Não configura domínio ou WhatsApp e não instala acesso remoto. Veja `COMECE-AQUI.txt`.

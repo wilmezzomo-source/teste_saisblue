@@ -20,7 +20,7 @@ function Import-Config {
         $Parts = $Line.Split('=', 2)
         if ($Parts.Count -ne 2) { throw 'Linha invalida em .env.' }
         $Key = $Parts[0].Trim()
-        if ($Key -notin @('APP_ENV','APP_URL','CRM_DB','ALLOW_SIMULATION','META_APP_SECRET','META_VERIFY_TOKEN','META_ACCESS_TOKEN','META_PHONE_NUMBER_ID','META_API_VERSION','CRM_DOMAIN')) { throw 'Chave desconhecida em .env.' }
+        if ($Key -notin @('APP_ENV','APP_URL','CRM_DB','ALLOW_SIMULATION','META_APP_SECRET','META_VERIFY_TOKEN','META_ACCESS_TOKEN','META_PHONE_NUMBER_ID','META_API_VERSION','CRM_DOMAIN','CRM_LISTEN_HOST')) { throw 'Chave desconhecida em .env.' }
         [Environment]::SetEnvironmentVariable($Key, $Parts[1].Trim(), 'Process')
     }
 }
@@ -53,7 +53,8 @@ switch ($Action) {
     'Proxy' {
         Import-Config
         if (!$CaddyPath -or !(Test-Path $CaddyPath)) { throw 'Informe -CaddyPath com o caminho do caddy.exe.' }
-        & $CaddyPath run --config (Join-Path $PSScriptRoot 'Caddyfile') --adapter caddyfile
+        $ProxyConfig = if ($env:APP_ENV -eq 'lan') { 'Caddyfile-whatsapp-only' } else { 'Caddyfile' }
+        & $CaddyPath run --config (Join-Path $PSScriptRoot $ProxyConfig) --adapter caddyfile
         Assert-Success
     }
     'RegisterTasks' {

@@ -1,0 +1,9 @@
+# For LAN-only CRM: expose only the signed Meta webhook to the internet.
+{$CRM_DOMAIN} {
+    handle /webhooks/whatsapp {
+        reverse_proxy {$CRM_LISTEN_HOST:127.0.0.1}:3000
+    }
+    handle {
+        respond 404
+    }
+}
