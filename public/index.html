@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sais Blue | CRM</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body data-auth="pending">
+    <aside>
+      <a class="brand" href="/" aria-label="Sais Blue início"
+        ><span class="brandmark">s<span>•</span></span>
+        <div>SAIS BLUE<small>RELACIONAMENTOS QUE CRESCEM</small></div></a
+      >
+      <div class="workspace">
+        <span class="square">SB</span>
+        <div>Sais Blue<small>Seu espaço de trabalho</small></div>
+        <span>⌄</span>
+      </div>
+      <p class="nav-label">ESPAÇO COMERCIAL</p>
+      <nav>
+        <button data-view="pipeline" class="active">
+          <span>▥</span> Funil de vendas</button
+        ><button data-view="inbox">
+          <span>◉</span> Atendimento <b id="inbox-count">0</b></button
+        ><button data-view="contacts"><span>♧</span> Contatos</button
+        ><button data-view="team"><span>♧</span> Equipe</button
+        ><button data-view="reports"><span>↑</span> Visão geral</button>
+      </nav>
+      <div class="aside-bottom">
+        <div class="help-card">
+          <span>✧</span><strong>Do primeiro oi à venda.</strong>
+          <p>Seus contatos e oportunidades, juntos em um só lugar.</p>
+        </div>
+        <button data-view="settings" class="settings">
+          ⚙ &nbsp; Integrações
+        </button>
+        <div class="profile">
+          <span class="avatar">SB</span>
+          <div>
+            <span id="profile-name">Equipe Sais Blue</span
+            ><small id="profile-role">Acesso individual</small>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <div class="app">
+      <header>
+        <div>
+          <span class="breadcrumb">Comercial</span
+          ><span class="crumb-separator">/</span
+          ><span id="breadcrumb-current">Funil de vendas</span>
+        </div>
+        <div class="header-right">
+          <span class="demo-pill"><i></i> Espaço da equipe</span
+          ><button id="logout" class="secondary">Sair</button
+          ><span class="avatar small">SB</span>
+        </div>
+      </header>
+      <main>
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">CONECTE. CUIDE. CONVERTA.</p>
+            <h1 id="page-title">Funil de vendas</h1>
+            <p id="page-subtitle">
+              Cada conversa é o começo de uma nova oportunidade.
+            </p>
+          </div>
+          <div class="actions">
+            <button id="simulate" class="secondary">
+              ↓ &nbsp; Simular lead do anúncio</button
+            ><button id="new-contact" class="primary">
+              ＋ &nbsp; Novo contato
+            </button>
+          </div>
+        </div>
+        <section id="stats" class="stats"></section>
+        <div id="content"></div>
+        <footer>
+          Sais Blue CRM
+          <span>Feito para aproximar pessoas e oportunidades.</span>
+        </footer>
+      </main>
+    </div>
+    <dialog id="create-dialog">
+      <form id="create-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">SAIS BLUE CRM</p>
+            <h2 id="form-title">Novo contato</h2>
+          </div>
+          <button
+            type="button"
+            class="close"
+            data-close="create-dialog"
+            aria-label="Fechar"
+          >
+            ×
+          </button>
+        </div>
+        <p id="form-description">Adicione um contato ao seu funil comercial.</p>
+        <label
+          >Nome<input
+            name="name"
+            required
+            maxlength="120"
+            placeholder="Nome do cliente" /></label
+        ><label
+          >WhatsApp com DDI<input
+            name="phone"
+            required
+            inputmode="tel"
+            placeholder="55 11 99999-9999" /></label
+        ><label id="body-field" hidden
+          >Mensagem recebida<textarea
+            name="body"
+            placeholder="Olá! Vi o anúncio e gostaria de saber mais."
+          ></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button type="button" class="secondary" data-close="create-dialog">
+            Cancelar</button
+          ><button class="primary" type="submit">Adicionar ao CRM</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="detail-dialog"><div id="detail"></div></dialog>
+    <div id="toast" role="status"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>

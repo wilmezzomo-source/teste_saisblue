@@ -1,0 +1,65 @@
+# Sais Blue CRM — equipe e WhatsApp
+
+Versão própria para funil comercial e atendimento. Todas as pessoas com conta ativa podem ver e editar todos os cards. Administradores gerenciam os acessos. Dados centralizados em SQLite, com autenticação Flask e execução por Waitress em Windows ou Linux.
+
+**Estado real:** código implementado e testado localmente. Não publicado no domínio da Sais Blue, sem instalação no servidor Windows da empresa e sem conexão à conta real do WhatsApp. Não há administrador ou senha padrão no pacote. A integração com a Meta foi testada com eventos assinados e transporte de envio simulado, sem mensagens reais.
+
+## Funcionalidades
+
+- Login individual, senha com scrypt, sessão de 12 horas com cookie HttpOnly e CSRF; Secure em produção.
+- Convites de uso único, validade de 48h; redefinição de senha por link de 1h; desativação de usuários e revogação de sessões.
+- Todos os membros podem criar contatos, alterar etapa/valor/responsável/observações e adicionar notas. Login não depende do responsável pelo card.
+- Verificação de versão para impedir sobrescrita por edições simultâneas; sincronização do funil a cada 5 segundos; histórico com autor e alterações.
+- Cadastro automático por telefone no webhook, verificação HMAC, filtro do número receptor, deduplicação de eventos e dados do anúncio quando enviados pela Meta.
+- Adaptador oficial para responder texto na janela de 24h, identificador de pedido contra reenvio duplicado, estados de envio e atualizações de entrega/leitura.
+- Backup consistente do SQLite e kit de instalação Windows com tarefas de aplicação, HTTPS e backup diário.
+
+## Instalar no servidor Windows
+
+Para um primeiro teste no próprio Windows, extraia o pacote e abra `INICIAR-NO-WINDOWS.cmd`: o assistente instala as dependências, solicita nome/e-mail/senha e abre o CRM local. Requer Python 3.12+ com launcher `py`. Não configura domínio ou WhatsApp e não instala acesso remoto. Veja `COMECE-AQUI.txt`.
+
+Para publicação e início automático, siga [deploy/INSTALAR-WINDOWS.md](deploy/INSTALAR-WINDOWS.md). O documento inclui os comandos, requisitos de DNS/HTTPS, cadastro do administrador, acesso da equipe, conexão Meta e um pedido pronto para encaminhar à Telium/TI.
+
+Ainda é necessário acesso autorizado ao servidor, domínio/HTTPS e credenciais oficiais da Meta. O telefone informado (+55 54 3443-6405) é apenas referência de negócio, não uma credencial ou identificador da API. Não foram feitas mudanças no site, e-mails ou DNS.
+
+## Desenvolvimento local
+
+Python 3.12+:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+Crie `.env` a partir de `.env.example` e, para testar localmente, use `APP_ENV=development`, `APP_URL=http://127.0.0.1:3000`, `CRM_DB=data/crm.sqlite3` e, se desejar simulações, `ALLOW_SIMULATION=1`. No Windows use `.venv\Scripts\python.exe`.
+
+```bash
+.venv/bin/python launch.py check
+.venv/bin/python launch.py admin --email EMAIL_REAL --name NOME_REAL
+.venv/bin/python launch.py serve
+```
+
+O comando de administrador solicita a senha sem exibi-la. Abra http://127.0.0.1:3000. Convide membros em **Equipe**. Não há envio automático de convites por e-mail. Os dados do protótipo anterior são migrados por adição de colunas, sem apagar contatos ou mensagens; faça backup antes de atualizar. A configuração de exemplo usa um banco novo em `data/`; para migrar um banco anterior, copie-o consistentemente e configure `CRM_DB` para esse arquivo.
+
+## Testes
+
+```bash
+.venv/bin/python -m unittest -v
+node --check public/app.js
+node --check public/auth.js
+node test_ui.cjs
+```
+
+O teste de navegador requer Playwright e Chromium (disponíveis no ambiente de desenvolvimento). Ele sobe sua própria instância temporária em loopback na porta 3001, com contas e senhas efêmeras, e apaga o banco ao terminar; não cria contas na aplicação principal. Verifica dois usuários, convite, edição por membro, conflito entre fichas abertas, histórico, notas, persistência, navegação, logout e viewport de celular. Usa `.venv/bin/python` e `/usr/bin/chromium`; para outro ambiente ajuste o executável Python do teste e/ou `CHROMIUM_PATH`.
+
+Os testes do servidor cobrem autenticação, CSRF, autorização, convites, bloqueio de acesso, limitação de login, conflito concorrente, migração, webhook, idempotência de envio e timeout. As imagens `preview*.png` são capturas dessa instância temporária de testes.
+
+## Limites e operação
+
+Uma única instância de aplicação/banco em disco local. Não usar SQLite em compartilhamento de rede nem escalar para múltiplos servidores sem migrar para um banco adequado. O polling e a consulta de histórico completa são apropriados para validação/equipe pequena; volume alto requer paginação, processamento em fila e monitoramento. O pacote não configura infraestrutura sozinho e não foi certificado no Windows da empresa. Definir políticas de retenção/LGPD e testar recuperação de backup antes de usar dados reais.
+
+WhatsApp: sem templates fora da janela de 24h e sem download/exibição de mídia nesta versão. Configuração de credenciais não comprova conexão. É necessário testar recebimento, resposta e entrega com a conta real após publicação. Simulação não abre janela de envio. Não há atribuição automática de vendedores, IA ou automações de campanhas nesta versão.
+
+## Referência DeskcommCRM
+
+Análise inicial do README, licença e manifesto de https://github.com/melgarafael/DeskcommCRM no commit `3f16949cabb69222da9356b2a453d5eb67d9b0f1`. Licença MIT, com suporte documentado a Meta Cloud API, Next.js e Supabase. A cópia está em `/workspace/deskcomm-reference`. Esta aplicação foi escrita de forma independente e não é um fork nem uma auditoria do projeto original.

@@ -1,0 +1,31 @@
+SAIS BLUE CRM - PRIMEIRO TESTE NO WINDOWS
+
+1. Extraia TODO o ZIP em uma pasta local do servidor, por exemplo C:\SaisBlueCRM.
+   Nao execute os arquivos ainda dentro do ZIP nem em pasta compartilhada de rede.
+2. Se ainda nao houver Python 3.12 ou superior, instale a versao oficial para Windows:
+   https://www.python.org/downloads/windows/
+   Inclua o launcher "py" durante a instalacao.
+3. De dois cliques em INICIAR-NO-WINDOWS.cmd.
+4. Siga as perguntas no terminal: seu nome, e-mail e uma senha de pelo menos 12 caracteres.
+   A senha nao aparece durante a digitacao. Guarde-a; nao a envie no chat.
+5. O navegador abrira o CRM. Entre com esse e-mail e senha.
+   Se nao abrir automaticamente: http://127.0.0.1:3000 (no proprio servidor).
+
+O assistente precisa de internet para baixar dependencias, preserva a configuracao
+existente e nao tem usuario/senha padrao. Deixe a janela aberta durante o teste.
+Ao fechar a janela o CRM para; o inicio automatico e a publicacao estao no roteiro de TI.
+
+Esse primeiro teste funciona no proprio servidor. O acesso do restante da equipe
+precisa de um endereco HTTPS configurado. Dentro do CRM voce podera gerar convites
+individuais em Equipe. Todos os membros ativos poderao editar todos os cards.
+
+O numero (54) 3443-6405 ainda precisa ser vinculado a plataforma oficial da Meta.
+O instalador nao conecta o WhatsApp, nao migra o numero e nao envia mensagens.
+
+Para publicar, configurar o endereco, acesso do time, WhatsApp e inicio automatico:
+deploy\INSTALAR-WINDOWS.md
+Esse arquivo tambem inclui um texto pronto para encaminhar a Telium ou ao TI.
+
+Nenhuma mudanca foi feita no site, nos e-mails ou no servidor da empresa por este pacote.
+O assistente e os scripts Windows precisam ser validados no seu servidor real.
+Se ocorrer erro, informe a etapa e a mensagem, sem enviar senhas ou tokens.

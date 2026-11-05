@@ -1,0 +1,11 @@
+*.sqlite3
+*.sqlite3-*
+__pycache__/
+.env
+node_modules/
+test-results/
+
+.venv/
+backups/
+data/
+*.env.local

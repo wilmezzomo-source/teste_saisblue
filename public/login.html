@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Entrar | Sais Blue CRM</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body class="login-page">
+    <main class="login-card">
+      <a class="brand" href="/login"
+        ><span class="brandmark">s<span>•</span></span>
+        <div>SAIS BLUE<small>RELACIONAMENTOS QUE CRESCEM</small></div></a
+      >
+      <p class="eyebrow">SEU ESPAÇO COMERCIAL</p>
+      <h1 id="auth-title">Bom ter você aqui.</h1>
+      <p id="auth-description">
+        Entre na sua conta para acompanhar seus clientes e trabalhar com a
+        equipe.
+      </p>
+      <form id="auth-form">
+        <label id="name-label" hidden
+          >Seu nome<input
+            name="name"
+            autocomplete="name"
+            maxlength="120" /></label
+        ><label id="email-label"
+          >E-mail<input
+            name="email"
+            type="email"
+            autocomplete="username"
+            required /></label
+        ><label
+          >Senha<input
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            maxlength="256"
+        /></label>
+        <p id="password-help" hidden>
+          Crie uma senha com pelo menos 12 caracteres.
+        </p>
+        <p id="auth-error" role="alert"></p>
+        <button class="primary" type="submit" id="auth-submit">Entrar</button>
+      </form>
+      <p class="auth-footer">
+        Acesso exclusivo da equipe Sais Blue.<br />Para criar ou recuperar sua
+        conta, solicite um link ao administrador.
+      </p>
+    </main>
+    <script src="/auth.js"></script>
+  </body>
+</html>
