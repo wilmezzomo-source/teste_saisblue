@@ -1,5 +1,6 @@
 """Runs on an isolated Windows CI host, never against a company installation."""
 import json
+import base64
 import os
 from pathlib import Path
 import shutil
@@ -16,6 +17,18 @@ import urllib.request
 class WindowsDesktopNativeTest(unittest.TestCase):
     def test_real_gui_detects_running_installation_and_stops_only_its_crm(self):
         from desktop_worker import WindowsOps
+        class DiagnosticOps(WindowsOps):
+            def powershell(self,code):
+                encoded=base64.b64encode(code.encode('utf-16le')).decode('ascii')
+                exe=Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
+                result=subprocess.run([str(exe),'-NoProfile','-NonInteractive','-EncodedCommand',encoded],capture_output=True,timeout=40,creationflags=subprocess.CREATE_NO_WINDOW)
+                if result.returncode:
+                    details=(result.stderr.decode('utf-8',errors='replace')+' '+result.stdout.decode('utf-8',errors='replace'))[:4000]
+                    # Isolated fixture only: no Meta/ngrok credentials or company data exist here.
+                    print('::error title=Windows fixture diagnostic::'+details.replace('%','%25').replace('\r','%0D').replace('\n','%0A'),flush=True)
+                    raise AssertionError('Windows fixture PowerShell failed: '+details)
+                value=result.stdout.decode('utf-8-sig').strip()
+                return json.loads(value) if value else None
         with tempfile.TemporaryDirectory(prefix='SaisBlue CRM test ') as folder:
             root=Path(folder)
             subprocess.run([sys.executable,'-m','venv','--without-pip','--system-site-packages',root/'.venv'],check=True,capture_output=True)
@@ -42,7 +55,7 @@ HTTPServer(('127.0.0.1',3000),Handler).serve_forever()
             python=root/'.venv/Scripts/python.exe'
             crm=subprocess.Popen([str(python),str(root/'launch.py'),'serve'],cwd=root,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             other=subprocess.Popen([sys.executable,'-c','import time;time.sleep(180)'])
-            ops=WindowsOps(root,{'CRM_LISTEN_HOST':'127.0.0.1'})
+            ops=DiagnosticOps(root,{'CRM_LISTEN_HOST':'127.0.0.1'})
             try:
                 for _ in range(50):
                     if ops.health('2026.11.06.0'):break
