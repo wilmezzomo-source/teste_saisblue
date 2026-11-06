@@ -13,7 +13,7 @@ class UpdateTest(TestCase):
         self.target=Path(self.temp.name)/'installed'
         for directory in ['new/public/data','new/public/brand','new/data','installed/data','installed/.venv']:
             (Path(self.temp.name)/directory).mkdir(parents=True)
-        for name in ['server.py','launch.py','requirements.txt']:
+        for name in ['server.py','launch.py','qualification.py','requirements.txt']:
             (self.source/name).write_text('new code')
         (self.source/'public/index.html').write_text('new interface')
         (self.source/'public/data/cities.json').write_text('[]')
@@ -40,6 +40,7 @@ class UpdateTest(TestCase):
         self.assertEqual((self.target/'.env').read_bytes(),config)
         self.assertEqual((self.target/'.venv/keep.txt').read_text(),'existing environment')
         self.assertEqual((self.target/'server.py').read_text(),'new code')
+        self.assertEqual((self.target/'qualification.py').read_text(),'new code')
         self.assertEqual((self.target/'public/brand/sb-logo.png').read_bytes(),b'test-logo')
         for path in [self.target/'data/crm.sqlite3',backup/'crm.sqlite3']:
             with sqlite3.connect(path) as db:

@@ -42,7 +42,7 @@ def apply_update(source,target,install=True):
         raise ValueError('Selecione a pasta antiga do CRM, diferente da pasta extraída da atualização.')
     if not (target/'.env').is_file() or not (target/'INICIAR-NO-WINDOWS.cmd').is_file():
         raise ValueError('Selecione a pasta da instalação existente, onde estão .env e INICIAR-NO-WINDOWS.cmd.')
-    for required in ('server.py','launch.py','requirements.txt','public/index.html','public/data/cities.json'):
+    for required in ('server.py','launch.py','qualification.py','requirements.txt','public/index.html','public/data/cities.json'):
         if not (source/required).is_file():
             raise ValueError('O pacote está incompleto. Extraia todo o ZIP antes de atualizar.')
     values=settings(target/'.env')

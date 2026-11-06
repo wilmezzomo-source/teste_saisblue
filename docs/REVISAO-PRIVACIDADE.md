@@ -12,7 +12,7 @@ Esta política descreve os dados tratados no CRM e na integração do número co
 
 ## Quais dados entram no CRM
 
-Podem ser registrados nome, telefone/identificador de WhatsApp, cidade e estado, perfil de Instagram quando informado, conteúdo das mensagens disponibilizadas pela integração, datas, identificadores e estados de envio e recebimento, origem do anúncio e identificadores de campanha/clique quando fornecidos pela Meta.
+Podem ser registrados nome, telefone/identificador de WhatsApp, cidade e estado, perfil comercial (Lojista, Revenda ou Consumidor Final), perfil de Instagram quando informado, conteúdo das mensagens disponibilizadas pela integração, datas, identificadores e estados de envio e recebimento, origem do anúncio e identificadores de campanha/clique quando fornecidos pela Meta.
 
 A equipe pode incluir notas de atendimento, responsável, etapa comercial e valor da oportunidade. Para as contas da equipe, o sistema trata nome, e-mail, senha em formato de hash, sessão de acesso e histórico de alterações. A integração atual não importa automaticamente o histórico antigo de conversas e não faz download ou reprodução de anexos de mídia; pode registrar a indicação do tipo de mídia recebido.
 
@@ -21,6 +21,8 @@ Os dados são recebidos das mensagens enviadas ao número comercial, dos dados a
 ## Para que os dados são utilizados
 
 Os dados servem para responder solicitações, acompanhar atendimentos e propostas, organizar oportunidades comerciais, evitar contatos duplicados, distribuir responsabilidades, consultar o histórico e acompanhar a distribuição dos clientes por município.
+
+O primeiro atendimento pode utilizar um assistente virtual com roteiro fixo para perguntar o perfil comercial e a cidade/UF, registrar as respostas confirmadas e direcionar a conversa à equipe conforme perfil e estado. O cliente pode pedir atendimento humano. As tags também permitem avaliar os resultados comerciais por perfil; a equipe pode conferir e corrigir esses dados.
 
 Os dados das contas da equipe e os registros de alteração são usados para autenticação, administração de acesso, segurança e rastreabilidade. O tratamento deve observar a finalidade do atendimento, os procedimentos relacionados a uma contratação e a execução de contratos, quando aplicáveis, além das obrigações legais e demais bases permitidas pela legislação. Usos que dependam de consentimento ou autorização específica devem respeitar essa exigência.
 

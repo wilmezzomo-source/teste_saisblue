@@ -16,6 +16,7 @@ const colors = [
   "#a0a9b7",
 ];
 let cities = [],
+  profileFilter = "",
   states = [],
   leadMap = null,
   pinLayer = null,
@@ -139,14 +140,22 @@ async function bootstrap() {
     $("#profile-role").textContent =
       currentUser.role === "admin" ? "Administrador" : "Membro da equipe";
     $("#simulate").hidden = !status.simulation;
+    $("#new-contact").hidden = !status.manual_contacts_enabled;
     document.body.dataset.auth = "ready";
     await load();
   } catch (e) {
     toast(e.message);
   }
 }
+function matchesProfile(c) {
+  return !profileFilter || (profileFilter === "__pending__" ? !c.lead_profile : c.lead_profile === profileFilter);
+}
+function profileTag(profile) {
+  const kind=({Lojista:"lojista",Revenda:"revenda","Consumidor Final":"consumidor"})[profile] || "pending";
+  return `<span class="profile-tag ${kind}">${esc(profile || "Perfil pendente")}</span>`;
+}
 function matches(c) {
-  return [
+  return matchesProfile(c) && [
     c.name,
     c.phone,
     c.source,
@@ -154,16 +163,18 @@ function matches(c) {
     c.city || "",
     c.state || "",
     c.instagram || "",
+    c.lead_profile || "",
   ].some((x) => x.toLowerCase().includes(query.toLowerCase()));
 }
 function stats() {
-  const open = contacts.filter((c) => !["Ganho", "Perdido"].includes(c.stage));
-  const won = contacts.filter((c) => c.stage === "Ganho");
-  const withMessages = contacts.filter((c) =>
+  const selected = contacts.filter(matchesProfile);
+  const open = selected.filter((c) => !["Ganho", "Perdido"].includes(c.stage));
+  const won = selected.filter((c) => c.stage === "Ganho");
+  const withMessages = selected.filter((c) =>
     c.messages.some((m) => m.direction === "in"),
   );
   $("#stats").innerHTML = [
-    ["Contatos no CRM", contacts.length, "Todos os seus relacionamentos", "♧"],
+    ["Contatos no CRM", selected.length, profileFilter ? "Perfil selecionado" : "Todos os perfis", "♧"],
     ["Oportunidades abertas", open.length, "Em acompanhamento no funil", "▥"],
     [
       "Valor em negociação",
@@ -189,11 +200,11 @@ function toolbar(title, subtitle = "") {
   return `<div class="toolbar"><div class="toolbar-title">${title}<span>${subtitle}</span></div><input id="search" class="search" aria-label="Buscar contatos" placeholder="⌕  Buscar nome, telefone ou origem" value="${esc(query)}"></div>`;
 }
 function card(c) {
-  return `<button class="card" data-contact="${c.id}" draggable="true"><div class="card-top"><span class="avatar">${esc(initials(c.name))}</span>${esc(c.name)}</div><div class="card-phone">+${esc(c.phone)}</div><div class="card-location ${c.location_pending ? "missing-location" : ""}">${c.location_pending ? "⚑ Cidade/UF pendentes" : "⌖ " + esc(c.city) + " / " + esc(c.state)}</div><span class="source">${esc(c.source)}</span><div class="card-bottom"><strong>${money(c.value)}</strong><span>${c.messages.filter((m) => m.direction === "in").length} conversa(s)</span></div></button>`;
+  return `<button class="card" data-contact="${c.id}" draggable="true"><div class="card-top"><span class="avatar">${esc(initials(c.name))}</span>${esc(c.name)}</div><div class="card-phone">+${esc(c.phone)}</div><div class="card-location ${c.location_pending ? "missing-location" : ""}">${c.location_pending ? "⚑ Cidade/UF pendentes" : "⌖ " + esc(c.city) + " / " + esc(c.state)}</div><span class="source">${esc(c.source)}</span><p class="card-qualification">${profileTag(c.lead_profile)} · ${esc(qualificationLabel(c.qualification_state))}</p><small class="card-owner">Responsável: ${esc(c.owner)}</small><div class="card-bottom"><strong>${money(c.value)}</strong><span>${c.messages.filter((m) => m.direction === "in").length} conversa(s)</span></div></button>`;
 }
 function banner() {
   if (!systemStatus.simulation)
-    return `<div class="info-banner"><span>✓</span><div><strong>Um funil para toda a equipe.</strong><p>Todos os membros ativos podem editar os cards. As alterações são sincronizadas a cada 5 segundos; edições simultâneas são verificadas ao salvar.</p></div></div>`;
+    return `<div class="info-banner"><span>✓</span><div><strong>Novos leads somente de anúncios.</strong><p>A origem é identificada pela Meta. As próximas mensagens desses leads continuam no histórico. Todos os membros ativos podem editar os cards.</p></div></div>`;
   return `<div class="info-banner"><span>↓</span><div><strong>Seu próximo cliente pode chegar de um anúncio.</strong><p>Simule uma mensagem do WhatsApp e veja o contato entrar automaticamente no funil. Nenhuma mensagem real será enviada.</p></div></div>`;
 }
 function render() {
@@ -204,6 +215,7 @@ function render() {
   }
   stats();
   $("#page-title").textContent = titles[view][0];
+  $("#profile-filter").hidden = ["team", "settings"].includes(view);
   $("#breadcrumb-current").textContent = titles[view][0];
   $("#page-subtitle").textContent = titles[view][1];
   document
@@ -228,10 +240,10 @@ function render() {
         `${contacts.length} contatos cadastrados`,
       ) +
       (list.length
-        ? `<div class="table-wrap"><table><thead><tr><th>CONTATO</th><th>WHATSAPP</th><th>CIDADE / UF</th><th>INSTAGRAM</th><th>ETAPA</th><th>ORIGEM</th><th>RESPONSÁVEL</th></tr></thead><tbody>${list.map((c) => `<tr data-contact="${c.id}" tabindex="0"><td><strong>${esc(c.name)}</strong></td><td>+${esc(c.phone)}</td><td>${c.location_pending ? '<span class="missing-location">Preencher localização</span>' : esc(c.city) + " / " + esc(c.state)}</td><td>${c.instagram ? `<a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">@${esc(c.instagram)}</a>` : "—"}</td><td><span class="tag">${esc(c.stage)}</span></td><td>${esc(c.source)}</td><td>${esc(c.owner)}</td></tr>`).join("")}</tbody></table></div>`
+        ? `<div class="table-wrap"><table><thead><tr><th>CONTATO</th><th>WHATSAPP</th><th>CIDADE / UF</th><th>INSTAGRAM</th><th>PERFIL</th><th>ETAPA</th><th>ORIGEM</th><th>RESPONSÁVEL</th></tr></thead><tbody>${list.map((c) => `<tr data-contact="${c.id}" tabindex="0"><td><strong>${esc(c.name)}</strong></td><td>+${esc(c.phone)}</td><td>${c.location_pending ? '<span class="missing-location">Preencher localização</span>' : esc(c.city) + " / " + esc(c.state)}</td><td>${c.instagram ? `<a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">@${esc(c.instagram)}</a>` : "—"}</td><td>${profileTag(c.lead_profile)}</td><td><span class="tag">${esc(c.stage)}</span></td><td>${esc(c.source)}</td><td>${esc(c.owner)}</td></tr>`).join("")}</tbody></table></div>`
         : empty(
             "Sua base começa com uma conversa.",
-            "Cadastre um contato ou simule a chegada de um lead pelo WhatsApp.",
+            "Os novos contatos entram pelos anúncios identificados pela Meta.",
           ));
   } else if (view === "inbox") {
     const rows = list.filter((c) => c.messages.length);
@@ -241,17 +253,10 @@ function render() {
         ? `<div class="panel" style="padding:0">${rows.map((c) => `<button class="inbox-item" data-contact="${c.id}"><span class="avatar">${esc(initials(c.name))}</span><div><strong>${esc(c.name)}</strong><p>${esc(c.messages.at(-1).body)}</p></div><small>${date(c.messages.at(-1).created)}</small></button>`).join("")}</div>`
         : empty(
             "Pronto para o primeiro oi.",
-            "As mensagens recebidas aparecerão aqui. Use “Simular lead do anúncio” para experimentar.",
+            "As mensagens dos leads vindos de anúncios aparecerão aqui.",
           ));
   } else if (view === "reports") {
-    html = `<div class="grid-two"><div class="panel"><h3>Distribuição no funil</h3><p>Acompanhe em que etapa estão suas oportunidades.</p>${stages
-      .map((s, i) => {
-        const n = contacts.filter((c) => c.stage === s).length;
-        return `<div class="report-row"><span>${esc(s)}</span><div class="bar"><div style="width:${contacts.length ? (n / contacts.length) * 100 : 0}%;background:${colors[i]}"></div></div><strong>${n}</strong></div>`;
-      })
-      .join(
-        "",
-      )}</div><div class="panel"><h3>Origem dos contatos</h3><p>Origem registrada no momento do cadastro.</p>${[...new Set(contacts.map((c) => c.source))].map((s) => `<div class="report-row"><span>${esc(s)}</span><div class="bar"><div style="width:${(contacts.filter((c) => c.source === s).length / contacts.length) * 100}%;background:#1269ef"></div></div><strong>${contacts.filter((c) => c.source === s).length}</strong></div>`).join("") || "<p>Os dados aparecerão após o primeiro cadastro.</p>"}</div></div>`;
+    html = reportsView();
   } else if (view === "map") {
     html = mapView();
   } else if (view === "team") {
@@ -262,6 +267,7 @@ function render() {
   $("#content").innerHTML = html;
   if (view === "team") bindTeam();
   if (view === "map") initMap();
+  if (view === "settings") bindAutomation();
   $("#empty-simulate")?.addEventListener("click", () => openCreate(true));
   $("#search")?.addEventListener("input", (e) => {
     const pos = e.target.selectionStart;
@@ -326,6 +332,27 @@ function openCreate(sim) {
   $("#create-form").elements.body.required = sim;
   $("#create-dialog").showModal();
 }
+function qualificationLabel(state) {
+  return ({not_started:"Aguardando atendimento",waiting_profile:"Perguntando perfil",waiting_city:"Perguntando cidade/UF",completed:"Qualificação concluída",human:"Atendimento humano"})[state] || "Aguardando atendimento";
+}
+function profileInput(c) {
+  return `<label>Perfil do cliente<select name="lead_profile"><option value="">A identificar</option>${(systemStatus.lead_profiles || ["Lojista","Revenda","Consumidor Final"]).map(p => `<option ${c.lead_profile === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>`;
+}
+function qualificationTools(c) {
+  const choices = teamUsers.filter(u=>u.active);
+  const selected = choices.some(u=>u.name===c.owner) ? c.owner : currentUser.name;
+  return `<section class="qualification-panel"><strong>${esc(qualificationLabel(c.qualification_state))}</strong><p>Ao assumir ou encaminhar, as perguntas automáticas são pausadas. Complete os dados pendentes na ficha.</p><div class="handoff-actions"><label>Encaminhar para<select id="handoff-owner">${choices.map(u=>`<option ${u.name===selected?"selected":""}>${esc(u.name)}</option>`).join("")}</select></label><button class="secondary" id="handoff-contact">Encaminhar atendimento</button><button class="primary" id="claim-contact">Assumir atendimento</button></div></section>`;
+}
+function bindQualification(c) {
+  const claim = async (owner) => {
+    try {
+      await api("/api/claim",{id:c.id,revision:c.revision,owner});
+      await load(); detail(c.id); toast("Responsável atualizado. Assistente pausado neste contato.");
+    } catch(e) { toast(e.message); if(e.status===409) { await load(); detail(c.id); } }
+  };
+  $("#claim-contact").onclick=()=>claim(currentUser.name);
+  $("#handoff-contact").onclick=()=>claim($("#handoff-owner").value);
+}
 function detail(id) {
   const c = contacts.find((c) => c.id === id);
   if (!c) return;
@@ -334,7 +361,7 @@ function detail(id) {
     ref = JSON.parse(c.referral);
   } catch {}
   $("#detail").innerHTML =
-    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div><span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Preencha cidade e estado para mapear este cliente. O WhatsApp não informa a cidade automaticamente.</div>' : ""}<form id="detail-form"><div class="detail-grid">${locationInputs(c)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label><label>Responsável<select name="owner"><option>Sem responsável</option>${teamUsers
+    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div><span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Preencha cidade e estado para mapear este cliente. O WhatsApp não informa a cidade automaticamente.</div>' : ""}${qualificationTools(c)}<form id="detail-form"><div class="detail-grid">${profileInput(c)}${locationInputs(c)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label><label>Responsável<select name="owner"><option>Sem responsável</option>${teamUsers
       .filter((u) => u.active)
       .map(
         (u) =>
@@ -350,6 +377,7 @@ function detail(id) {
   };
   bindLocationFields($("#detail-form"));
   bindSend(c);
+  bindQualification(c);
   $("#detail-form").onsubmit = async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target));
@@ -384,6 +412,7 @@ function detail(id) {
   };
   if (!$("#detail-dialog").open) $("#detail-dialog").showModal();
 }
+$("#profile-filter").onchange = (e) => {profileFilter=e.target.value; render();};
 $("#new-contact").onclick = () => openCreate(false);
 $("#simulate").onclick = () => openCreate(true);
 document
@@ -396,9 +425,10 @@ document.querySelectorAll("[data-view]").forEach(
     (b.onclick = async () => {
       view = b.dataset.view;
       query = "";
-      if (view === "team") {
+      if (view === "team" || view === "settings") {
         try {
           teamUsers = (await api("/api/team")).users;
+          systemStatus = await api("/api/status");
         } catch (e) {
           toast(e.message);
         }
@@ -453,7 +483,7 @@ function teamView() {
 }
 function showInvite(path) {
   $("#invite-result").hidden = false;
-  $("#invite-link").value = location.origin + path;
+  $("#invite-link").value = (systemStatus.team_url || location.origin) + path;
   $("#invite-link").focus();
   $("#invite-link").select();
 }
@@ -510,12 +540,42 @@ function bindTeam() {
       }),
   );
 }
+function reportsView() {
+  const selected=contacts.filter(matchesProfile);
+  const profiles=["Lojista","Revenda","Consumidor Final",""];
+  const profileRows=profiles.filter(p=>!profileFilter || (profileFilter==="__pending__"?!p:p===profileFilter)).map(profile=>{
+    const rows=selected.filter(c=>(c.lead_profile || "")===profile);
+    const open=rows.filter(c=>!["Ganho","Perdido"].includes(c.stage));
+    const won=rows.filter(c=>c.stage==="Ganho");
+    return `<tr data-profile-summary="${esc(profile || "pending")}"><td>${profileTag(profile)}</td><td>${rows.length}</td><td>${open.length}</td><td>${money(open.reduce((sum,c)=>sum+c.value,0))}</td><td>${won.length}</td><td>${money(won.reduce((sum,c)=>sum+c.value,0))}</td></tr>`;
+  }).join("");
+  return `<div class="panel"><h3>Resultados por perfil</h3><p>Compare os leads, oportunidades abertas e vendas de cada perfil. O seletor no topo também filtra o funil, os contatos e o mapa.</p><div class="table-wrap"><table><thead><tr><th>PERFIL</th><th>LEADS</th><th>OPORTUNIDADES ABERTAS</th><th>VALOR EM NEGOCIAÇÃO</th><th>VENDAS</th><th>VALOR GANHO</th></tr></thead><tbody>${profileRows}</tbody></table></div></div><div class="grid-two automation-panel"><div class="panel"><h3>Distribuição no funil</h3>${stages.map((stage,i)=>{const count=selected.filter(c=>c.stage===stage).length;return `<div class="report-row"><span>${esc(stage)}</span><div class="bar"><div style="width:${selected.length?count/selected.length*100:0}%;background:${colors[i]}"></div></div><strong>${count}</strong></div>`;}).join("")}</div><div class="panel"><h3>Origem dos contatos</h3>${[...new Set(selected.map(c=>c.source))].map(source=>{const count=selected.filter(c=>c.source===source).length;return `<div class="report-row"><span>${esc(source)}</span><strong>${count}</strong></div>`;}).join("") || "<p>Os dados aparecerão após o primeiro lead.</p>"}</div></div>`;
+}
 function settingsView() {
-  return `<div class="grid-two"><div class="panel"><div class="connection"><span class="connection-icon">◉</span><div><h3>WhatsApp Business</h3><span class="status-off">${systemStatus.sending_configured ? "Credenciais configuradas · validar na Meta" : "Aguardando conexão da conta Meta"}</span></div></div><p>Número informado pela Sais Blue: <strong>+55 (54) 3443-6405</strong>. O número ainda precisa ser vinculado e validado na plataforma oficial da Meta.</p><ul class="check-list"><li>Cadastro automático por telefone</li><li>Origem do anúncio quando recebida da Meta</li><li>Recebimento com assinatura verificada</li><li>Respostas de texto dentro da janela de 24 horas</li><li>Histórico de envio, entrega e leitura</li></ul><p>As credenciais são configuradas apenas no servidor. Configuração presente não confirma conexão real. Mídias e templates ainda não estão disponíveis nesta versão.</p></div><div class="panel"><h3>Publicação e acesso da equipe</h3><p>O sistema está preparado para servidor Windows com serviço de aplicação e proxy HTTPS. O domínio, a instalação no servidor e a conta Meta precisam ser configurados para disponibilizar o acesso externo.</p><ul class="check-list"><li>Login individual e acesso por convite</li><li>Todos os membros podem editar os cards</li><li>Histórico de quem fez cada alteração</li><li>Verificação de edições simultâneas</li><li>Backup do banco por comando</li></ul><p>Webhook: <strong>/webhooks/whatsapp</strong></p><p>${systemStatus.webhook_configured ? "Recebimento configurado no servidor; falta validar eventos reais." : "Recebimento ainda sem configuração Meta."}</p></div></div>`;
+  const a=systemStatus.automation || {enabled:false,assignment_mode:"regional",regional_owners:{}};
+  const people=teamUsers.filter(u=>u.active);
+  const select=(group,label)=>`<label>${label}<select name="${group}"><option value="">Selecione a conta da equipe</option>${people.map(u=>`<option value="${esc(u.id)}" ${a.regional_owners?.[group]===u.id?"selected":""}>${esc(u.name)}</option>`).join("")}</select></label>`;
+  return `<div class="panel"><h3>Entrada somente por anúncios</h3><p>Novos leads entram quando a Meta envia a identificação de um anúncio para o WhatsApp oficial <strong>+55 (54) 3443-6405</strong>. Conversas comuns e o texto “vim do anúncio” não criam novos cards. As próximas mensagens de um lead já identificado continuam no histórico.</p><p>Os cadastros anteriores à atualização são preservados. Um link comum para o WhatsApp pode não trazer identificação de anúncio; valide a entrada pelo anúncio publicado.</p></div><div class="panel automation-panel"><h3>Primeiro atendimento automático</h3><p>O assistente se apresenta, pergunta Lojista, Revenda ou Consumidor Final e depois cidade/UF. As respostas confirmadas são salvas na ficha e no mapa. O cliente pode pedir ATENDENTE.</p>${currentUser.role==="admin"?`<form id="automation-form"><label class="check-option"><input type="checkbox" name="enabled" ${a.enabled?"checked":""}>Ativar o roteiro para leads de anúncios</label><label>Distribuição após qualificar<select name="assignment_mode"><option value="regional" ${a.assignment_mode==="regional"?"selected":""}>Por perfil e estado · Chai / Grasi</option><option value="manual" ${a.assignment_mode==="manual"?"selected":""}>Escolher manualmente no card</option></select></label><div class="detail-grid">${select("chai","Chai · Lojista ou Revenda de RS e SC")}${select("grasi","Grasi · demais estados e todo Consumidor Final")}</div><p>Convide Chai e Grasi em Equipe e aguarde ambas criarem suas contas para selecioná-las aqui.</p><div class="dialog-actions"><button class="primary">Salvar primeiro atendimento</button></div></form>`:`<p>Roteiro: <strong>${a.enabled?"Ativado":"Desativado"}</strong>. Um administrador configura o atendimento automático e a distribuição.</p>`}<p>Em caso de resposta não reconhecida, pedido de atendimento humano ou falha de envio, a equipe deve assumir. O roteiro usa regras fixas e funciona na janela de atendimento de 24 horas.</p></div><div class="panel automation-panel"><h3>Acesso da equipe</h3><p>Endereço do CRM: <a href="${esc(systemStatus.team_url || location.origin)}">${esc(systemStatus.team_url || location.origin)}</a></p><p>Gere um convite individual em <strong>Equipe</strong>. Cada pessoa cria sua senha e acessa pelo navegador na rede da empresa. Todos os membros ativos podem editar os cards.</p><p>Credenciais de envio: ${systemStatus.sending_configured?"configuradas":"pendentes"}. Recebimento: ${systemStatus.webhook_configured?"configurado":"pendente"}.</p></div>`;
+}
+function bindAutomation() {
+  const form=$("#automation-form");
+  if(!form) return;
+  form.onsubmit=async(e)=>{
+    e.preventDefault();
+    const fields=new FormData(form);
+    try {
+      const result=await api("/api/automation",{enabled:form.elements.enabled.checked,assignment_mode:fields.get("assignment_mode"),regional_owners:{chai:fields.get("chai"),grasi:fields.get("grasi")}});
+      systemStatus.automation=result.automation;
+      toast("Primeiro atendimento salvo.");
+    } catch(err) {toast(err.message);}
+  };
 }
 function statusLabel(status) {
   return (
     {
+      queued: "Aguardando envio",
+      sending: "Enviando",
+      cancelled: "Cancelada · equipe assume",
       pending: "Em processamento",
       accepted: "Aceita pela Meta",
       sent: "Enviada",
@@ -707,6 +767,7 @@ async function initMap() {
 function mapContacts() {
   return contacts.filter(
     (c) =>
+      matchesProfile(c) &&
       (!mapState || c.state === mapState) &&
       (!mapStage || c.stage === mapStage),
   );
@@ -716,6 +777,7 @@ function refreshPins(fit = false) {
   const signature = JSON.stringify([
     mapState,
     mapStage,
+    profileFilter,
     contacts.map((c) => [c.id, c.revision, c.city_id, c.location_pending]),
   ]);
   if (!fit && signature === mapSignature) return;
@@ -769,7 +831,7 @@ function refreshPins(fit = false) {
   }
   $("#map-count").textContent =
     located.length + " lead(s) em " + groups.size + " cidade(s)";
-  const allPending = contacts.filter((c) => c.location_pending);
+  const allPending = contacts.filter((c) => matchesProfile(c) && c.location_pending);
   $("#map-pending-count").textContent = allPending.length
     ? allPending.length + " contato(s) ainda precisam de cidade/UF."
     : "Todos os contatos têm cidade e estado preenchidos.";

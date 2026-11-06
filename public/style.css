@@ -10,6 +10,20 @@
   --line: #e6eaf0;
   --bg: #f6f8fc;
 }
+.qualification-panel { margin:18px 0; padding:18px; background:#f0f5ff; border:1px solid #d9e5fb; border-radius:12px; }
+.qualification-panel p, .card-qualification { font-size:12px; line-height:1.6; color:var(--muted); }
+.card-owner { display:block; margin-top:9px; color:var(--muted); }
+.handoff-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+.handoff-actions label { flex:1; min-width:180px; }
+.automation-panel { margin-top:20px; }
+.check-option { display:flex; align-items:center; gap:10px; padding:12px 0; }
+.check-option input { width:auto; }
+.profile-tag { display:inline-block; border-radius:20px; padding:4px 9px; font-size:10px; font-weight:600; line-height:1.5; white-space:nowrap; }
+.profile-tag.lojista { background:#e9f1ff; color:#1e61c3; }
+.profile-tag.revenda { background:#f1eafb; color:#774ca6; }
+.profile-tag.consumidor { background:#e4f6ed; color:#237458; }
+.profile-tag.pending { background:#f3f0e7; color:#837043; }
+#profile-filter { max-width:210px; }
 * {
   box-sizing: border-box;
 }

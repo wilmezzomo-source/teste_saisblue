@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -20,11 +21,12 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from locations import CITIES, CITY_BY_ID, STATES, location_fields, instagram_handle
+from qualification import PROFILES, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
 
 ROOT = Path(__file__).parent
-STAGES = ['Novo contato', 'Em atendimento', 'Proposta enviada', 'Negociação', 'Ganho', 'Perdido']
+STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.06.3'
+RELEASE = '2026.11.06.4'
 
 
 class Problem(Exception):
@@ -92,19 +94,32 @@ def init_db(app):
         CREATE TABLE IF NOT EXISTS invites(token_hash TEXT PRIMARY KEY, email TEXT NOT NULL, role TEXT NOT NULL, expires REAL NOT NULL, used INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT, contact_id TEXT, user_id TEXT, actor TEXT NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL, created REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS attempts(key TEXT PRIMARY KEY, count INTEGER NOT NULL, until REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS crm_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS messages_contact ON messages(contact_id,created);
         CREATE INDEX IF NOT EXISTS audit_contact ON audit(contact_id,id);
         ''')
         # Additive migration preserves the first prototype's data.
         for table, additions in {
-            'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''")],
-            'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''"), ('error_code','INTEGER'), ('error_detail', "TEXT NOT NULL DEFAULT ''")],
+            'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''"), ('ad_origin', 'INTEGER NOT NULL DEFAULT 0'), ('lead_profile', "TEXT NOT NULL DEFAULT ''"), ('qualification_state', "TEXT NOT NULL DEFAULT 'not_started'"), ('qualification_attempts', 'INTEGER NOT NULL DEFAULT 0'), ('qualification_last_at', 'REAL NOT NULL DEFAULT 0')],
+            'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''"), ('error_code','INTEGER'), ('error_detail', "TEXT NOT NULL DEFAULT ''"), ('automation', 'INTEGER NOT NULL DEFAULT 0'), ('automation_step', "TEXT NOT NULL DEFAULT ''"), ('send_started', 'REAL NOT NULL DEFAULT 0')],
         }.items():
             existing = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
             for column, declaration in additions:
                 if column not in existing:
                     db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {declaration}')
         db.execute('CREATE UNIQUE INDEX IF NOT EXISTS messages_external ON messages(external_id) WHERE external_id IS NOT NULL')
+        db.execute('CREATE INDEX IF NOT EXISTS messages_automation ON messages(automation,status,created)')
+        for row in db.execute("SELECT id FROM contacts WHERE stage='Proposta enviada'").fetchall():
+            db.execute("UPDATE contacts SET stage='Negociação',revision=revision+1,updated=? WHERE id=?", (now(), row['id']))
+            db.execute('INSERT INTO audit(contact_id,actor,action,details,created) VALUES(?,?,?,?,?)',
+                       (row['id'],'Sistema','Etapa removida do funil',json.dumps({'antes':'Proposta enviada','depois':'Negociação'},ensure_ascii=False),now()))
+        for row in db.execute('SELECT id,referral FROM contacts WHERE ad_origin=0 AND referral IS NOT NULL').fetchall():
+            try:
+                referred = is_ad_referral(json.loads(row['referral']))
+            except (ValueError, TypeError):
+                referred = False
+            if referred:
+                db.execute('UPDATE contacts SET ad_origin=1 WHERE id=?', (row['id'],))
 
 
 def audit(db, action, cid=None, details=None, actor=None):
@@ -117,20 +132,27 @@ def ingest(db, number, name, body, message_id, referral=None, source='WhatsApp',
     if db.execute('SELECT 1 FROM messages WHERE id=? OR external_id=?', (message_id, message_id)).fetchone():
         return False
     number = phone(number)
-    row = db.execute('SELECT id FROM contacts WHERE phone=?', (number,)).fetchone()
+    row = db.execute('SELECT id,ad_origin FROM contacts WHERE phone=?', (number,)).fetchone()
+    ad_origin = is_ad_referral(referral)
+    # A signed ad referral admits the lead; subsequent messages need no repeated referral.
+    # Organic conversations never create a card or store message content in this CRM.
+    if channel == 'meta' and not ad_origin and not (row and row['ad_origin']):
+        return False
     cid = row['id'] if row else secrets.token_hex(12)
     if not row:
         db.execute('INSERT INTO contacts(id,name,phone,stage,source,referral,created,updated) VALUES(?,?,?,?,?,?,?,?)',
                    (cid, name or number, number, STAGES[0], source, json.dumps(referral, ensure_ascii=False) if referral else None, now(), now()))
         audit(db, 'Contato criado', cid, {'source': source})
-    elif referral:
+    elif ad_origin:
         db.execute('UPDATE contacts SET referral=?,source=? WHERE id=?', (json.dumps(referral, ensure_ascii=False), source, cid))
     # Trust the signed event timestamp, never extend the 24-hour window on webhook replay.
     created = min(float(timestamp), now()) if timestamp else now()
     db.execute('INSERT INTO messages(id,contact_id,body,direction,created,channel,external_id) VALUES(?,?,?,?,?,?,?)',
                (message_id, cid, body, 'in', created, channel, message_id if channel == 'meta' else None))
     db.execute('UPDATE contacts SET updated=?,revision=revision+1 WHERE id=?', (now(), cid))
-    return True
+    if ad_origin:
+        db.execute('UPDATE contacts SET ad_origin=1 WHERE id=?', (cid,))
+    return cid
 
 
 def meta_failure(code):
@@ -139,6 +161,48 @@ def meta_failure(code):
            131030:'Destinatário não autorizado para este número de teste.',133010:'Número não registrado na plataforma da API.',
            100:'Verifique parâmetros, permissões e identificação do recurso.',200:'Permissão de acesso negada.'}
     return hints.get(code,'Falha informada pela Meta; consultar o código no suporte oficial.')
+
+
+def transmit_meta(app, number, body):
+    url = f"https://graph.facebook.com/{app.config['META_API_VERSION']}/{app.config['META_PHONE_NUMBER_ID']}/messages"
+    payload = json.dumps({'messaging_product':'whatsapp','to':number,'type':'text','text':{'body':body}}).encode()
+    req = urllib.request.Request(url, data=payload, headers={'Authorization':'Bearer '+app.config['META_ACCESS_TOKEN'],'Content-Type':'application/json'})
+    external_id, result_status, code = None, 'uncertain', None
+    try:
+        sender = app.config.get('META_SENDER', urllib.request.urlopen)
+        with sender(req, timeout=20) as response:
+            external_id = json.load(response)['messages'][0]['id']
+        result_status = 'accepted'
+    except urllib.error.HTTPError as error:
+        result_status = 'failed'
+        try:
+            code = json.load(error).get('error',{}).get('code')
+            code = code if isinstance(code,int) else None
+        except (ValueError, TypeError):
+            pass
+    except (OSError, ValueError, KeyError, IndexError, TypeError):
+        pass  # Never automatically retry: a timeout can follow an accepted request.
+    return result_status, external_id, code, meta_failure(code) if code else ''
+
+
+def run_automation_once(app):
+    return process_outbox(app, database, transmit_meta, audit)
+
+
+def start_automation_worker(app):
+    stop = threading.Event()
+    def run():
+        while not stop.is_set():
+            try:
+                handled = run_automation_once(app)
+            except Exception as exc:
+                app.logger.error('Qualification worker: %s', type(exc).__name__)
+                handled = False
+            if not handled:
+                stop.wait(1)
+    thread = threading.Thread(target=run, name='saisblue-qualification', daemon=True)
+    thread.start()
+    return stop, thread
 
 
 def create_app(config=None):
@@ -405,18 +469,7 @@ def create_app(config=None):
 
     @app.post('/api/contacts')
     def new_contact():
-        d = data()
-        name, number = text(d.get('name', ''), 120), phone(d.get('phone', ''))
-        place = location_fields(d.get('city_id'))
-        instagram = instagram_handle(d.get('instagram',''))
-        if not name:
-            raise Problem('Informe o nome do contato.')
-        cid = secrets.token_hex(12)
-        with database(app) as db:
-            db.execute('INSERT INTO contacts(id,name,phone,stage,source,created,updated) VALUES(?,?,?,?,?,?,?)', (cid, name, number, STAGES[0], 'Cadastro manual', now(), now()))
-            db.execute('UPDATE contacts SET city_id=?,city=?,state=?,instagram=? WHERE id=?', (place['city_id'],place['city'],place['state'],instagram,cid))
-            audit(db, 'Contato criado', cid, {'city':place['city'],'state':place['state']})
-        return jsonify(ok=True, id=cid)
+        raise Problem('Novos contatos entram somente por anúncios identificados pela Meta.', 403)
 
     @app.post('/api/simulate')
     def simulate():
@@ -430,7 +483,7 @@ def create_app(config=None):
             raise Problem('Informe a mensagem recebida.')
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
-            ingest(db, d.get('phone', ''), text(d.get('name', ''), 120), body, secrets.token_hex(16), {'headline': 'Campanha de demonstração Sais Blue', 'source_type': 'ad'}, 'Anúncio Meta · simulado', channel='simulation')
+            ingest(db, d.get('phone', ''), text(d.get('name', ''), 120), body, secrets.token_hex(16), {'headline': 'Campanha de demonstração Sais Blue', 'source_type': 'ad', 'source_id':'simulation'}, 'Anúncio Meta · simulado', channel='simulation')
             if place:
                 db.execute('UPDATE contacts SET city_id=?,city=?,state=?,instagram=? WHERE phone=?', (place['city_id'],place['city'],place['state'],instagram,phone(d.get('phone',''))))
         return jsonify(ok=True)
@@ -438,7 +491,7 @@ def create_app(config=None):
     @app.post('/api/update')
     def update():
         d = data()
-        patch = {key: d[key] for key in ('stage', 'value', 'owner', 'note', 'instagram') if key in d}
+        patch = {key: d[key] for key in ('stage', 'value', 'owner', 'note', 'instagram', 'lead_profile') if key in d}
         if 'city_id' in d:
             patch.update(location_fields(d['city_id']))
         if 'instagram' in patch:
@@ -447,6 +500,8 @@ def create_app(config=None):
             raise Problem('Atualize a página antes de editar.')
         if 'stage' in patch and patch['stage'] not in STAGES:
             raise Problem('Etapa inválida.')
+        if 'lead_profile' in patch and patch['lead_profile'] not in ('', *PROFILES):
+            raise Problem('Selecione Lojista, Revenda ou Consumidor Final.')
         if 'value' in patch:
             patch['value'] = float(patch['value'])
             if not math.isfinite(patch['value']) or not 0 <= patch['value'] <= 1e12:
@@ -465,9 +520,31 @@ def create_app(config=None):
                 raise Problem('Este card foi atualizado por outra pessoa. Recarregue os dados e revise sua alteração.', 409)
             assignments = ','.join(key + '=?' for key in patch)
             db.execute(f'UPDATE contacts SET {assignments},updated=?,revision=revision+1 WHERE id=?', (*patch.values(), now(), row['id']))
+            if patch.get('owner', 'Sem responsável') != 'Sem responsável' or patch.get('stage', STAGES[0]) != STAGES[0]:
+                if row['qualification_state'] in ('waiting_profile', 'waiting_city'):
+                    handover(db, row['id'], audit, 'Atendimento assumido pela equipe')
             changes = {key: {'antes': row[key], 'depois': value} for key, value in patch.items() if row[key] != value}
             audit(db, 'Oportunidade atualizada', row['id'], changes)
-        return jsonify(ok=True, revision=d['revision'] + 1)
+            revision = db.execute('SELECT revision FROM contacts WHERE id=?', (row['id'],)).fetchone()[0]
+        return jsonify(ok=True, revision=revision)
+
+    @app.post('/api/claim')
+    def claim():
+        d = data()
+        with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            c = db.execute('SELECT * FROM contacts WHERE id=?', (d.get('id'),)).fetchone()
+            if not c:
+                raise Problem('Contato não encontrado.', 404)
+            if c['revision'] != d.get('revision'):
+                raise Problem('Este card foi atualizado. Recarregue antes de assumir.', 409)
+            owner = d.get('owner', g.user['name'])
+            if not db.execute('SELECT 1 FROM users WHERE name=? AND active=1', (owner,)).fetchone():
+                raise Problem('Selecione uma pessoa ativa da equipe.')
+            handover(db, c['id'], audit, 'Transferência para atendimento humano')
+            db.execute('UPDATE contacts SET owner=?,stage=? WHERE id=?', (owner, STAGES[1], c['id']))
+            audit(db, 'Atendimento assumido', c['id'], {'responsável':owner})
+        return jsonify(ok=True)
 
     @app.post('/api/messages')
     def note():
@@ -485,8 +562,34 @@ def create_app(config=None):
     def status():
         receive = bool(app.config['META_APP_SECRET'] and app.config['META_VERIFY_TOKEN'] and app.config['META_PHONE_NUMBER_ID'])
         sending = bool(receive and app.config['META_ACCESS_TOKEN'])
+        with database(app) as db:
+            automation = qualification_settings(db)
         return jsonify(version=RELEASE, mode='Equipe Sais Blue', webhook_configured=receive, sending_configured=sending,
-                       connection_verified=False, simulation=app.config['ALLOW_SIMULATION'])
+                       connection_verified=False, simulation=app.config['ALLOW_SIMULATION'], ads_only=True,
+                       manual_contacts_enabled=False, automation=automation, lead_profiles=PROFILES,
+                       team_url=app.config['APP_URL'] or request.host_url.rstrip('/'))
+
+    @app.post('/api/automation')
+    def configure_automation():
+        admin()
+        d = data()
+        enabled, mode, owners = d.get('enabled'), d.get('assignment_mode', 'regional'), d.get('regional_owners', {})
+        if not isinstance(enabled, bool) or mode not in ('manual', 'regional') or not isinstance(owners, dict) or any(not isinstance(owners.get(p,''),str) for p in ('chai','grasi')):
+            raise Problem('Configuração de qualificação inválida.')
+        with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            if enabled and mode == 'regional' and any(not db.execute('SELECT 1 FROM users WHERE id=? AND active=1', (owners.get(p,''),)).fetchone() for p in ('chai','grasi')):
+                raise Problem('Selecione as contas ativas de Chai e Grasi para a distribuição.')
+            if enabled and not (app.config['META_ACCESS_TOKEN'] and app.config['META_PHONE_NUMBER_ID']):
+                raise Problem('Configure as credenciais de envio antes de ativar o atendimento automático.')
+            config = {'enabled':enabled,'assignment_mode':mode,'regional_owners':{p:owners.get(p,'') for p in ('chai','grasi')}}
+            db.execute("INSERT INTO crm_settings VALUES('qualification',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(config),))
+            if not enabled:
+                for c in db.execute("SELECT id FROM contacts WHERE qualification_state IN ('waiting_profile','waiting_city')").fetchall():
+                    handover(db, c['id'], audit, 'Atendimento automático desativado')
+                db.execute("UPDATE messages SET status='cancelled' WHERE automation=1 AND status='queued'")
+            audit(db, 'Configuração do primeiro atendimento alterada', details=config)
+        return jsonify(ok=True, automation=config)
 
     @app.get('/webhooks/whatsapp')
     def verify():
@@ -515,7 +618,10 @@ def create_app(config=None):
                     names = {c['wa_id']: c.get('profile', {}).get('name', c['wa_id']) for c in value.get('contacts', [])}
                     for m in value.get('messages', []):
                         body = m.get('text', {}).get('body') or '[' + m.get('type', 'mensagem') + ': mídia recebida; visualização ainda indisponível]'
-                        ingest(db, m['from'], names.get(m['from']), body, m['id'], m.get('referral'), 'Anúncio Meta' if m.get('referral') else 'WhatsApp', timestamp=m.get('timestamp'))
+                        cid = ingest(db, m['from'], names.get(m['from']), body, m['id'], m.get('referral'), 'Anúncio Meta' if is_ad_referral(m.get('referral')) else 'WhatsApp', timestamp=m.get('timestamp'))
+                        if cid:
+                            created = min(float(m['timestamp']), now()) if m.get('timestamp') else now()
+                            process_answer(db, cid, m['id'], body, created, audit)
                     # Ignore older status events after delivered/read; failures remain visible.
                     rank = {'pending': 0, 'uncertain': 0, 'accepted': 1, 'sent': 2, 'delivered': 3, 'read': 4, 'failed': 5}
                     for s in value.get('statuses', []):
@@ -524,6 +630,10 @@ def create_app(config=None):
                             error_code=(s.get('errors') or [{}])[0].get('code')
                             error_code=error_code if isinstance(error_code,int) else None
                             db.execute('UPDATE messages SET status=?,error_code=?,error_detail=? WHERE id=?', (s['status'],error_code,meta_failure(error_code) if error_code else '',row['id']))
+                            if s['status'] == 'failed':
+                                message = db.execute('SELECT contact_id,automation FROM messages WHERE id=?', (row['id'],)).fetchone()
+                                if message['automation']:
+                                    handover(db, message['contact_id'], audit, 'A Meta informou falha de entrega da mensagem automática')
         return jsonify(ok=True)
 
     @app.post('/api/send')
@@ -549,29 +659,13 @@ def create_app(config=None):
             last = db.execute("SELECT MAX(created) FROM messages WHERE contact_id=? AND direction='in' AND channel='meta'", (contact['id'],)).fetchone()[0]
             if not last or now() - last >= 24 * 3600:
                 raise Problem('Janela de atendimento de 24 horas encerrada. Aguarde uma nova mensagem do cliente; envio por template ainda não disponível.', 409)
+            if contact['qualification_state'] in ('waiting_profile', 'waiting_city'):
+                handover(db, contact['id'], audit, 'Resposta enviada pela equipe no CRM')
             db.execute('INSERT INTO messages(id,contact_id,body,direction,created,channel,status,author) VALUES(?,?,?,?,?,?,?,?)', (mid, contact['id'], body, 'out', now(), 'meta', 'pending', g.user['name']))
             audit(db, 'Envio solicitado', contact['id'])
-        url = f"https://graph.facebook.com/{app.config['META_API_VERSION']}/{receiver}/messages"
-        payload = json.dumps({'messaging_product': 'whatsapp', 'to': contact['phone'], 'type': 'text', 'text': {'body': body}}).encode()
-        req = urllib.request.Request(url, data=payload, headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
-        external_id, result_status, error_code = None, 'uncertain', None
-        try:
-            sender = app.config.get('META_SENDER', urllib.request.urlopen)
-            with sender(req, timeout=20) as response:
-                external_id = json.load(response)['messages'][0]['id']
-            result_status = 'accepted'
-        except urllib.error.HTTPError as error:
-            result_status = 'failed'
-            try:
-                error_code=json.load(error).get('error',{}).get('code')
-                error_code=error_code if isinstance(error_code,int) else None
-            except (ValueError,TypeError):
-                error_code=None
-        except (OSError, ValueError, KeyError, IndexError):
-            # A timeout can occur after Meta accepted the request. Never auto-retry.
-            result_status = 'uncertain'
+        result_status, external_id, error_code, error_detail = transmit_meta(app, contact['phone'], body)
         with database(app) as db:
-            db.execute('UPDATE messages SET status=?,external_id=?,error_code=?,error_detail=? WHERE id=?', (result_status,external_id,error_code,meta_failure(error_code) if error_code else '',mid))
+            db.execute('UPDATE messages SET status=?,external_id=?,error_code=?,error_detail=? WHERE id=?', (result_status,external_id,error_code,error_detail,mid))
             db.execute('UPDATE contacts SET updated=? WHERE id=?', (now(), contact['id']))
         if result_status != 'accepted':
             raise Problem('A Meta recusou o envio.' if result_status == 'failed' else 'Envio sem confirmação. Confira o histórico antes de tentar novamente para evitar duplicação.', 502)
@@ -601,4 +695,5 @@ def create_app(config=None):
 
 app = create_app()
 if __name__ == '__main__':
+    start_automation_worker(app)
     app.run(host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', '3000')), debug=False)

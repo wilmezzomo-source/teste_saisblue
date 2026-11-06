@@ -16,7 +16,7 @@ ATUALIZAR MANUALMENTE UMA VERSAO JA PUBLICADA
    O assistente atualiza as dependencias e abre o navegador.
 6. Atualize a pagina do navegador. Mantenha o terminal aberto durante a execucao manual.
 
-ASSISTENTE DE ATUALIZACAO (VERSAO 2026.11.06.3)
+ASSISTENTE DE ATUALIZACAO (VERSAO 2026.11.06.4)
 Execute ATUALIZAR-NO-WINDOWS.cmd na pasta NOVA extraida e selecione a pasta ANTIGA.
 Ele recusa atualizar enquanto o app roda, cria um backup consistente do banco e do
 codigo substituido, atualiza o codigo e dependencias, e preserva .env/.venv/banco.
@@ -59,3 +59,7 @@ CORRECAO DO COMANDO PY
 Os comandos de rede, diagnostico e validacao agora usam o Python da pasta .venv,
 sem depender do launcher py no PATH da conta administradora. O iniciador tambem
 prioriza esse Python quando a instalacao ja existe. Nao e preciso reinstalar Python.
+
+ANUNCIOS E PRIMEIRO ATENDIMENTO
+Veja ATUALIZACAO-ANUNCIOS-E-QUALIFICACAO.md para ativar o roteiro, escolher
+as contas de Chai e Grasi e validar tags/filtros/distribuicao apos atualizar.

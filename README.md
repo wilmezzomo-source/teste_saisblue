@@ -2,7 +2,18 @@
 
 Versão própria para funil comercial e atendimento. Todas as pessoas com conta ativa podem ver e editar todos os cards. Administradores gerenciam os acessos. Dados centralizados em SQLite, com autenticação Flask e execução por Waitress em Windows ou Linux.
 
-**Estado real:** código implementado e testado localmente. Não publicado no domínio da Sais Blue, sem instalação no servidor Windows da empresa e sem conexão à conta real do WhatsApp. Não há administrador ou senha padrão no pacote. A integração com a Meta foi testada com eventos assinados e transporte de envio simulado, sem mensagens reais.
+**Estado real:** o usuário confirmou o recebimento no aplicativo WhatsApp Business e no CRM, além de resposta pelo CRM chegando ao remetente, com a versão anterior no servidor da empresa. A versão **2026.11.06.4** implementa os ajustes abaixo; precisa ser aplicada no Windows e validada com um lead real de anúncio. O domínio próprio e a operação persistente ainda não foram configurados nesta sessão.
+
+## Anúncios, qualificação, tags e distribuição — 2026.11.06.4
+
+Consulte [ATUALIZACAO-ANUNCIOS-E-QUALIFICACAO.md](ATUALIZACAO-ANUNCIOS-E-QUALIFICACAO.md) para atualizar sem reinstalar, dar acesso à equipe e ativar o roteiro.
+
+- Novos contatos somente com origem de anúncio identificada pela Meta; continuações dos leads admitidos permanecem no histórico. Cadastros anteriores são preservados; novas inclusões manuais ficam desabilitadas.
+- Roteiro fixo opcional no WhatsApp para Lojista/Revenda/Consumidor Final e cidade/UF, com respostas persistidas, fila durável e pausa para atendimento humano. Ativar em Integrações após escolher as contas ativas da equipe.
+- Lojista/Revenda de RS ou SC → Chai. Demais Lojista/Revenda e todo Consumidor Final → Grasi.
+- Tag de perfil, filtro compartilhado entre as visões e resultados separados por perfil. Assumir/encaminhar atendimento pausa o roteiro.
+- Etapa Proposta enviada removida; cards antigos nela migram para Negociação com auditoria.
+
 
 ## Política de privacidade para publicação do app
 
@@ -28,7 +39,7 @@ Siga `ENTRAR-EM-USO-HOJE.md` por etapas: atualizar com backup, validar o acesso 
 
 - Login individual, senha com scrypt, sessão de 12 horas com cookie HttpOnly e CSRF; Secure em produção.
 - Convites de uso único, validade de 48h; redefinição de senha por link de 1h; desativação de usuários e revogação de sessões.
-- Todos os membros podem criar contatos, alterar etapa/valor/responsável/observações e adicionar notas. Login não depende do responsável pelo card.
+- Todos os membros podem alterar etapa/valor/responsável/perfil/observações e adicionar notas. Login não depende do responsável pelo card.
 - Verificação de versão para impedir sobrescrita por edições simultâneas; sincronização do funil a cada 5 segundos; histórico com autor e alterações.
 - Cadastro automático por telefone no webhook, verificação HMAC, filtro do número receptor, deduplicação de eventos e dados do anúncio quando enviados pela Meta.
 - Adaptador oficial para responder texto na janela de 24h, identificador de pedido contra reenvio duplicado, estados de envio e atualizações de entrega/leitura.
@@ -88,7 +99,7 @@ Os testes do servidor cobrem autenticação, CSRF, autorização, convites, bloq
 
 Uma única instância de aplicação/banco em disco local. Não usar SQLite em compartilhamento de rede nem escalar para múltiplos servidores sem migrar para um banco adequado. O polling e a consulta de histórico completa são apropriados para validação/equipe pequena; volume alto requer paginação, processamento em fila e monitoramento. O pacote não configura infraestrutura sozinho e não foi certificado no Windows da empresa. Definir políticas de retenção/LGPD e testar recuperação de backup antes de usar dados reais.
 
-WhatsApp: sem templates fora da janela de 24h e sem download/exibição de mídia nesta versão. Configuração de credenciais não comprova conexão. É necessário testar recebimento, resposta e entrega com a conta real após publicação. Simulação não abre janela de envio. Não há atribuição automática de vendedores, IA ou automações de campanhas nesta versão.
+WhatsApp: sem templates fora da janela de 24h e sem download/exibição de mídia nesta versão. Configuração de credenciais não comprova conexão. É necessário testar recebimento, resposta e entrega com a conta real após publicação. Simulação não abre janela de envio. A distribuição por perfil e estado e o roteiro fixo de qualificação estão disponíveis. Não há IA generativa, importação de histórico antigo ou sincronização dos envios feitos no aplicativo por eventos de eco.
 
 ## Referência DeskcommCRM
 

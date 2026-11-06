@@ -107,7 +107,7 @@ class GatewayTest(unittest.TestCase):
                 reply=Reply(result.data);reply.status=result.status_code;reply.headers=result.headers
                 return reply
             public=create_gateway(self.values,sender).test_client()
-            payload={'entry':[{'changes':[{'value':{'metadata':{'phone_number_id':OFFICIAL_PHONE_ID},'contacts':[{'wa_id':'5511999998888','profile':{'name':'Cliente do anúncio'}}],'messages':[{'id':'wamid.gateway.1','from':'5511999998888','type':'text','text':{'body':'Olá! Vim do anúncio.'},'referral':{'source_id':'campaign-fixture','headline':'Anúncio Sais Blue'}}]}}]}]}
+            payload={'entry':[{'changes':[{'value':{'metadata':{'phone_number_id':OFFICIAL_PHONE_ID},'contacts':[{'wa_id':'5511999998888','profile':{'name':'Cliente do anúncio'}}],'messages':[{'id':'wamid.gateway.1','from':'5511999998888','type':'text','text':{'body':'Olá! Vim do anúncio.'},'referral':{'source_type':'ad','source_id':'campaign-fixture','headline':'Anúncio Sais Blue'}}]}}]}]}
             raw=json.dumps(payload,ensure_ascii=False).encode()
             signature='sha256='+hmac.new(b'app-secret-fixture',raw,hashlib.sha256).hexdigest()
             for _ in range(2):

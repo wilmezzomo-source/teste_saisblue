@@ -1,6 +1,6 @@
 # Sais Blue — execução por etapas, com validação
 
-Versão **2026.11.06.3**. Objetivo inicial: equipe usando o CRM na rede da empresa. A integração com o WhatsApp oficial só está concluída quando uma mensagem real entra no CRM e uma resposta chega ao cliente; um token, um número listado ou um retorno `accepted` não comprovam isso.
+Versão **2026.11.06.4**. Objetivo inicial: equipe usando o CRM na rede da empresa. A integração com o WhatsApp oficial só está concluída quando uma mensagem real entra no CRM e uma resposta chega ao cliente; um token, um número listado ou um retorno `accepted` não comprovam isso.
 
 ## 1. Atualizar a instalação que já existe
 

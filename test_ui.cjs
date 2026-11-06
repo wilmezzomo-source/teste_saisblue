@@ -22,11 +22,18 @@ async function login(page, email, password) {
     [
       "-c",
       `
-import os,time
-from server import app,database,password
+import os,time,io,json
+from server import app,database,password,start_automation_worker
 from waitress import serve
+counter=0
+def fake_sender(req,timeout):
+ global counter
+ counter+=1
+ return io.BytesIO(json.dumps({'messages':[{'id':'fixture-out-'+str(counter)}]}).encode())
+app.config['META_SENDER']=fake_sender
 with database(app) as db:
  db.execute('INSERT INTO users VALUES(?,?,?,?,?,1,?)',('admin-test','admin@example.test','Admin de demonstração',password(os.environ['TEST_PASSWORD']),'admin',time.time()))
+start_automation_worker(app)
 serve(app,host='127.0.0.1',port=3001,threads=4)
 `,
     ],
@@ -39,9 +46,10 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
         APP_ENV: "development",
         APP_URL: base,
         ALLOW_SIMULATION: "1",
-        META_APP_SECRET: "",
-        META_ACCESS_TOKEN: "",
-        META_PHONE_NUMBER_ID: "",
+        META_APP_SECRET: "ui-fixture-secret",
+        META_VERIFY_TOKEN: "ui-fixture-verify",
+        META_ACCESS_TOKEN: "ui-fixture-token",
+        META_PHONE_NUMBER_ID: "ui-fixture-phone",
       },
       stdio: ["ignore", "ignore", "pipe"],
     },
@@ -70,7 +78,9 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL("**/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.06.3"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.06.4"}).waitFor();
+  assert.equal(await admin.locator("#new-contact").isHidden(), true);
+  assert.equal(await admin.locator('.column[data-stage="Proposta enviada"]').count(),0);
   await admin.evaluate(() => document.fonts.load("400 14px Montserrat"));
   assert.equal(await admin.locator(".brand-asset img").evaluate(img => img.complete && img.naturalWidth > 0), true);
   assert.match(await admin.evaluate(() => requestKey()), /^[a-f0-9]{32}$/);
@@ -109,7 +119,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .locator(".card")
     .filter({ hasText: "Cliente de demonstração" })
     .click();
-  await member.locator("[name=stage]").selectOption("Proposta enviada");
+  await member.locator("[name=stage]").selectOption("Em atendimento");
   await member.locator("[name=value]").fill("2500");
   await member.getByRole("button", { name: "Salvar oportunidade" }).click();
   await member.getByText("Oportunidade atualizada.", { exact: true }).waitFor();
@@ -122,7 +132,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .waitFor();
   await admin.getByRole("button", { name: "Recarregar card" }).click();
   await admin.waitForFunction(
-    () => document.querySelector("[name=stage]").value === "Proposta enviada",
+    () => document.querySelector("[name=stage]").value === "Em atendimento",
   );
   await member
     .locator("#note-form [name=body]")
@@ -144,7 +154,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.locator("#close-detail").click();
   await member.reload();
   await member
-    .locator('.column[data-stage="Proposta enviada"] .card')
+    .locator('.column[data-stage="Em atendimento"] .card')
     .waitFor();
   await member.screenshot({ path: __dirname + "/preview.png", fullPage: true });
   await member.locator("[data-view=team]").click();
@@ -160,14 +170,16 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.locator(".inbox-item").first().waitFor();
   // The map groups clients in the same municipality and keeps unlocated leads visible.
   await admin.evaluate(async () => {
-    await api("/api/contacts", {
+    await api("/api/simulate", {
       name: "Segundo cliente de Bento",
+      body: "Mensagem de anúncio",
       phone: "5554999990001",
       city_id: "4302105",
       instagram: "@cliente_bento",
     });
-    await api("/api/contacts", {
+    await api("/api/simulate", {
       name: "Cliente de São Paulo",
+      body: "Mensagem de anúncio",
       phone: "5511999990002",
       city_id: "3550308",
     });
@@ -243,8 +255,68 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.getByText("Distribuição no funil", { exact: true }).waitFor();
   await member.locator("[data-view=settings]").click();
   await member
-    .getByText("Aguardando conexão da conta Meta", { exact: true })
+    .getByRole("heading", { name: "Primeiro atendimento automático", exact: true })
     .waitFor();
+  assert.equal(await member.locator("#automation-form").count(),0);
+  if(await admin.locator('#detail-dialog').isVisible()) await admin.locator('#close-detail').click();
+  await admin.locator("[data-view=settings]").click();
+  await admin.locator('#automation-form [name=enabled]').check();
+  const accounts=await admin.evaluate(async()=> (await api('/api/team')).users);
+  const seller=accounts.find(u=>u.email==='vendas@example.test');
+  await admin.locator('#automation-form [name=chai]').selectOption('admin-test');
+  await admin.locator('#automation-form [name=grasi]').selectOption(seller.id);
+  await admin.getByRole('button',{name:'Salvar primeiro atendimento'}).click();
+  await admin.getByRole('status').filter({hasText:'Primeiro atendimento salvo.'}).waitFor();
+  await admin.screenshot({path:__dirname+'/preview-automation.png',fullPage:true});
+  let serial=0;
+  async function whatsapp(body,ad=false,number='5554999997444') {
+    const message={id:'ui-qualification-'+(++serial),from:number,type:'text',text:{body},timestamp:String(Date.now()/1000)};
+    if(ad) message.referral={source_type:'ad',source_id:'ui-ad-fixture'};
+    const raw=JSON.stringify({entry:[{changes:[{value:{metadata:{phone_number_id:'ui-fixture-phone'},contacts:[{wa_id:number,profile:{name:'Lead qualificado UI'}}],messages:[message]}}]}]});
+    const signature='sha256='+crypto.createHmac('sha256','ui-fixture-secret').update(raw).digest('hex');
+    const response=await fetch(base+'/webhooks/whatsapp',{method:'POST',headers:{'Content-Type':'application/json','X-Hub-Signature-256':signature},body:raw});
+    assert.equal(response.status,200);
+  }
+  await whatsapp('Mensagem comum',false,'5554999997555');
+  await whatsapp('Vim do anúncio',true);
+  await admin.waitForFunction(async()=>{
+    const data=await fetch('/api/contacts').then(r=>r.json());
+    return data.contacts.find(c=>c.phone==='5554999997444')?.messages.some(m=>m.automation && m.status==='accepted' && m.body.includes('assistente virtual'));
+  });
+  await whatsapp('Revenda');
+  await admin.waitForFunction(async()=>{
+    const data=await fetch('/api/contacts').then(r=>r.json());
+    return data.contacts.find(c=>c.phone==='5554999997444')?.messages.some(m=>m.automation && m.status==='accepted' && m.body.includes('Qual é sua cidade'));
+  });
+  await whatsapp('Guaporé/RS');
+  await admin.waitForFunction(async()=>{
+    const data=await fetch('/api/contacts').then(r=>r.json());
+    return data.contacts.find(c=>c.phone==='5554999997444')?.messages.some(m=>m.automation && m.status==='accepted' && m.body.includes('Registrei seu perfil'));
+  });
+  await admin.locator('[data-view=pipeline]').click();
+  await admin.locator('.card').filter({hasText:'Lead qualificado UI'}).waitFor({timeout:15000});
+  await admin.locator('#profile-filter').selectOption('Revenda');
+  assert.equal(await admin.locator('.card').count(),1);
+  assert.equal(await admin.locator('.profile-tag.revenda').count(),1);
+  await admin.locator('.card').click();
+  assert.equal(await admin.locator('#detail-form [name=lead_profile]').inputValue(),'Revenda');
+  assert.equal(await admin.locator('#detail-form [name=city_id]').inputValue(),'4309407');
+  assert.equal(await admin.locator('#detail-form [name=owner]').inputValue(),'Admin de demonstração');
+  await admin.getByRole('button',{name:'Assumir atendimento',exact:true}).click();
+  await admin.getByRole('status').filter({hasText:'Assistente pausado'}).waitFor();
+  await admin.locator('#close-detail').click();
+  await admin.locator('[data-view=reports]').click();
+  await admin.getByRole('heading',{name:'Resultados por perfil'}).waitFor();
+  assert.equal(await admin.locator('[data-profile-summary]').count(),1);
+  await admin.locator('#profile-filter').selectOption('');
+  assert.equal(await admin.locator('[data-profile-summary]').count(),4);
+  await admin.screenshot({path:__dirname+'/preview-profiles.png',fullPage:true});
+  await admin.locator('#profile-filter').selectOption('Lojista');
+  await admin.locator('[data-view=map]').click();
+  await admin.locator('#map-count').filter({hasText:'0 lead(s)'}).waitFor();
+  await admin.locator('#profile-filter').selectOption('');
+  const stored=await admin.evaluate(async()=> (await api('/api/contacts')).contacts);
+  assert.equal(stored.some(c=>c.phone==='5554999997555'),false);
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({
@@ -265,7 +337,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: equipe, conflitos, cidade/UF, Instagram, mapa, filtros, pendências, persistência e mobile.",
+    "UI OK: equipe, conflitos, mapa, captura de anúncios, qualificação, distribuição, tags, filtros, relatórios e mobile.",
   );
 })()
   .catch((e) => {
