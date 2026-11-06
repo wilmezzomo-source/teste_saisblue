@@ -35,7 +35,7 @@ def process_roles(snapshot, target):
     roles = {}
     records = snapshot.get('processes', [])
     for p in records:
-        if ntpath.basename(p.get('exe') or '').lower() not in ('python.exe','pythonw.exe'):
+        if (ntpath.basename(p.get('exe') or '') or p.get('name','')).lower() not in ('python.exe','pythonw.exe'):
             continue
         command = p.get('command') or ''
         tokens = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s]+)', command)]
@@ -52,7 +52,7 @@ def process_roles(snapshot, target):
         pid = int(p['pid'])
         if roles.get(pid) == 'wrapper' and pid not in parents:
             del roles[pid]
-        if int(p.get('parent',0)) in controllers and ntpath.basename(p.get('exe') or '').lower() == 'ngrok.exe':
+        if int(p.get('parent',0)) in controllers and (ntpath.basename(p.get('exe') or '') or p.get('name','')).lower() == 'ngrok.exe':
             command = (p.get('command') or '').lower()
             if 'http://127.0.0.1:3002' in command:
                 roles[pid] = 'ngrok'
@@ -149,7 +149,7 @@ $own=@($all | Where-Object {
 })
 $ids=@($own | ForEach-Object {$_.ProcessId})
 $children=@($all | Where-Object { $_.Name -eq 'ngrok.exe' -and $_.ParentProcessId -in $ids })
-$rows=@(@($own)+@($children) | ForEach-Object { @{pid=[int]$_.ProcessId;parent=[int]$_.ParentProcessId;exe=$_.ExecutablePath;command=$_.CommandLine;started=$_.CreationDate.ToUniversalTime().ToString('o')} })
+$rows=@(@($own)+@($children) | ForEach-Object { @{pid=[int]$_.ProcessId;parent=[int]$_.ParentProcessId;name=$_.Name;exe=$_.ExecutablePath;command=$_.CommandLine;started=$_.CreationDate.ToUniversalTime().ToString('o')} })
 $ports=@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {$_.LocalPort -in @(3000,3002)} | ForEach-Object {@{pid=[int]$_.OwningProcess;port=[int]$_.LocalPort}})
 @{processes=$rows;ports=$ports}|ConvertTo-Json -Depth 5 -Compress'''.replace('ROOT_B64',self.encoded_roots())
         return self.powershell(code)
@@ -175,7 +175,7 @@ if($match) { ACTION }
 $expected=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('RECORD'))|ConvertFrom-Json
 $p=Get-CimInstance Win32_Process -Filter ('ProcessId='+[int]$expected.pid)
 if($p) {
- if($p.CreationDate.ToUniversalTime().ToString('o') -ne $expected.started -or $p.CommandLine -cne $expected.command -or $p.ExecutablePath -ine $expected.exe) { throw 'Identidade do processo mudou' }
+ if($p.CreationDate.ToUniversalTime().ToString('o') -ne $expected.started -or $p.CommandLine -cne $expected.command -or $p.ExecutablePath -ine $expected.exe -or [int]$p.ParentProcessId -ne [int]$expected.parent) { throw 'Identidade do processo mudou' }
  Stop-Process -Id ([int]$expected.pid) -ErrorAction Stop
 }'''.replace('RECORD',encoded))
 

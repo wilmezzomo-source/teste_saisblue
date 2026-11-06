@@ -138,5 +138,12 @@ class ProcessScopeTest(unittest.TestCase):
         p=self.process(10,'launch.py');p['command']='python launch.py serve'
         with self.assertRaises(UpdateError):process_roles({'processes':[p],'ports':[{'port':3000,'pid':10}]},self.root)
 
+    def test_store_ngrok_without_executable_path_still_requires_owned_parent_and_gateway(self):
+        controller=self.process(11,'iniciar_https.py')
+        child={'pid':12,'parent':11,'name':'ngrok.exe','exe':None,'command':'ngrok http http://127.0.0.1:3002 --inspect=false'}
+        other={**child,'pid':99,'parent':555}
+        roles=process_roles({'processes':[controller,child,other],'ports':[]},self.root)
+        self.assertEqual(set(roles),{11,12})
+
 
 if __name__=='__main__':unittest.main()
