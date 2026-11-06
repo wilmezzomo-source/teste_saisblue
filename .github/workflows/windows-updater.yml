@@ -2,7 +2,7 @@ name: Windows updater
 on:
   push:
     branches: [crm-windows]
-    paths: ['desktop/**', '*update*.py', 'test_windows_desktop_native.py', 'runtime_control.py', 'launch.py', 'iniciar_https.py', 'windows-release.json', '.github/workflows/windows-updater.yml']
+    paths: ['desktop/**', 'desktop_worker.py', '*update*.py', 'test_windows_desktop_native.py', 'runtime_control.py', 'launch.py', 'iniciar_https.py', 'windows-release.json', '.github/workflows/windows-updater.yml', '.github/run_windows_tests.py']
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,4 +25,4 @@ jobs:
       - name: Tests and real Windows lifecycle
         env:
           SAISBLUE_NATIVE_WINDOWS_TEST: '1'
-        run: python -m unittest -v
+        run: python .github/run_windows_tests.py

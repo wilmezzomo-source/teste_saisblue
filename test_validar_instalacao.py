@@ -1,3 +1,4 @@
+from sqlite_context import connection as sqlite_connection
 import io
 from pathlib import Path
 import sqlite3
@@ -15,7 +16,7 @@ class InstallationCheckTest(unittest.TestCase):
                 p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('fixture')
             config='APP_URL=http://192.168.0.219:3000\nCRM_DB=crm.sqlite3\nMETA_ACCESS_TOKEN=private-test-token\n'
             (root/'.env').write_text(config)
-            with sqlite3.connect(root/'crm.sqlite3') as db:
+            with sqlite_connection(root/'crm.sqlite3') as db:
                 db.execute('CREATE TABLE users(active INTEGER)');db.execute('INSERT INTO users VALUES(1)')
                 db.execute('CREATE TABLE contacts(id TEXT)');db.execute("INSERT INTO contacts VALUES('existing')")
             def sender(url,timeout):

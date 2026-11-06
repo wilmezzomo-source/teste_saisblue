@@ -1,3 +1,4 @@
+from sqlite_context import connection as sqlite_connection
 import json
 from pathlib import Path
 import socket
@@ -32,7 +33,7 @@ class DesktopUpdateTest(unittest.TestCase):
         (self.target/'INICIAR-NO-WINDOWS.cmd').write_text('previous command')
         (self.target/'.venv/Scripts/python.exe').write_bytes(b'installed-python')
         (self.target/'.env').write_text('CRM_DB=data/crm.sqlite3\nCRM_LISTEN_HOST=192.168.0.219\nMETA_ACCESS_TOKEN=private-fixture\nMETA_WEBHOOK_URL=https://same.ngrok-free.dev/webhooks/whatsapp\n')
-        with sqlite3.connect(self.target/'data/crm.sqlite3') as db:
+        with sqlite_connection(self.target/'data/crm.sqlite3') as db:
             db.execute('CREATE TABLE contacts(name TEXT)')
             db.execute("INSERT INTO contacts VALUES('Cliente preservado')")
         self.socket=patch('update_windows.socket.socket').start()
@@ -51,7 +52,7 @@ class DesktopUpdateTest(unittest.TestCase):
             def validate(self):
                 self.calls.append('validate');self.validated+=1
                 if fail and self.validated==1:
-                    with sqlite3.connect(target/'data/crm.sqlite3') as db:
+                    with sqlite_connection(target/'data/crm.sqlite3') as db:
                         db.execute('ALTER TABLE contacts ADD COLUMN partial_migration TEXT')
                     raise UpdateError('Fixture migration failure')
             def start(self,version=None):self.calls.append(('start',version));return True
@@ -68,7 +69,7 @@ class DesktopUpdateTest(unittest.TestCase):
         self.assertEqual((self.target/'.env').read_bytes(),config)
         self.assertEqual((self.target/'.venv/Scripts/python.exe').read_bytes(),b'installed-python')
         self.assertEqual((self.target/'desktop/SaisBlue-Atualizador.exe').read_bytes(),b'MZ-fixture')
-        with sqlite3.connect(self.target/'data/crm.sqlite3') as db:
+        with sqlite_connection(self.target/'data/crm.sqlite3') as db:
             self.assertEqual(db.execute('SELECT name FROM contacts').fetchone()[0],'Cliente preservado')
         self.assertNotIn('private-fixture',str(self.messages))
 
@@ -82,7 +83,7 @@ class DesktopUpdateTest(unittest.TestCase):
         self.assertEqual((self.target/'.env').read_bytes(),config)
         self.assertFalse((self.target/'qualification.py').exists())
         self.assertEqual(ops.calls[-1],('start',None))
-        with sqlite3.connect(self.target/'data/crm.sqlite3') as db:
+        with sqlite_connection(self.target/'data/crm.sqlite3') as db:
             self.assertEqual([r[1] for r in db.execute('PRAGMA table_info(contacts)')],['name'])
             self.assertEqual(db.execute('SELECT name FROM contacts').fetchone()[0],'Cliente preservado')
 

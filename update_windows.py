@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import zipfile
+from sqlite_context import connection
 
 ROOT = Path(__file__).resolve().parent
 FILES = {'.env.example','requirements.txt'}
@@ -63,7 +64,7 @@ def apply_update(source,target,install=True,on_backup=None):
     stamp=time.strftime('%Y%m%d-%H%M%S')+'-'+str(time.time_ns()%1000000)
     backup=target/'backups'/('atualizacao-'+stamp)
     backup.mkdir(parents=True)
-    with sqlite3.connect(database) as old, sqlite3.connect(backup/'crm.sqlite3') as copy:
+    with connection(database) as old, connection(backup/'crm.sqlite3') as copy:
         old.backup(copy)
     # Only back up files that will be replaced. Configuration and customer state are never copied over.
     with zipfile.ZipFile(backup/'codigo-anterior.zip','w',zipfile.ZIP_DEFLATED) as previous:
@@ -112,7 +113,7 @@ def restore_update(backup,target):
                 path.write_bytes(previous.read(relative))
             else:
                 path.unlink(missing_ok=True)
-    with sqlite3.connect(backup/'crm.sqlite3') as original,sqlite3.connect(manifest['database']) as database:
+    with connection(backup/'crm.sqlite3') as original,connection(manifest['database']) as database:
         original.backup(database)
 
 

@@ -1,3 +1,4 @@
+from sqlite_context import connection as sqlite_connection
 import hashlib
 import hmac
 import io
@@ -208,7 +209,7 @@ class CRMTest(unittest.TestCase):
         backup=Path(self.temp.name)/'backup.db'
         result=runner.invoke(args=['backup',str(backup)])
         self.assertEqual(result.exit_code,0,result.output)
-        with sqlite3.connect(backup) as db:
+        with sqlite_connection(backup) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM contacts').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM users').fetchone()[0],3)
 
@@ -248,7 +249,7 @@ class CRMTest(unittest.TestCase):
 
     def test_existing_prototype_migrates_without_data_loss(self):
         legacy=Path(self.temp.name)/'legacy.db'
-        with sqlite3.connect(legacy) as db:
+        with sqlite_connection(legacy) as db:
             db.execute("CREATE TABLE contacts(id TEXT PRIMARY KEY,name TEXT,phone TEXT,stage TEXT,value REAL,owner TEXT,source TEXT,referral TEXT,note TEXT,created REAL,updated REAL)")
             db.execute("CREATE TABLE messages(id TEXT PRIMARY KEY,contact_id TEXT,body TEXT,direction TEXT,created REAL)")
             db.execute("INSERT INTO contacts VALUES('old','Contato existente','5511999991234','Ganho',120,'Equipe','Manual',NULL,'nota',1,1)")

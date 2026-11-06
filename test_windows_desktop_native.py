@@ -1,3 +1,4 @@
+from sqlite_context import connection as sqlite_connection
 """Runs on an isolated Windows CI host, never against a company installation."""
 import json
 import base64
@@ -38,7 +39,7 @@ class WindowsDesktopNativeTest(unittest.TestCase):
             (root/'INICIAR-NO-WINDOWS.cmd').write_text('fixture')
             repo=Path(__file__).parent
             (root/'requirements.txt').write_bytes((repo/'requirements.txt').read_bytes())
-            for file in ('desktop_worker.py','update_windows.py'):
+            for file in ('desktop_worker.py','update_windows.py','sqlite_context.py'):
                 shutil.copyfile(repo/file,root/file)
             config='APP_ENV=development\nAPP_URL=http://127.0.0.1:3000\nCRM_LISTEN_HOST=127.0.0.1\nCRM_DB=data/crm.sqlite3\nALLOW_SIMULATION=0\nMETA_APP_SECRET=\nMETA_VERIFY_TOKEN=\nMETA_ACCESS_TOKEN=\nMETA_PHONE_NUMBER_ID=\n'
             (root/'.env').write_text(config,encoding='utf-8')
@@ -118,7 +119,7 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
                         time.sleep(.5)
                     self.assertTrue(ops.health('2026.11.06.5'),'GUI update did not start the verified new version')
                     self.assertEqual((root/'.env').read_text(encoding='utf-8'),config)
-                    with sqlite3.connect(root/'data/crm.sqlite3') as db:
+                    with sqlite_connection(root/'data/crm.sqlite3') as db:
                         self.assertEqual(db.execute("SELECT name FROM contacts WHERE id='fixture'").fetchone()[0],'Preserved customer')
                     # Close the browser spawned by the GUI is unnecessary; stop this CRM via the same validated controller.
                     ops.stop()

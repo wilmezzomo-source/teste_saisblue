@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import sqlite3
+from sqlite_context import connection
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
@@ -28,7 +29,7 @@ def check(root=ROOT, sender=urllib.request.urlopen):
         rows.append('BANCO: FALHA — banco configurado não encontrado; não criei outro.')
     else:
         try:
-            with sqlite3.connect(database.resolve().as_uri()+'?mode=ro',uri=True,timeout=3) as db:
+            with connection(database.resolve().as_uri()+'?mode=ro',uri=True,timeout=3) as db:
                 active=db.execute('SELECT COUNT(*) FROM users WHERE active=1').fetchone()[0]
                 contacts=db.execute('SELECT COUNT(*) FROM contacts').fetchone()[0]
                 rows.append(f'BANCO: OK — {active} usuário(s) ativo(s), {contacts} contato(s).')

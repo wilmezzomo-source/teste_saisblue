@@ -1,3 +1,4 @@
+from sqlite_context import connection as sqlite_connection
 import sqlite3
 import tempfile
 from pathlib import Path
@@ -24,7 +25,7 @@ class UpdateTest(TestCase):
         (self.target/'INICIAR-NO-WINDOWS.cmd').write_text('existing launcher')
         (self.target/'.env').write_text('CRM_DB=data/crm.sqlite3\nMETA_ACCESS_TOKEN=keep-existing\nCRM_LISTEN_HOST=192.168.1.25\n')
         (self.target/'.venv/keep.txt').write_text('existing environment')
-        with sqlite3.connect(self.target/'data/crm.sqlite3') as db:
+        with sqlite_connection(self.target/'data/crm.sqlite3') as db:
             db.execute('CREATE TABLE contacts(name TEXT)')
             db.execute("INSERT INTO contacts VALUES('Cliente existente')")
         self.socket=patch('update_windows.socket.socket').start()
@@ -43,7 +44,7 @@ class UpdateTest(TestCase):
         self.assertEqual((self.target/'qualification.py').read_text(),'new code')
         self.assertEqual((self.target/'public/brand/sb-logo.png').read_bytes(),b'test-logo')
         for path in [self.target/'data/crm.sqlite3',backup/'crm.sqlite3']:
-            with sqlite3.connect(path) as db:
+            with sqlite_connection(path) as db:
                 self.assertEqual(db.execute('SELECT name FROM contacts').fetchone()[0],'Cliente existente')
         import zipfile
         with zipfile.ZipFile(backup/'codigo-anterior.zip') as previous:

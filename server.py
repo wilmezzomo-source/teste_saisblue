@@ -21,6 +21,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from locations import CITIES, CITY_BY_ID, STATES, location_fields, instagram_handle
+from sqlite_context import connection
 from qualification import PROFILES, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
 
 ROOT = Path(__file__).parent
@@ -685,7 +686,7 @@ def create_app(config=None):
     @click.argument('destination')
     def backup(destination):
         """Consistent SQLite backup, including committed WAL records."""
-        with database(app) as source, sqlite3.connect(destination) as target:
+        with database(app) as source, connection(destination) as target:
             source.backup(target)
         os.chmod(destination, 0o600)
         click.echo('Backup criado.')
