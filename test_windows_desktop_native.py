@@ -83,7 +83,9 @@ public static class SaisBlueGui {
  [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h,int m,IntPtr w,IntPtr l);
  public static List<IntPtr> Children(IntPtr parent) { var list=new List<IntPtr>(); EnumChildWindows(parent,(h,d)=>{list.Add(h);return true;},IntPtr.Zero);return list; }
  public static string Text(IntPtr h) { var b=new StringBuilder(32768);SendMessage(h,13,(IntPtr)b.Capacity,b);return b.ToString(); }
- public static void Click(IntPtr h) { SendMessage(h,245,IntPtr.Zero,IntPtr.Zero); }
+ [DllImport("user32.dll")] static extern IntPtr GetParent(IntPtr h);
+ [DllImport("user32.dll")] static extern int GetDlgCtrlID(IntPtr h);
+ public static void Click(IntPtr h) { SendMessage(GetParent(h),273,(IntPtr)GetDlgCtrlID(h),h); }
 }
 '@
 $deadline=(Get-Date).AddSeconds(20);$window=$null
@@ -110,7 +112,7 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
 @{window=$true;detected=$found;pid=$ps[0].Id}|ConvertTo-Json -Compress'''.replace('TARGET_ROOT',encoded_root).replace('BUTTON_ACTION',action)
                 result=ops.powershell(code)
                 self.assertTrue(result['detected'])
-                deadline=time.monotonic()+110
+                deadline=time.monotonic()+(120 if do_update else 45)
                 if do_update:
                     while time.monotonic()<deadline:
                         if ops.health('2026.11.06.5'):break
@@ -123,7 +125,14 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
                     ops.stop()
                 else:
                     while time.monotonic()<deadline and ops.health():time.sleep(.5)
-                    self.assertFalse(ops.health(),'GUI did not stop the old CRM')
+                    if ops.health():
+                        diagnostic=code.split('$deadline=')[0]+"\n$p=Get-Process -Id "+str(result['pid'])+"; $text=@([SaisBlueGui]::Children($p.MainWindowHandle)|ForEach-Object {[SaisBlueGui]::Text($_)}) -join '; '; @{text=$text}|ConvertTo-Json -Compress"
+                        text=ops.powershell(diagnostic)['text']
+                        print('::error title=Updater window state::'+text.replace('%','%25').replace('\n','%0A'),flush=True)
+                        try:ops.stop()
+                        except Exception as exc:
+                            print('::error title=Direct controller diagnostic::'+str(exc).replace('%','%25').replace('\n','%0A'),flush=True)
+                        self.fail('GUI did not stop the old CRM; see safe fixture diagnostics')
                 self.assertIsNone(other.poll(),'Updater stopped an unrelated Python process')
                 # WM_CLOSE waits until the update has finished; use exact GUI PID only.
                 ops.powershell('$p=Get-Process -Id '+str(result['pid'])+' -ErrorAction SilentlyContinue; if($p){$p.CloseMainWindow()|Out-Null}')
