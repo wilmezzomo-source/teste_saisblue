@@ -115,6 +115,16 @@ class WindowsOps:
         self.base = 'http://' + host + ':3000'
         self.transport = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         self.task_paused = False
+        self.last_task_enabled = False
+        self.root_aliases = [str(self.root)]
+        if sys.platform=='win32':
+            import ctypes
+            buffer=ctypes.create_unicode_buffer(32768)
+            if ctypes.windll.kernel32.GetShortPathNameW(str(self.root),buffer,len(buffer)):
+                self.root_aliases.append(buffer.value)
+
+    def encoded_roots(self):
+        return base64.b64encode(json.dumps(self.root_aliases).encode()).decode()
 
     def powershell(self, code):
         encoded = base64.b64encode(code.encode('utf-16le')).decode('ascii')
@@ -127,28 +137,36 @@ class WindowsOps:
         return json.loads(output) if output else None
 
     def snapshot(self):
-        root = base64.b64encode(str(self.root).encode()).decode()
         code = r'''$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
-$root=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('ROOT_B64'))
+$roots=@([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('ROOT_B64'))|ConvertFrom-Json)
 $all=@(Get-CimInstance Win32_Process)
-$python=Join-Path $root '.venv\Scripts\python.exe'
-$own=@($all | Where-Object { $_.Name -in @('python.exe','pythonw.exe') -and ($_.ExecutablePath -ieq $python -or ($_.CommandLine -and $_.CommandLine.IndexOf($root,[StringComparison]::OrdinalIgnoreCase) -ge 0)) })
+$own=@($all | Where-Object {
+ $match=$false
+ foreach($root in $roots) {
+  if($_.ExecutablePath -ieq (Join-Path $root '.venv\Scripts\python.exe') -or ($_.CommandLine -and $_.CommandLine.IndexOf($root,[StringComparison]::OrdinalIgnoreCase) -ge 0)) {$match=$true;break}
+ }
+ $_.Name -in @('python.exe','pythonw.exe') -and $match
+})
 $ids=@($own | ForEach-Object {$_.ProcessId})
 $children=@($all | Where-Object { $_.Name -eq 'ngrok.exe' -and $_.ParentProcessId -in $ids })
 $rows=@(@($own)+@($children) | ForEach-Object { @{pid=[int]$_.ProcessId;parent=[int]$_.ParentProcessId;exe=$_.ExecutablePath;command=$_.CommandLine;started=$_.CreationDate.ToUniversalTime().ToString('o')} })
 $ports=@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {$_.LocalPort -in @(3000,3002)} | ForEach-Object {@{pid=[int]$_.OwningProcess;port=[int]$_.LocalPort}})
-@{processes=$rows;ports=$ports}|ConvertTo-Json -Depth 5 -Compress'''.replace('ROOT_B64',root)
+@{processes=$rows;ports=$ports}|ConvertTo-Json -Depth 5 -Compress'''.replace('ROOT_B64',self.encoded_roots())
         return self.powershell(code)
 
     def task(self, action):
-        root = base64.b64encode(str(self.root).encode()).decode()
         # Touch only the exact named application task pointing at this project's script.
         result = self.powershell(r'''$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
-$root=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('ROOT_B64'))
+$roots=@([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('ROOT_B64'))|ConvertFrom-Json)
 $task=Get-ScheduledTask -TaskName 'SaisBlueCRM' -ErrorAction SilentlyContinue
-$match=$task -and @($task.Actions | Where-Object { $_.Arguments -and $_.Arguments.IndexOf((Join-Path $root 'deploy\windows.ps1'),[StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count -gt 0
+$match=$false
+foreach($root in $roots) {
+ if($task -and @($task.Actions | Where-Object { $_.Arguments -and $_.Arguments.IndexOf((Join-Path $root 'deploy\windows.ps1'),[StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count -gt 0) {$match=$true;break}
+}
+$enabled=$match -and $task.Settings.Enabled
 if($match) { ACTION }
-@{matched=[bool]$match}|ConvertTo-Json -Compress'''.replace('ROOT_B64',root).replace('ACTION',action))
+@{matched=[bool]$match;enabled=[bool]$enabled}|ConvertTo-Json -Compress'''.replace('ROOT_B64',self.encoded_roots()).replace('ACTION',action))
+        self.last_task_enabled=result['enabled']
         return result['matched']
 
     def kill(self, record):
@@ -164,7 +182,8 @@ if($p) {
     def stop(self):
         owned = process_roles(self.snapshot(), str(self.root))
         # Disable restart while replacing files, only for this installation's own task.
-        self.task_paused = self.task("Disable-ScheduledTask -TaskName 'SaisBlueCRM'|Out-Null; Stop-ScheduledTask -TaskName 'SaisBlueCRM' -ErrorAction Stop")
+        matched=self.task("if($task.Settings.Enabled){Disable-ScheduledTask -TaskName 'SaisBlueCRM'|Out-Null}; if($task.State -eq 'Running'){Stop-ScheduledTask -TaskName 'SaisBlueCRM' -ErrorAction Stop}")
+        self.task_paused = self.task_paused or (matched and self.last_task_enabled)
         for role in ('https','app'):
             state = self.root / '.runtime' / (role+'.json')
             try:

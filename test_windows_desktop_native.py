@@ -1,6 +1,7 @@
 """Runs on an isolated Windows CI host, never against a company installation."""
 import json
 import base64
+import ctypes
 import os
 from pathlib import Path
 import shutil
@@ -53,7 +54,10 @@ class Handler(BaseHTTPRequestHandler):
 HTTPServer(('127.0.0.1',3000),Handler).serve_forever()
 ''',encoding='utf-8')
             python=root/'.venv/Scripts/python.exe'
-            crm=subprocess.Popen([str(python),str(root/'launch.py'),'serve'],cwd=root,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            buffer=ctypes.create_unicode_buffer(32768)
+            short=root
+            if ctypes.windll.kernel32.GetShortPathNameW(str(root),buffer,len(buffer)):short=Path(buffer.value)
+            crm=subprocess.Popen([str(python),str(short/'launch.py'),'serve'],cwd=root,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
             other=subprocess.Popen([sys.executable,'-c','import time;time.sleep(180)'])
             ops=DiagnosticOps(root,{'CRM_LISTEN_HOST':'127.0.0.1'})
             try:
