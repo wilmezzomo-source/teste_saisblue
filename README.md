@@ -4,6 +4,10 @@ Versão própria para funil comercial e atendimento. Todas as pessoas com conta 
 
 **Estado real:** código implementado e testado localmente. Não publicado no domínio da Sais Blue, sem instalação no servidor Windows da empresa e sem conexão à conta real do WhatsApp. Não há administrador ou senha padrão no pacote. A integração com a Meta foi testada com eventos assinados e transporte de envio simulado, sem mensagens reais.
 
+## Política de privacidade para publicação do app
+
+Páginas estáticas em `docs/`, com o contato confirmado da empresa, política específica do CRM e instruções de exclusão. Consulte `PUBLICAR-POLITICA-META.md`: revisar o texto, ativar GitHub Pages na branch `crm-windows` e pasta `/docs`, verificar as URLs públicas e então cadastrar na Meta. O commit não ativa Pages nem publica o app Meta automaticamente. Não exige atualizar o servidor Windows.
+
 ## Piloto de webhook HTTPS — 2026.11.06.3
 
 Veja `CONECTAR-WHATSAPP-HOJE.md`: conector ngrok autorizado para teste, com gateway somente para o callback, verificação do número/app e validação de desafio e isolamento. Novos comandos usam o Python existente; o atualizador também não depende do launcher `py`. Não foi executado com a conta ngrok/Meta real, e não é uma implantação persistente de produção.
