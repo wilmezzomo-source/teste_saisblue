@@ -70,7 +70,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL("**/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.06.1"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.06.2"}).waitFor();
   await admin.evaluate(() => document.fonts.load("400 14px Montserrat"));
   assert.equal(await admin.locator(".brand-asset img").evaluate(img => img.complete && img.naturalWidth > 0), true);
   assert.match(await admin.evaluate(() => requestKey()), /^[a-f0-9]{32}$/);
@@ -177,6 +177,11 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
       body: "Vim do anúncio",
     });
   });
+  const mapRequests=[];
+  await member.route('https://tile.openstreetmap.org/**',async route=>{
+    mapRequests.push(route.request().headers());
+    await route.fulfill({status:403,body:'Blocked provider fixture'});
+  });
   await member.reload();
   await member.locator("[data-view=map]").click();
   await member
@@ -184,6 +189,13 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .filter({ hasText: "3 lead(s) em 2 cidade(s)" })
     .waitFor();
   assert.equal(await member.locator(".lead-pin").count(), 2);
+  assert.equal(mapRequests.length,0,'Default map must not depend on external tiles');
+  await member.locator('.leaflet-control-layers').hover();
+  await member.getByText('Ruas · OpenStreetMap',{exact:true}).click();
+  await member.locator('#map-status').filter({hasText:'camada de ruas indisponível'}).waitFor();
+  assert.ok(mapRequests.length>0);
+  assert.ok(mapRequests.every(headers=>headers.referer===base+'/'),'Only the app origin should be sent as Referer');
+  assert.equal(await member.locator('.lead-pin').count(),2,'Provider failure must preserve lead pins');
   await member.locator(".lead-pin").filter({ hasText: "2" }).click();
   await member
     .locator(".city-popup")

@@ -24,7 +24,7 @@ from locations import CITIES, CITY_BY_ID, STATES, location_fields, instagram_han
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Proposta enviada', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.06.1'
+RELEASE = '2026.11.06.2'
 
 
 class Problem(Exception):

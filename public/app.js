@@ -615,7 +615,7 @@ function bindLocationFields(container) {
   };
 }
 function mapView() {
-  return `<div class="toolbar map-toolbar"><div class="toolbar-title">Onde estão seus clientes<span>Pins na sede do município; não representam o endereço exato.</span></div><div class="map-filters"><select id="map-state" aria-label="Filtrar mapa por estado"><option value="">Todos os estados</option>${states.map((s) => `<option ${s === mapState ? "selected" : ""}>${s}</option>`).join("")}</select><select id="map-stage" aria-label="Filtrar mapa por etapa"><option value="">Todas as etapas</option>${stages.map((s) => `<option ${s === mapStage ? "selected" : ""}>${esc(s)}</option>`).join("")}</select><button class="secondary" id="fit-map">Enquadrar pins</button></div></div><div class="map-layout"><section class="map-canvas-wrap"><div id="lead-map" aria-label="Mapa geográfico dos leads"></div><div id="map-status" role="status">Mapa por município · carregando cartografia</div></section><section class="panel map-summary"><p class="eyebrow">COBERTURA COMERCIAL</p><h3 id="map-count">Localizando clientes</h3><p id="map-pending-count"></p><div id="map-city-list"></div><div id="map-pending-list"></div></section></div><p class="map-footnote">A cidade é selecionada de um catálogo de municípios brasileiros. Contatos e nomes não são enviados a serviços de geocodificação. A camada de ruas usa OpenStreetMap e precisa de internet; os limites estaduais funcionam localmente.</p>`;
+  return `<div class="toolbar map-toolbar"><div class="toolbar-title">Onde estão seus clientes<span>Pins na sede do município; não representam o endereço exato.</span></div><div class="map-filters"><select id="map-state" aria-label="Filtrar mapa por estado"><option value="">Todos os estados</option>${states.map((s) => `<option ${s === mapState ? "selected" : ""}>${s}</option>`).join("")}</select><select id="map-stage" aria-label="Filtrar mapa por etapa"><option value="">Todas as etapas</option>${stages.map((s) => `<option ${s === mapStage ? "selected" : ""}>${esc(s)}</option>`).join("")}</select><button class="secondary" id="fit-map">Enquadrar pins</button></div></div><div class="map-layout"><section class="map-canvas-wrap"><div id="lead-map" aria-label="Mapa geográfico dos leads"></div><div id="map-status" role="status">Mapa por município · carregando cartografia</div></section><section class="panel map-summary"><p class="eyebrow">COBERTURA COMERCIAL</p><h3 id="map-count">Localizando clientes</h3><p id="map-pending-count"></p><div id="map-city-list"></div><div id="map-pending-list"></div></section></div><p class="map-footnote">A cidade é selecionada de um catálogo de municípios brasileiros. Contatos e nomes não são enviados a serviços de geocodificação. O mapa inicia com cartografia local. Para ver ruas, use o seletor de camadas no canto superior direito; essa opção depende do OpenStreetMap e de internet.</p>`;
 }
 async function initMap() {
   if (!window.L) {
@@ -629,9 +629,11 @@ async function initMap() {
   );
   leadMap = instance;
   mapSignature = "";
+  const localBase = L.layerGroup().addTo(instance);
   pinLayer = L.layerGroup().addTo(instance);
   const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
+    referrerPolicy: "strict-origin-when-cross-origin",
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
   });
@@ -644,14 +646,19 @@ async function initMap() {
     if (!unavailable) tileStatus();
   });
   tiles.on("tileerror", () => {
-    if (unavailable) return;
+    if (leadMap !== instance || unavailable) return;
     unavailable = true;
     if (instance.hasLayer(tiles)) instance.removeLayer(tiles);
+    if (!instance.hasLayer(localBase)) localBase.addTo(instance);
     if (leadMap === instance && $("#map-status"))
       $("#map-status").textContent =
         "Limites estaduais locais · camada de ruas indisponível";
   });
-  tiles.addTo(instance);
+  instance.on("baselayerchange", event => {
+    if(leadMap!==instance)return;
+    if(event.layer===tiles){unavailable=false;$("#map-status").textContent="Carregando ruas · OpenStreetMap";}
+    else $("#map-status").textContent="Mapa local · municípios e limites estaduais";
+  });
   try {
     if (!boundaryData) {
       const response = await fetch("/data/brazil-states.geojson");
@@ -672,7 +679,7 @@ async function initMap() {
     outline.bringToBack();
     L.control
       .layers(
-        { "Ruas · OpenStreetMap": tiles },
+        { "Mapa local": localBase, "Ruas · OpenStreetMap": tiles },
         { "Limites estaduais": outline },
         { collapsed: true },
       )
@@ -684,6 +691,7 @@ async function initMap() {
       );
   }
   if (leadMap !== instance) return;
+  $("#map-status").textContent="Mapa local · municípios e limites estaduais";
   $("#map-state").onchange = (e) => {
     mapState = e.target.value;
     refreshPins(true);

@@ -4,6 +4,10 @@ Versão própria para funil comercial e atendimento. Todas as pessoas com conta 
 
 **Estado real:** código implementado e testado localmente. Não publicado no domínio da Sais Blue, sem instalação no servidor Windows da empresa e sem conexão à conta real do WhatsApp. Não há administrador ou senha padrão no pacote. A integração com a Meta foi testada com eventos assinados e transporte de envio simulado, sem mensagens reais.
 
+## Correção de mapa 2026.11.06.2
+
+O mapa inicia com cartografia local e pins, sem depender de tiles externos. Ruas OpenStreetMap são opcionais, com política de Referer apropriada e retorno ao mapa local em falha. Veja `CORRECAO-MAPA.md` para aplicar sem reinstalar ou alterar banco/configuração.
+
 ## Localização e mapa
 
 Cidade/UF obrigatórias nos cadastros manuais, Instagram e aba Mapa com pins por município e filtros por UF/etapa. A migração preserva o banco; contatos antigos e mensagens WhatsApp sem cidade ficam sinalizados como pendentes. Confira `AJUSTES-LOCALIZACAO.md` para o fluxo, atualização Windows, fontes cartográficas e limites. A versão em preparação usa a logo original e as fontes Montserrat/Instrument Serif do site oficial; incluída na versão 2026.11.06.1.
