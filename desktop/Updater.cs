@@ -25,6 +25,9 @@ internal static class Program {
     internal const string Channel = "https://raw.githubusercontent.com/wilmezzomo-source/teste_saisblue/crm-windows/windows-release.json";
     internal static readonly string Home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SaisBlueCRM");
     internal static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
+    internal static void Diagnostic(Exception error) {
+        try { Directory.CreateDirectory(Home); File.AppendAllText(Path.Combine(Home, "updater-ui.log"), error.GetType().FullName + ": " + error.Message + Environment.NewLine + error.StackTrace + Environment.NewLine); } catch {}
+    }
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetLongPathName(string shortPath, StringBuilder longPath, uint capacity);
     internal static string Canonical(string path) {
@@ -57,7 +60,8 @@ internal static class Program {
             int idx = Array.IndexOf(args, "--hint");
             if (idx >= 0 && idx + 1 < args.Length) hint = args[idx + 1];
             Application.Run(new UpdaterForm(hint));
-        } catch {
+        } catch (Exception error) {
+            Diagnostic(error);
             MessageBox.Show("Não consegui abrir o atualizador. Execute no servidor Windows e confira a permissão da sua conta para gravar arquivos.", "Sais Blue CRM");
         }
     }
@@ -85,7 +89,7 @@ internal static class Program {
                     }
                 }
             }
-        } catch {}
+        } catch (Exception error) { Diagnostic(error); }
         if (candidates.Count == 1) return candidates.First();
         string saved = Path.Combine(Home, "installation.txt");
         if (File.Exists(saved)) { string folder = File.ReadAllText(saved).Trim(); if (IsInstallation(folder)) return folder; }

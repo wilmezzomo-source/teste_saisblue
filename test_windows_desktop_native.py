@@ -81,12 +81,19 @@ while((Get-Date) -lt $deadline) {
 }
 if(!$window) {throw 'Updater window did not open'}
 $editCondition=New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Edit)
-$edits=$window.FindAll([Windows.Automation.TreeScope]::Descendants,$editCondition)
 $found=$false
-foreach($edit in $edits) { $value=$edit.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value; if($value -eq 'TARGET_ROOT') {$found=$true} }
+$ready=(Get-Date).AddSeconds(8)
+while((Get-Date) -lt $ready -and !$found) {
+ $edits=$window.FindAll([Windows.Automation.TreeScope]::Descendants,$editCondition)
+ foreach($edit in $edits) { $value=$edit.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value; if($value -eq 'TARGET_ROOT') {$found=$true} }
+ if(!$found){Start-Sleep -Milliseconds 200}
+}
 if(!$found) {
  $values=@($edits | ForEach-Object {$_.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value}) -join '; '
- throw ('Updater did not detect original installation; expected TARGET_ROOT; displayed: '+$values)
+ $children=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition) | ForEach-Object {$_.Current.ControlType.ProgrammaticName+':'+$_.Current.Name}) -join '; '
+ $diag=Join-Path $env:LOCALAPPDATA 'SaisBlueCRM\updater-ui.log'
+ $log=if(Test-Path $diag){Get-Content -Raw $diag}else{'none'}
+ throw ('Updater did not detect original installation; expected TARGET_ROOT; displayed: '+$values+'; controls: '+$children+'; diagnostic: '+$log)
 }
 $button=$window.FindFirst([Windows.Automation.TreeScope]::Descendants,(New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty,'BUTTON_ACTION')))
 $button.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
