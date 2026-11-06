@@ -6,7 +6,11 @@ Versão própria para funil comercial e atendimento. Todas as pessoas com conta 
 
 ## Localização e mapa
 
-Cidade/UF obrigatórias nos cadastros manuais, Instagram e aba Mapa com pins por município e filtros por UF/etapa. A migração preserva o banco; contatos antigos e mensagens WhatsApp sem cidade ficam sinalizados como pendentes. Confira `AJUSTES-LOCALIZACAO.md` para o fluxo, atualização Windows, fontes cartográficas e limites. A logo e as fontes oficiais ainda aguardam consulta ao site, bloqueada pela política de rede do ambiente.
+Cidade/UF obrigatórias nos cadastros manuais, Instagram e aba Mapa com pins por município e filtros por UF/etapa. A migração preserva o banco; contatos antigos e mensagens WhatsApp sem cidade ficam sinalizados como pendentes. Confira `AJUSTES-LOCALIZACAO.md` para o fluxo, atualização Windows, fontes cartográficas e limites. A versão em preparação usa a logo original e as fontes Montserrat/Instrument Serif do site oficial; incluída na versão 2026.11.06.1.
+
+## Entrada em uso
+
+Siga `ENTRAR-EM-USO-HOJE.md` por etapas: atualizar com backup, validar o acesso da equipe, consultar o número oficial na Meta e só então configurar HTTPS/webhook e validar envio/recebimento reais. `VALIDAR-INSTALACAO.cmd` faz a checagem local; `DIAGNOSTICAR-WHATSAPP.cmd` consulta o número oficial sem enviar ou registrar nada. Os relatórios gerados não contêm tokens e não entram no Git. Erros recebidos da Meta agora ficam com código e orientação no histórico da mensagem.
 
 ## Funcionalidades
 
@@ -31,6 +35,10 @@ Para um primeiro teste no próprio Windows, extraia o pacote e abra `INICIAR-NO-
 Para publicação e início automático, siga [deploy/INSTALAR-WINDOWS.md](deploy/INSTALAR-WINDOWS.md). O documento inclui os comandos, requisitos de DNS/HTTPS, cadastro do administrador, acesso da equipe, conexão Meta e um pedido pronto para encaminhar à Telium/TI.
 
 Ainda é necessário acesso autorizado ao servidor, domínio/HTTPS e credenciais oficiais da Meta. O telefone informado (+55 54 3443-6405) é apenas referência de negócio, não uma credencial ou identificador da API. Não foram feitas mudanças no site, e-mails ou DNS.
+
+## Atualizar e acessar a instalação existente
+
+Não é necessário reinstalar o CRM a cada versão. Veja `COMO-ATUALIZAR-E-ACESSAR.txt`. Nesta versão, `ATUALIZAR-NO-WINDOWS.cmd` poderá ser executado da pasta nova extraída para selecionar a instalação antiga, fazer backup e atualizar somente o código/dependências. Usuários usam o navegador; somente o servidor Windows executa o programa. Logo/fontes e o atualizador foram testados localmente e incluídos na versão 2026.11.06.1; a execução no Windows da empresa ainda deve ser validada.
 
 ## Desenvolvimento local
 

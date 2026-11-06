@@ -24,6 +24,7 @@ from locations import CITIES, CITY_BY_ID, STATES, location_fields, instagram_han
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Proposta enviada', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
+RELEASE = '2026.11.06.1'
 
 
 class Problem(Exception):
@@ -97,7 +98,7 @@ def init_db(app):
         # Additive migration preserves the first prototype's data.
         for table, additions in {
             'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''")],
-            'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''")],
+            'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''"), ('error_code','INTEGER'), ('error_detail', "TEXT NOT NULL DEFAULT ''")],
         }.items():
             existing = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
             for column, declaration in additions:
@@ -130,6 +131,14 @@ def ingest(db, number, name, body, message_id, referral=None, source='WhatsApp',
                (message_id, cid, body, 'in', created, channel, message_id if channel == 'meta' else None))
     db.execute('UPDATE contacts SET updated=?,revision=revision+1 WHERE id=?', (now(), cid))
     return True
+
+
+def meta_failure(code):
+    hints={190:'Token inválido ou expirado.',131000:'Erro genérico da Meta; a causa específica não foi informada.',
+           131026:'A Meta não conseguiu entregar a mensagem.',131047:'Janela de atendimento encerrada.',
+           131030:'Destinatário não autorizado para este número de teste.',133010:'Número não registrado na plataforma da API.',
+           100:'Verifique parâmetros, permissões e identificação do recurso.',200:'Permissão de acesso negada.'}
+    return hints.get(code,'Falha informada pela Meta; consultar o código no suporte oficial.')
 
 
 def create_app(config=None):
@@ -245,6 +254,12 @@ def create_app(config=None):
             raise Problem('Página não encontrada.', 404)
         return send_from_directory(ROOT / 'public', name)
 
+    @app.get('/brand/<name>')
+    def brand_asset(name):
+        if name not in ('sb-logo.png','montserrat-400.woff2','montserrat-500.woff2','montserrat-600.woff2','montserrat-700.woff2','instrument-serif-italic.woff2'):
+            raise Problem('Arquivo não encontrado.',404)
+        return send_from_directory(ROOT / 'public/brand',name)
+
     @app.get('/vendor/leaflet/<path:name>')
     def leaflet_asset(name):
         if name not in ('leaflet.js','leaflet.css','images/layers.png','images/layers-2x.png'):
@@ -263,7 +278,7 @@ def create_app(config=None):
     def health():
         with database(app) as db:
             db.execute('SELECT 1').fetchone()
-        return jsonify(ok=True)
+        return jsonify(ok=True, application='sais-blue-crm', version=RELEASE)
 
     @app.post('/api/login')
     def login():
@@ -470,7 +485,7 @@ def create_app(config=None):
     def status():
         receive = bool(app.config['META_APP_SECRET'] and app.config['META_VERIFY_TOKEN'] and app.config['META_PHONE_NUMBER_ID'])
         sending = bool(receive and app.config['META_ACCESS_TOKEN'])
-        return jsonify(mode='Equipe Sais Blue', webhook_configured=receive, sending_configured=sending,
+        return jsonify(version=RELEASE, mode='Equipe Sais Blue', webhook_configured=receive, sending_configured=sending,
                        connection_verified=False, simulation=app.config['ALLOW_SIMULATION'])
 
     @app.get('/webhooks/whatsapp')
@@ -506,7 +521,9 @@ def create_app(config=None):
                     for s in value.get('statuses', []):
                         row = db.execute('SELECT id,status FROM messages WHERE external_id=?', (s.get('id'),)).fetchone()
                         if row and rank.get(s.get('status'), -1) > rank.get(row['status'], 0):
-                            db.execute('UPDATE messages SET status=? WHERE id=?', (s['status'], row['id']))
+                            error_code=(s.get('errors') or [{}])[0].get('code')
+                            error_code=error_code if isinstance(error_code,int) else None
+                            db.execute('UPDATE messages SET status=?,error_code=?,error_detail=? WHERE id=?', (s['status'],error_code,meta_failure(error_code) if error_code else '',row['id']))
         return jsonify(ok=True)
 
     @app.post('/api/send')
@@ -537,19 +554,24 @@ def create_app(config=None):
         url = f"https://graph.facebook.com/{app.config['META_API_VERSION']}/{receiver}/messages"
         payload = json.dumps({'messaging_product': 'whatsapp', 'to': contact['phone'], 'type': 'text', 'text': {'body': body}}).encode()
         req = urllib.request.Request(url, data=payload, headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'})
-        external_id, result_status = None, 'uncertain'
+        external_id, result_status, error_code = None, 'uncertain', None
         try:
             sender = app.config.get('META_SENDER', urllib.request.urlopen)
             with sender(req, timeout=20) as response:
                 external_id = json.load(response)['messages'][0]['id']
             result_status = 'accepted'
-        except urllib.error.HTTPError:
+        except urllib.error.HTTPError as error:
             result_status = 'failed'
+            try:
+                error_code=json.load(error).get('error',{}).get('code')
+                error_code=error_code if isinstance(error_code,int) else None
+            except (ValueError,TypeError):
+                error_code=None
         except (OSError, ValueError, KeyError, IndexError):
             # A timeout can occur after Meta accepted the request. Never auto-retry.
             result_status = 'uncertain'
         with database(app) as db:
-            db.execute('UPDATE messages SET status=?,external_id=? WHERE id=?', (result_status, external_id, mid))
+            db.execute('UPDATE messages SET status=?,external_id=?,error_code=?,error_detail=? WHERE id=?', (result_status,external_id,error_code,meta_failure(error_code) if error_code else '',mid))
             db.execute('UPDATE contacts SET updated=? WHERE id=?', (now(), contact['id']))
         if result_status != 'accepted':
             raise Problem('A Meta recusou o envio.' if result_status == 'failed' else 'Envio sem confirmação. Confira o histórico antes de tentar novamente para evitar duplicação.', 502)

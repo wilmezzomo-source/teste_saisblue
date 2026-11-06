@@ -1,0 +1,56 @@
+SAIS BLUE CRM - ATUALIZACAO E ACESSO DA EQUIPE
+
+NAO E NECESSARIO REINSTALAR TUDO.
+A instalacao ja existente deve ser mantida. O codigo e atualizado; o banco,
+usuarios, senhas e configuracoes ficam no servidor.
+
+ATUALIZAR MANUALMENTE UMA VERSAO JA PUBLICADA
+1. No servidor Windows, pare o CRM com Ctrl+C no terminal onde ele roda.
+   Se ele roda pelo Agendador, pare a tarefa SaisBlueCRM com o responsavel de TI.
+2. Faca backup conforme deploy/INSTALAR-WINDOWS.md.
+3. Baixe o ZIP da versao publicada e extraia tudo em uma pasta separada.
+4. Copie os arquivos e subpastas para a pasta ORIGINAL do CRM, aceitando substituir.
+   Nao apague .env, .venv ou a pasta raiz data.
+   public/data e diferente de data: copie public/data e public/vendor junto com o codigo.
+5. Abra INICIAR-NO-WINDOWS.cmd na pasta ORIGINAL.
+   O assistente atualiza as dependencias e abre o navegador.
+6. Atualize a pagina do navegador. Mantenha o terminal aberto durante a execucao manual.
+
+ASSISTENTE DE ATUALIZACAO (VERSAO 2026.11.06.1)
+Execute ATUALIZAR-NO-WINDOWS.cmd na pasta NOVA extraida e selecione a pasta ANTIGA.
+Ele recusa atualizar enquanto o app roda, cria um backup consistente do banco e do
+codigo substituido, atualiza o codigo e dependencias, e preserva .env/.venv/banco.
+Depois abra INICIAR-NO-WINDOWS.cmd na pasta antiga. O assistente nao altera DNS,
+firewall nem a conta Meta. Se falhar, nao reinicie ate revisar a mensagem com TI.
+
+QUAL APLICATIVO USAR
+Servidor: Windows executa INICIAR-NO-WINDOWS.cmd, que inicia Python/Waitress.
+Uso do CRM: qualquer navegador atual (Edge, Chrome ou Safari).
+Os computadores da equipe NAO instalam Python nem uma copia do CRM.
+
+ACESSO PELA MESMA REDE
+Se ainda nao foi configurado:
+- Na pasta original do servidor, clique com botao direito em
+  ATIVAR-REDE-E-WHATSAPP.cmd > Executar como administrador.
+- Escolha 1 e selecione o IP privado da placa conectada a rede da empresa.
+- Reinicie o CRM abrindo INICIAR-NO-WINDOWS.cmd.
+- O endereco exibido pelo assistente e o que todos usam no navegador.
+  Exemplo apenas ilustrativo: http://192.168.1.25:3000
+  Nao use esse exemplo sem verificar o IP real do servidor.
+- Abra o CRM nesse mesmo endereco no servidor, entre como administrador e gere
+  um convite individual em Equipe para cada pessoa.
+- Cada pessoa abre seu convite no proprio navegador, cria a senha e entra.
+- Todos os membros ativos podem editar todos os cards.
+
+127.0.0.1 funciona apenas no computador onde o servidor roda; nao e o endereco
+da equipe. O servidor deve permanecer ligado e o processo do CRM precisa estar
+rodando. Para inicio automatico, use o roteiro de TI em deploy/INSTALAR-WINDOWS.md.
+
+O acesso LAN inicial usa HTTP sem criptografia. HTTPS continua necessario para
+proteger senhas/dados em operacao. Nao encaminhe a porta 3000 para a internet.
+
+WHATSAPP
+Trocar um token expirado nao confirma entrega. A conexao real ainda exige
+credenciais oficiais, numero correto e webhook HTTPS configurado e validado.
+O numero de teste da Meta e diferente do numero oficial da empresa; nao e uma
+instalacao adicional do CRM.

@@ -172,6 +172,18 @@ class CRMTest(unittest.TestCase):
         messages=self.client.get('/api/contacts').json['contacts'][0]['messages']
         self.assertEqual(next(m for m in messages if m['direction']=='out')['status'],'read')
 
+    def test_failed_delivery_keeps_meta_error_code_in_history(self):
+        self.signed(self.meta_payload())
+        c=self.client.get('/api/contacts').json['contacts'][0]
+        self.app.config.update(META_ACCESS_TOKEN='fake-token',META_SENDER=lambda req,timeout:io.BytesIO(b'{"messages":[{"id":"wamid.fail.1"}]}'))
+        self.post('/api/send',{'id':c['id'],'body':'Teste','request_id':secrets.token_hex(16)})
+        event={'entry':[{'changes':[{'value':{'metadata':{'phone_number_id':'123456'},'statuses':[{'id':'wamid.fail.1','status':'failed','errors':[{'code':131000,'message':'private raw body should not be stored'}]}]}}]}]}
+        self.signed(event)
+        message=next(m for m in self.client.get('/api/contacts').json['contacts'][0]['messages'] if m['direction']=='out')
+        self.assertEqual(message['status'],'failed')
+        self.assertEqual(message['error_code'],131000)
+        self.assertNotIn('private raw',message['error_detail'])
+
     def test_timeout_not_automatically_retried(self):
         self.signed(self.meta_payload())
         c=self.client.get('/api/contacts').json['contacts'][0]

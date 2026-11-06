@@ -70,6 +70,9 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL("**/login");
   await login(admin, "admin@example.test", secret);
+  await admin.locator("#release-version").filter({hasText:"2026.11.06.1"}).waitFor();
+  await admin.evaluate(() => document.fonts.load("400 14px Montserrat"));
+  assert.equal(await admin.locator(".brand-asset img").evaluate(img => img.complete && img.naturalWidth > 0), true);
   assert.match(await admin.evaluate(() => requestKey()), /^[a-f0-9]{32}$/);
   await admin.locator("[data-view=team]").click();
   await admin.locator("#invite-form [name=email]").fill("vendas@example.test");

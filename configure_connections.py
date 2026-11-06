@@ -160,10 +160,12 @@ def configure_meta():
     url = values.get('APP_URL','')
     if urlsplit(url).scheme != 'https':
         print('Falta publicar HTTPS. O endereço da rede interna não pode receber os eventos da Meta pela internet.')
+        callback = 'PENDENTE — configurar URL pública HTTPS antes de cadastrar na Meta.'
     else:
-        print('Webhook para cadastrar no app: ' + url.rstrip('/') + '/webhooks/whatsapp')
+        callback = url.rstrip('/') + '/webhooks/whatsapp'
+        print('URL para cadastrar após confirmar HTTPS público: ' + callback)
     setup = ROOT / 'META-CONFIGURACAO-LOCAL.txt'
-    setup.write_text('USO LOCAL. NÃO ENVIAR NO CHAT OU PUBLICAR.\nWebhook (exige HTTPS público): '+url.rstrip('/')+'/webhooks/whatsapp\nToken de verificação: '+verification+'\nAssine os eventos messages da conta WhatsApp.\n', encoding='utf-8')
+    setup.write_text('USO LOCAL. NÃO ENVIAR NO CHAT OU PUBLICAR.\nWebhook: '+callback+'\nToken de verificação: '+verification+'\nAssine os eventos messages da conta WhatsApp.\n', encoding='utf-8')
     print('Os dados de verificação estão em META-CONFIGURACAO-LOCAL.txt, nesta pasta. Não envie esse arquivo aqui.')
     print('Reinicie o CRM após concluir a configuração. Uma pessoa deve mandar mensagem para o número e testar a resposta pelo CRM.')
 

@@ -31,7 +31,7 @@ O catálogo contém municípios brasileiros. Se for necessário trabalhar com ou
 
 ## Identidade visual
 
-O layout e as cores existentes foram preservados. A aplicação da logo e fonte exatas do site ainda depende de consultar `saisblue.com.br`, bloqueado pela política de rede do ambiente de desenvolvimento. A liberação dos hosts do site e dos tiles foi salva como rascunho de configuração do ambiente, não aplicada ao servidor Windows da empresa. Não foi adotada uma fonte arbitrária como se fosse a oficial.
+O layout e as cores existentes foram preservados. A versão em preparação agora usa o arquivo original da logo branca enviado pelo usuário e encontrado no site oficial, sobre suporte azul escuro, sem redesenho. As fontes Montserrat e Instrument Serif foram obtidas do mesmo site e incluídas localmente com licenças. Fontes em `public/brand/SOURCES.md`. Essa alteração integra a versão 2026.11.06.1.
 
 ## WhatsApp oficial
 
