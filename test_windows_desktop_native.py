@@ -71,32 +71,42 @@ HTTPServer(('127.0.0.1',3000),Handler).serve_forever()
                 do_update=(repo/'windows-release.json').is_file()
                 action='Atualizar e abrir CRM' if do_update else 'Parar CRM'
                 code=r'''$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
+Add-Type @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class SaisBlueGui {
+ delegate bool Callback(IntPtr handle, IntPtr data);
+ [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, Callback callback, IntPtr data);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern IntPtr SendMessage(IntPtr h,int m,IntPtr w,StringBuilder l);
+ [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h,int m,IntPtr w,IntPtr l);
+ public static List<IntPtr> Children(IntPtr parent) { var list=new List<IntPtr>(); EnumChildWindows(parent,(h,d)=>{list.Add(h);return true;},IntPtr.Zero);return list; }
+ public static string Text(IntPtr h) { var b=new StringBuilder(32768);SendMessage(h,13,(IntPtr)b.Capacity,b);return b.ToString(); }
+ public static void Click(IntPtr h) { SendMessage(h,245,IntPtr.Zero,IntPtr.Zero); }
+}
+'@
 $deadline=(Get-Date).AddSeconds(20);$window=$null
 while((Get-Date) -lt $deadline) {
  $ps=@(Get-Process -Name 'SaisBlue-Atualizador' -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle -eq 'Sais Blue CRM'})
- if($ps.Count -eq 1) {$window=[Windows.Automation.AutomationElement]::FromHandle($ps[0].MainWindowHandle);break}
+ if($ps.Count -eq 1) {$window=$ps[0].MainWindowHandle;break}
  Start-Sleep -Milliseconds 200
 }
 if(!$window) {throw 'Updater window did not open'}
-$editCondition=New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty,[Windows.Automation.ControlType]::Edit)
-$found=$false
-$ready=(Get-Date).AddSeconds(8)
-while((Get-Date) -lt $ready -and !$found) {
- $edits=$window.FindAll([Windows.Automation.TreeScope]::Descendants,$editCondition)
- foreach($edit in $edits) { $value=$edit.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value; if($value -eq 'TARGET_ROOT') {$found=$true} }
- if(!$found){Start-Sleep -Milliseconds 200}
+$found=$false;$button=[IntPtr]::Zero;$ready=(Get-Date).AddSeconds(8)
+while((Get-Date) -lt $ready -and (!$found -or $button -eq [IntPtr]::Zero)) {
+ foreach($handle in [SaisBlueGui]::Children($window)) {
+  $value=[SaisBlueGui]::Text($handle)
+  if($value -eq 'TARGET_ROOT') {$found=$true}
+  if($value -eq 'BUTTON_ACTION') {$button=$handle}
+ }
+ if(!$found -or $button -eq [IntPtr]::Zero){Start-Sleep -Milliseconds 200}
 }
-if(!$found) {
- $values=@($edits | ForEach-Object {$_.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value}) -join '; '
- $children=@($window.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition) | ForEach-Object {$_.Current.ControlType.ProgrammaticName+':'+$_.Current.Name}) -join '; '
- $diag=Join-Path $env:LOCALAPPDATA 'SaisBlueCRM\updater-ui.log'
- $log=if(Test-Path $diag){Get-Content -Raw $diag}else{'none'}
- throw ('Updater did not detect original installation; expected TARGET_ROOT; displayed: '+$values+'; controls: '+$children+'; diagnostic: '+$log)
+if(!$found -or $button -eq [IntPtr]::Zero) {
+ $controls=@([SaisBlueGui]::Children($window)|ForEach-Object {[SaisBlueGui]::Text($_)}) -join '; '
+ throw ('Native GUI controls missing; expected TARGET_ROOT and BUTTON_ACTION; found: '+$controls)
 }
-$button=$window.FindFirst([Windows.Automation.TreeScope]::Descendants,(New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty,'BUTTON_ACTION')))
-$button.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
+[SaisBlueGui]::Click($button)
 @{window=$true;detected=$found;pid=$ps[0].Id}|ConvertTo-Json -Compress'''.replace('TARGET_ROOT',encoded_root).replace('BUTTON_ACTION',action)
                 result=ops.powershell(code)
                 self.assertTrue(result['detected'])
