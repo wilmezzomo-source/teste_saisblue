@@ -1,6 +1,6 @@
 # Sais Blue — execução por etapas, com validação
 
-Versão **2026.11.06.1**. Objetivo inicial: equipe usando o CRM na rede da empresa. A integração com o WhatsApp oficial só está concluída quando uma mensagem real entra no CRM e uma resposta chega ao cliente; um token, um número listado ou um retorno `accepted` não comprovam isso.
+Versão **2026.11.06.3**. Objetivo inicial: equipe usando o CRM na rede da empresa. A integração com o WhatsApp oficial só está concluída quando uma mensagem real entra no CRM e uma resposta chega ao cliente; um token, um número listado ou um retorno `accepted` não comprovam isso.
 
 ## 1. Atualizar a instalação que já existe
 
@@ -13,7 +13,7 @@ Versão **2026.11.06.1**. Objetivo inicial: equipe usando o CRM na rede da empre
 5. Aguarde o resultado. O atualizador faz backup do banco e do código substituído e preserva a configuração, o banco e os acessos. Se ele disser que o CRM continua rodando, pare o processo e repita a atualização. Se houver falha nas dependências, não inicie até corrigir a etapa.
 6. Na **pasta antiga**, abra **INICIAR-NO-WINDOWS.cmd**.
 
-**Validação:** o CRM abre com a logo SB enviada, conserva os contatos existentes e mostra `2026.11.06.1` no rodapé após o login. Se houver erro, pare aqui e informe a mensagem; não reinstale nem crie outro banco.
+**Validação:** o CRM abre com a logo SB enviada, conserva os contatos existentes e mostra `2026.11.06.3` no rodapé após o login. Se houver erro, pare aqui e informe a mensagem; não reinstale nem crie outro banco.
 
 ## 2. Validar o uso pela equipe
 
@@ -51,7 +51,10 @@ O número escolhido é **Sais Blue – Willian, +55 54 3443-6405**, Phone Number
 
 ## 4. Habilitação oficial, HTTPS e webhook
 
-Para terminar a integração mantendo o aplicativo WhatsApp Business, é necessário um processo oficial de onboarding compatível com coexistência e elegível para esta conta. Ainda não há essa confirmação. Dependendo do caminho oferecido pela Meta, pode ser necessário um provedor habilitado. Isso pode exigir análise, prazo e contratação; nenhum desses passos foi realizado pelo pacote.
+Após o fluxo QR oficial, o número do Willian passou a aparecer como Inscrito no app. Para o piloto HTTPS com ngrok autorizado pelo usuário, siga agora `CONECTAR-WHATSAPP-HOJE.md`. Esse roteiro detalha a configuração local e a validação da URL; a inscrição não substitui o teste final de mensagens.
+
+
+Para terminar a integração mantendo o aplicativo WhatsApp Business, é necessário um processo oficial de onboarding compatível com coexistência e elegível para esta conta. A inscrição foi observada no painel, mas a entrega real continua pendente de validação. Dependendo do caminho oferecido pela Meta, pode ser necessário um provedor habilitado. Isso pode exigir análise, prazo e contratação; nenhum desses passos foi realizado pelo pacote.
 
 Depois de confirmar a habilitação e a autorização da conta/app:
 

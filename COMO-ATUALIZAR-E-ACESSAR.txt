@@ -16,7 +16,7 @@ ATUALIZAR MANUALMENTE UMA VERSAO JA PUBLICADA
    O assistente atualiza as dependencias e abre o navegador.
 6. Atualize a pagina do navegador. Mantenha o terminal aberto durante a execucao manual.
 
-ASSISTENTE DE ATUALIZACAO (VERSAO 2026.11.06.1)
+ASSISTENTE DE ATUALIZACAO (VERSAO 2026.11.06.3)
 Execute ATUALIZAR-NO-WINDOWS.cmd na pasta NOVA extraida e selecione a pasta ANTIGA.
 Ele recusa atualizar enquanto o app roda, cria um backup consistente do banco e do
 codigo substituido, atualiza o codigo e dependencias, e preserva .env/.venv/banco.

@@ -1,4 +1,5 @@
 """Apply an extracted release to an existing local installation, keeping state intact."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -90,14 +91,19 @@ def main():
     print('SAIS BLUE — atualizar uma instalação existente\n')
     print('Pare o CRM antes. Escolha a pasta ANTIGA, que já contém seus contatos e a configuração.')
     print('O assistente cria backup e preserva .env, .venv e o banco. Não altera firewall, DNS ou WhatsApp.')
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        window=tk.Tk();window.withdraw()
-        chosen=filedialog.askdirectory(title='Selecione a pasta ANTIGA do CRM já instalado')
-        window.destroy()
-    except ImportError:
-        chosen=input('Caminho da pasta antiga: ').strip().strip('"')
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--target',help='Pasta existente, selecionada pelo iniciador Windows.')
+    args=parser.parse_args()
+    chosen=args.target
+    if not chosen:
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            window=tk.Tk();window.withdraw()
+            chosen=filedialog.askdirectory(title='Selecione a pasta ANTIGA do CRM já instalado')
+            window.destroy()
+        except ImportError:
+            chosen=input('Caminho da pasta antiga: ').strip().strip('"')
     if not chosen:
         print('Nenhuma pasta selecionada. Nada foi alterado.');return
     backup=apply_update(ROOT,Path(chosen))

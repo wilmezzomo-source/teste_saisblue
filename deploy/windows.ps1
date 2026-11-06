@@ -20,7 +20,7 @@ function Import-Config {
         $Parts = $Line.Split('=', 2)
         if ($Parts.Count -ne 2) { throw 'Linha invalida em .env.' }
         $Key = $Parts[0].Trim()
-        if ($Key -notin @('APP_ENV','APP_URL','CRM_DB','ALLOW_SIMULATION','META_APP_SECRET','META_VERIFY_TOKEN','META_ACCESS_TOKEN','META_PHONE_NUMBER_ID','META_API_VERSION','CRM_DOMAIN','CRM_LISTEN_HOST')) { throw 'Chave desconhecida em .env.' }
+        if ($Key -notin @('APP_ENV','APP_URL','CRM_DB','ALLOW_SIMULATION','META_APP_SECRET','META_VERIFY_TOKEN','META_ACCESS_TOKEN','META_PHONE_NUMBER_ID','META_API_VERSION','CRM_DOMAIN','CRM_LISTEN_HOST','NGROK_AUTHTOKEN','META_WEBHOOK_URL')) { throw 'Chave desconhecida em .env.' }
         [Environment]::SetEnvironmentVariable($Key, $Parts[1].Trim(), 'Process')
     }
 }
