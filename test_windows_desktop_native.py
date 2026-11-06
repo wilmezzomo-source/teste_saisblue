@@ -30,7 +30,7 @@ class WindowsDesktopNativeTest(unittest.TestCase):
                 value=result.stdout.decode('utf-8-sig').strip()
                 return json.loads(value) if value else None
         with tempfile.TemporaryDirectory(prefix='SaisBlue CRM test ') as folder:
-            root=Path(folder)
+            root=Path(folder).resolve()
             subprocess.run([sys.executable,'-m','venv','--without-pip','--system-site-packages',root/'.venv'],check=True,capture_output=True)
             (root/'data').mkdir()
             (root/'server.py').write_text("RELEASE = '2026.11.06.0'\n",encoding='utf-8')
@@ -80,7 +80,10 @@ $editCondition=New-Object Windows.Automation.PropertyCondition([Windows.Automati
 $edits=$window.FindAll([Windows.Automation.TreeScope]::Descendants,$editCondition)
 $found=$false
 foreach($edit in $edits) { $value=$edit.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value; if($value -eq 'TARGET_ROOT') {$found=$true} }
-if(!$found) {throw 'Updater did not detect original installation'}
+if(!$found) {
+ $values=@($edits | ForEach-Object {$_.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern).Current.Value}) -join '; '
+ throw ('Updater did not detect original installation; expected TARGET_ROOT; displayed: '+$values)
+}
 $button=$window.FindFirst([Windows.Automation.TreeScope]::Descendants,(New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty,'BUTTON_ACTION')))
 $button.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern).Invoke()
 @{window=$true;detected=$found;pid=$ps[0].Id}|ConvertTo-Json -Compress'''.replace('TARGET_ROOT',encoded_root).replace('BUTTON_ACTION',action)

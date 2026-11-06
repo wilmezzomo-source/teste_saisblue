@@ -27,7 +27,11 @@ def emit(message, **fields):
 
 def process_roles(snapshot, target):
     """Recognize only this installation; never stop processes by program name alone."""
-    root = ntpath.normcase(ntpath.normpath(str(target)))
+    def canonical(value):
+        if sys.platform=='win32' and ntpath.isabs(value):
+            value=os.path.realpath(value)
+        return ntpath.normcase(ntpath.normpath(value))
+    root = canonical(str(target))
     roles = {}
     records = snapshot.get('processes', [])
     for p in records:
@@ -35,7 +39,7 @@ def process_roles(snapshot, target):
             continue
         command = p.get('command') or ''
         tokens = [a or b for a, b in re.findall(r'"([^"]*)"|([^\s]+)', command)]
-        normalized = [ntpath.normcase(ntpath.normpath(t)) for t in tokens]
+        normalized = [canonical(t) for t in tokens]
         for script, role in [('launch.py','app'),('server.py','app'),('iniciar_https.py','https'),('setup_windows.py','wrapper')]:
             owned = ntpath.join(root, script) in normalized
             # A relative script is accepted only with a validated lifecycle marker, below.

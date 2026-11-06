@@ -7,6 +7,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Management;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -24,6 +25,13 @@ internal static class Program {
     internal const string Channel = "https://raw.githubusercontent.com/wilmezzomo-source/teste_saisblue/crm-windows/windows-release.json";
     internal static readonly string Home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SaisBlueCRM");
     internal static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint GetLongPathName(string shortPath, StringBuilder longPath, uint capacity);
+    internal static string Canonical(string path) {
+        var buffer = new StringBuilder(32768);
+        if (GetLongPathName(path, buffer, (uint)buffer.Capacity) > 0) path = buffer.ToString();
+        return Path.GetFullPath(path);
+    }
 
     internal static string Quote(string value) {
         int trailing = value.Length - value.TrimEnd('\\').Length;
@@ -68,11 +76,11 @@ internal static class Program {
                     string exe = p["ExecutablePath"] as string;
                     string command = p["CommandLine"] as string ?? "";
                     if (exe != null && exe.EndsWith("\\.venv\\Scripts\\python.exe", StringComparison.OrdinalIgnoreCase)) {
-                        string folder = exe.Substring(0, exe.Length - "\\.venv\\Scripts\\python.exe".Length);
+                        string folder = Canonical(exe.Substring(0, exe.Length - "\\.venv\\Scripts\\python.exe".Length));
                         if (IsInstallation(folder) && (command.Contains("launch.py") || command.Contains("setup_windows.py") || command.Contains("iniciar_https.py"))) candidates.Add(folder);
                     }
                     foreach (Match m in Regex.Matches(command, "(?:\"(?<path>[^\"]+\\\\(?:launch|setup_windows|iniciar_https|server)\\.py)\"|(?<path>[A-Za-z]:\\\\[^\\s\"]+\\\\(?:launch|setup_windows|iniciar_https|server)\\.py))", RegexOptions.IgnoreCase)) {
-                        string folder = Path.GetDirectoryName(m.Groups["path"].Value);
+                        string folder = Canonical(Path.GetDirectoryName(m.Groups["path"].Value));
                         if (IsInstallation(folder)) candidates.Add(folder);
                     }
                 }
