@@ -138,7 +138,7 @@ class WindowsOps:
 
     def snapshot(self):
         code = r'''$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
-$roots=@([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('ROOT_B64'))|ConvertFrom-Json)
+$roots=ConvertFrom-Json -InputObject ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('ROOT_B64')))
 $all=@(Get-CimInstance Win32_Process)
 $own=@($all | Where-Object {
  $match=$false
@@ -157,7 +157,7 @@ $ports=@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Wher
     def task(self, action):
         # Touch only the exact named application task pointing at this project's script.
         result = self.powershell(r'''$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
-$roots=@([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('ROOT_B64'))|ConvertFrom-Json)
+$roots=ConvertFrom-Json -InputObject ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('ROOT_B64')))
 $task=Get-ScheduledTask -TaskName 'SaisBlueCRM' -ErrorAction SilentlyContinue
 $match=$false
 foreach($root in $roots) {
