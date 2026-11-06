@@ -27,6 +27,8 @@ class DesktopUpdateTest(unittest.TestCase):
         (self.target/'server.py').write_text('previous code')
         (self.target/'requirements.txt').write_text('same dependencies')
         (self.target/'launch.py').write_text('previous launcher')
+        (self.target/'public').mkdir()
+        (self.target/'public/index.html').write_text('previous UI')
         (self.target/'INICIAR-NO-WINDOWS.cmd').write_text('previous command')
         (self.target/'.venv/Scripts/python.exe').write_bytes(b'installed-python')
         (self.target/'.env').write_text('CRM_DB=data/crm.sqlite3\nCRM_LISTEN_HOST=192.168.0.219\nMETA_ACCESS_TOKEN=private-fixture\nMETA_WEBHOOK_URL=https://same.ngrok-free.dev/webhooks/whatsapp\n')
@@ -76,6 +78,7 @@ class DesktopUpdateTest(unittest.TestCase):
         with self.assertRaisesRegex(UpdateError,'recuperada e o CRM reiniciado'):
             update_installation(self.source,self.target,ops,self.report,install=False)
         self.assertEqual((self.target/'server.py').read_text(),'previous code')
+        self.assertEqual((self.target/'public/index.html').read_text(),'previous UI')
         self.assertEqual((self.target/'.env').read_bytes(),config)
         self.assertFalse((self.target/'qualification.py').exists())
         self.assertEqual(ops.calls[-1],('start',None))

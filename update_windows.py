@@ -72,9 +72,9 @@ def apply_update(source,target,install=True,on_backup=None):
             relative=p.relative_to(source)
             current=target/relative
             if current.is_file():
-                previous.write(current,str(relative))
-                existing.append(str(relative))
-    (backup/'restauracao.json').write_text(json.dumps({'target':str(target),'database':str(database),'files':[str(p.relative_to(source)) for p in files],'existing':existing}),encoding='utf-8')
+                previous.write(current,relative.as_posix())
+                existing.append(relative.as_posix())
+    (backup/'restauracao.json').write_text(json.dumps({'target':str(target),'database':str(database),'files':[p.relative_to(source).as_posix() for p in files],'existing':existing}),encoding='utf-8')
     if on_backup:on_backup(backup)
     for p in files:
         relative=p.relative_to(source)
