@@ -19,9 +19,13 @@ jobs:
       - name: Compile Windows application
         shell: pwsh
         run: |
+          $delivered = Join-Path $env:RUNNER_TEMP 'SaisBlue-delivered.exe'
+          Copy-Item desktop/SaisBlue-Atualizador.exe $delivered
           $compiler = Get-ChildItem "$env:ProgramFiles\dotnet\sdk\*\Roslyn\bincore\csc.dll" | Sort-Object FullName | Select-Object -Last 1
           $refs = "${env:ProgramFiles(x86)}\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8"
           python desktop/build.py --dotnet dotnet --compiler $compiler.FullName --refs $refs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item $delivered desktop/SaisBlue-Atualizador.exe -Force
       - name: Tests and real Windows lifecycle
         env:
           SAISBLUE_NATIVE_WINDOWS_TEST: '1'

@@ -182,7 +182,7 @@ if($p) {
     def stop(self):
         owned = process_roles(self.snapshot(), str(self.root))
         # Disable restart while replacing files, only for this installation's own task.
-        matched=self.task("if($task.Settings.Enabled){Disable-ScheduledTask -TaskName 'SaisBlueCRM'|Out-Null}; if($task.State -eq 'Running'){Stop-ScheduledTask -TaskName 'SaisBlueCRM' -ErrorAction Stop}")
+        matched=self.task("if($task.State -eq 'Running'){Stop-ScheduledTask -TaskName 'SaisBlueCRM' -ErrorAction Stop}; if($task.Settings.Enabled){Disable-ScheduledTask -TaskName 'SaisBlueCRM'|Out-Null}")
         self.task_paused = self.task_paused or (matched and self.last_task_enabled)
         for role in ('https','app'):
             state = self.root / '.runtime' / (role+'.json')
