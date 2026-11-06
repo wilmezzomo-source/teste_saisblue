@@ -54,3 +54,8 @@ Trocar um token expirado nao confirma entrega. A conexao real ainda exige
 credenciais oficiais, numero correto e webhook HTTPS configurado e validado.
 O numero de teste da Meta e diferente do numero oficial da empresa; nao e uma
 instalacao adicional do CRM.
+
+CORRECAO DO COMANDO PY
+Os comandos de rede, diagnostico e validacao agora usam o Python da pasta .venv,
+sem depender do launcher py no PATH da conta administradora. O iniciador tambem
+prioriza esse Python quando a instalacao ja existe. Nao e preciso reinstalar Python.

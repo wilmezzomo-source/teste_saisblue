@@ -2,6 +2,11 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 title Sais Blue CRM - Preparacao do Windows
+if exist "%~dp0.venv\Scripts\python.exe" (
+  "%~dp0.venv\Scripts\python.exe" "%~dp0setup_windows.py"
+  pause
+  exit /b
+)
 where py >nul 2>nul
 if errorlevel 1 (
   echo Precisamos do Python 3.12 ou superior com o launcher py.
