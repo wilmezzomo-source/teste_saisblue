@@ -109,7 +109,7 @@ class DesktopUpdateTest(unittest.TestCase):
 
     def test_validation_requires_real_existing_database(self):
         root,config=validate_target(self.target)
-        self.assertEqual(root,self.target)
+        self.assertEqual(root,self.target.resolve())
         (self.target/'data/crm.sqlite3').unlink()
         with self.assertRaises(UpdateError):validate_target(self.target)
 

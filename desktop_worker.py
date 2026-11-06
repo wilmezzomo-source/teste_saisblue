@@ -84,10 +84,10 @@ def update_lock(target):
     runtime = Path(target) / '.runtime'
     runtime.mkdir(exist_ok=True)
     with (runtime / 'update.lock').open('a+b') as handle:
-        handle.seek(0)
-        if not handle.read(1): handle.write(b'0'); handle.flush()
-        handle.seek(0)
         try:
+            handle.seek(0)
+            if not handle.read(1): handle.write(b'0'); handle.flush()
+            handle.seek(0)
             if sys.platform == 'win32':
                 import msvcrt
                 msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
