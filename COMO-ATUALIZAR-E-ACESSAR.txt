@@ -1,5 +1,11 @@
 SAIS BLUE CRM - ATUALIZACAO E ACESSO DA EQUIPE
 
+NOVO: APLICATIVO UNICO (2026.11.06.5)
+Abra SaisBlue-Atualizador.exe no servidor e clique em Atualizar e abrir CRM.
+Ele baixa o pacote, para o CRM, faz backup, atualiza e inicia em segundo plano.
+Nas proximas vezes, use o atalho Sais Blue CRM criado na area de trabalho.
+Veja ATUALIZAR-COM-UM-APLICATIVO.md. Os passos manuais abaixo sao alternativos.
+
 NAO E NECESSARIO REINSTALAR TUDO.
 A instalacao ja existente deve ser mantida. O codigo e atualizado; o banco,
 usuarios, senhas e configuracoes ficam no servidor.

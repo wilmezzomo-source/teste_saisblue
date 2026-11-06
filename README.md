@@ -1,5 +1,9 @@
 # Sais Blue CRM — equipe e WhatsApp
 
+## Aplicativo único para atualizar — 2026.11.06.5
+
+No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e confere o pacote, para somente os processos do CRM, faz backup, atualiza e reinicia em segundo plano. Cria um atalho com opções de abrir, iniciar/reconectar e parar. Veja [ATUALIZAR-COM-UM-APLICATIVO.md](ATUALIZAR-COM-UM-APLICATIVO.md). O aplicativo usa o Python e o banco já instalados, sem extrair ZIP manualmente. Inclui os ajustes de qualificação e tags da versão anterior.
+
 Versão própria para funil comercial e atendimento. Todas as pessoas com conta ativa podem ver e editar todos os cards. Administradores gerenciam os acessos. Dados centralizados em SQLite, com autenticação Flask e execução por Waitress em Windows ou Linux.
 
 **Estado real:** o usuário confirmou o recebimento no aplicativo WhatsApp Business e no CRM, além de resposta pelo CRM chegando ao remetente, com a versão anterior no servidor da empresa. A versão **2026.11.06.4** implementa os ajustes abaixo; precisa ser aplicada no Windows e validada com um lead real de anúncio. O domínio próprio e a operação persistente ainda não foram configurados nesta sessão.

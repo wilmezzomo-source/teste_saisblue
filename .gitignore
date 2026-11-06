@@ -19,3 +19,5 @@ VALIDACAO-INSTALACAO-RESULTADO.txt
 /ngrok.exe
 /tools/ngrok.exe
 .ngrok*
+/.runtime/
+/.desktop-build/

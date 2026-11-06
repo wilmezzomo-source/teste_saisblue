@@ -1,0 +1,28 @@
+name: Windows updater
+on:
+  push:
+    branches: [crm-windows]
+    paths: ['desktop/**', '*update*.py', 'runtime_control.py', 'launch.py', 'iniciar_https.py', 'windows-release.json', '.github/workflows/windows-updater.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Compile Windows application
+        shell: pwsh
+        run: |
+          $compiler = Get-ChildItem "$env:ProgramFiles\dotnet\sdk\*\Roslyn\bincore\csc.dll" | Sort-Object FullName | Select-Object -Last 1
+          $refs = "${env:ProgramFiles(x86)}\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8"
+          python desktop/build.py --dotnet dotnet --compiler $compiler.FullName --refs $refs
+      - name: Tests and real Windows lifecycle
+        env:
+          SAISBLUE_NATIVE_WINDOWS_TEST: '1'
+        run: python -m unittest -v

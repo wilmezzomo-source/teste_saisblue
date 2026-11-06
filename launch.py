@@ -35,23 +35,29 @@ if __name__ == '__main__':
     configure(args.config)
     from server import app
     if args.action == 'serve':
-        from waitress import serve
+        from waitress import create_server
         from server import start_automation_worker
+        from runtime_control import Runtime
         host = os.environ.get('CRM_LISTEN_HOST', '127.0.0.1')
         if host != '127.0.0.1':
             from configure_connections import private_ip
             private_ip(host)
             if os.environ.get('APP_ENV') != 'lan' or os.environ.get('APP_URL') != f'http://{host}:3000':
                 raise RuntimeError('Acesso LAN exige configuração coerente do assistente de rede.')
+        server = create_server(app, host=host, port=3000, threads=8, connection_limit=100,
+                               channel_timeout=30, max_request_body_size=1_000_000,
+                               trusted_proxy='127.0.0.1', trusted_proxy_count=1,
+                               trusted_proxy_headers={'x-forwarded-for','x-forwarded-proto'})
+        runtime = Runtime(ROOT, 'app')
         stop, worker = start_automation_worker(app)
+        runtime.update('ready')
+        runtime.watch(server.close, stop)
         try:
-            serve(app, host=host, port=3000, threads=8, connection_limit=100,
-                  channel_timeout=30, max_request_body_size=1_000_000,
-                  trusted_proxy='127.0.0.1', trusted_proxy_count=1,
-                  trusted_proxy_headers={'x-forwarded-for','x-forwarded-proto'})
+            server.run()
         finally:
             stop.set()
             worker.join(timeout=2)
+            runtime.close()
     elif args.action == 'admin':
         if not args.email or not args.name:
             parser.error('Informe --email e --name.')
