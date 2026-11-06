@@ -66,10 +66,10 @@ HTTPServer(('127.0.0.1',3000),Handler).serve_forever()
                     time.sleep(.2)
                 self.assertTrue(ops.health('2026.11.06.0'))
                 # Start the delivered GUI: staging means the original launcher exits.
-                subprocess.Popen([str(repo/'desktop/SaisBlue-Atualizador.exe')])
                 encoded_root=str(root).replace("'","''")
                 do_update=(repo/'windows-release.json').is_file()
                 action='Atualizar e abrir CRM' if do_update else 'Parar CRM'
+                subprocess.Popen([str(repo/'desktop/SaisBlue-Atualizador.exe'),'--action','update' if do_update else 'stop'])
                 code=r'''$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 Add-Type @'
 using System;
@@ -108,7 +108,6 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
  $controls=@([SaisBlueGui]::Children($window)|ForEach-Object {[SaisBlueGui]::Text($_)}) -join '; '
  throw ('Native GUI controls missing; expected TARGET_ROOT and BUTTON_ACTION; found: '+$controls)
 }
-[SaisBlueGui]::Click($button)
 @{window=$true;detected=$found;pid=$ps[0].Id}|ConvertTo-Json -Compress'''.replace('TARGET_ROOT',encoded_root).replace('BUTTON_ACTION',action)
                 result=ops.powershell(code)
                 self.assertTrue(result['detected'])
@@ -129,6 +128,11 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
                         diagnostic=code.split('$deadline=')[0]+"\n$p=Get-Process -Id "+str(result['pid'])+"; $text=@([SaisBlueGui]::Children($p.MainWindowHandle)|ForEach-Object {[SaisBlueGui]::Text($_)}) -join '; '; @{text=$text}|ConvertTo-Json -Compress"
                         text=ops.powershell(diagnostic)['text']
                         print('::error title=Updater window state::'+text.replace('%','%25').replace('\n','%0A'),flush=True)
+                        inventory=ops.snapshot()
+                        safe=json.dumps({'root_aliases':ops.root_aliases,**inventory})
+                        print('::error title=Isolated fixture processes::'+safe.replace('%','%25').replace('\n','%0A'),flush=True)
+                        expected=ops.powershell("[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); @(Get-CimInstance Win32_Process | Where-Object {$_.ProcessId -eq "+str(crm.pid)+" -or $_.ParentProcessId -eq "+str(crm.pid)+"}|Select-Object ProcessId,ParentProcessId,ExecutablePath,CommandLine)|ConvertTo-Json -Compress")
+                        print('::error title=Expected fixture Python only::'+json.dumps(expected).replace('%','%25').replace('\n','%0A'),flush=True)
                         try:ops.stop()
                         except Exception as exc:
                             print('::error title=Direct controller diagnostic::'+str(exc).replace('%','%25').replace('\n','%0A'),flush=True)

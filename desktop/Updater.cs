@@ -48,18 +48,21 @@ internal static class Program {
         try {
             Directory.CreateDirectory(Home);
             string original = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            string automatic = null;
+            int actionIndex = Array.IndexOf(args, "--action");
+            if (actionIndex >= 0 && actionIndex + 1 < args.Length && new[] { "start", "stop", "update" }.Contains(args[actionIndex + 1])) automatic = args[actionIndex + 1];
             if (!args.Contains("--staged")) {
                 string folder = Path.Combine(Home, "cache", Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(folder);
                 string staged = Path.Combine(folder, "SaisBlue-Atualizador.exe");
                 File.Copy(Assembly.GetExecutingAssembly().Location, staged);
-                Process.Start(new ProcessStartInfo(staged, "--staged --hint " + Quote(original)) { UseShellExecute = false });
+                Process.Start(new ProcessStartInfo(staged, "--staged --hint " + Quote(original) + (automatic == null ? "" : " --action " + automatic)) { UseShellExecute = false });
                 return;
             }
             string hint = null;
             int idx = Array.IndexOf(args, "--hint");
             if (idx >= 0 && idx + 1 < args.Length) hint = args[idx + 1];
-            Application.Run(new UpdaterForm(hint));
+            Application.Run(new UpdaterForm(hint, automatic));
         } catch (Exception error) {
             Diagnostic(error);
             MessageBox.Show("Não consegui abrir o atualizador. Execute no servidor Windows e confira a permissão da sua conta para gravar arquivos.", "Sais Blue CRM");
@@ -182,7 +185,7 @@ internal sealed class UpdaterForm : Form {
     private readonly ProgressBar progress = new ProgressBar();
     private readonly Button update = new Button(), start = new Button(), stop = new Button(), open = new Button(), browse = new Button();
     private bool busy;
-    public UpdaterForm(string hint) {
+    public UpdaterForm(string hint, string automatic) {
         Text = "Sais Blue CRM"; ClientSize = new Size(680, 500); FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10);
         Controls.Add(new Label { Text = "SAIS BLUE CRM", Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = Color.FromArgb(18, 105, 239), AutoSize = true, Left = 24, Top = 20 });
@@ -201,6 +204,7 @@ internal sealed class UpdaterForm : Form {
         history.SetBounds(27, 380, 626, 92); history.Multiline = true; history.ReadOnly = true; history.ScrollBars = ScrollBars.Vertical; history.Font = new Font("Segoe UI", 9);
         Controls.AddRange(new Control[] {folder,browse,update,open,start,stop,progress,status,history});
         FormClosing += delegate(object sender, FormClosingEventArgs e) { if (busy) { e.Cancel = true; status.Text = "Aguarde a atualização terminar. Você pode minimizar esta janela."; } };
+        if (automatic != null) Shown += async delegate { await Run(automatic); };
     }
     private void Report(string message, int value) {
         Action action = delegate { status.Text = message; progress.Value = Math.Max(0, Math.Min(100, value)); history.AppendText(message + Environment.NewLine); };
