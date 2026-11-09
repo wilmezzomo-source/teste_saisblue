@@ -78,8 +78,8 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL("**/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.06.5"}).waitFor();
-  assert.equal(await admin.locator("#new-contact").isHidden(), true);
+  await admin.locator("#release-version").filter({hasText:"2026.11.09.1"}).waitFor();
+  assert.equal(await admin.locator("#new-contact").isVisible(), true);
   assert.equal(await admin.locator('.column[data-stage="Proposta enviada"]').count(),0);
   await admin.evaluate(() => document.fonts.load("400 14px Montserrat"));
   assert.equal(await admin.locator(".brand-asset img").evaluate(img => img.complete && img.naturalWidth > 0), true);
@@ -107,6 +107,13 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .locator("[name=body]")
     .fill("Olá, vi o anúncio da Sais Blue. Quero saber mais!");
   await admin.getByRole("button", { name: "Adicionar ao CRM" }).click();
+  assert.equal((await member.evaluate(async()=> (await api('/api/contacts')).contacts)).length,0);
+  await admin.evaluate(async()=>{
+    const row=(await api('/api/contacts')).contacts.find(c=>c.name==='Cliente de demonstração');
+    const person=(await api('/api/team')).users.find(u=>u.email==='vendas@example.test');
+    await api('/api/update',{id:row.id,revision:row.revision,owner_id:person.id});
+    await load();
+  });
   await admin
     .locator(".card")
     .filter({ hasText: "Cliente de demonstração" })
@@ -159,7 +166,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.screenshot({ path: __dirname + "/preview.png", fullPage: true });
   await member.locator("[data-view=team]").click();
   await member
-    .getByText("Você pode editar qualquer card.", { exact: true })
+    .getByText("Você acessa somente suas oportunidades.", { exact: true })
     .waitFor();
   assert.equal(await member.locator("#invite-form").count(), 0);
   await member.locator("[data-view=contacts]").click();
@@ -188,6 +195,11 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
       phone: "5521999990003",
       body: "Vim do anúncio",
     });
+    const person=(await api('/api/team')).users.find(u=>u.email==='vendas@example.test');
+    for(const row of (await api('/api/contacts')).contacts.filter(c=>c.owner_id!==person.id)) {
+      if(row.city_id) await api('/api/update',{id:row.id,revision:row.revision,owner_id:person.id});
+      else await api('/api/claim',{id:row.id,revision:row.revision,owner_id:person.id});
+    }
   });
   const mapRequests=[];
   await member.route('https://tile.openstreetmap.org/**',async route=>{
@@ -301,7 +313,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.locator('.card').click();
   assert.equal(await admin.locator('#detail-form [name=lead_profile]').inputValue(),'Revenda');
   assert.equal(await admin.locator('#detail-form [name=city_id]').inputValue(),'4309407');
-  assert.equal(await admin.locator('#detail-form [name=owner]').inputValue(),'Admin de demonstração');
+  assert.equal(await admin.locator('#detail-form [name=owner_id]').inputValue(),'admin-test');
   await admin.getByRole('button',{name:'Assumir atendimento',exact:true}).click();
   await admin.getByRole('status').filter({hasText:'Assistente pausado'}).waitFor();
   await admin.locator('#close-detail').click();
@@ -317,6 +329,48 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.locator('#profile-filter').selectOption('');
   const stored=await admin.evaluate(async()=> (await api('/api/contacts')).contacts);
   assert.equal(stored.some(c=>c.phone==='5554999997555'),false);
+  await member.locator('[data-view=pipeline]').click();
+  await member.getByRole('button',{name:'Nova oportunidade'}).click();
+  const manual=member.locator('#create-form');
+  await manual.locator('[name=name]').fill('Oportunidade por indicação');
+  await manual.locator('[name=phone]').fill('5554999997666');
+  await manual.locator('[name=state_picker]').selectOption('SC');
+  const cityOption=await manual.locator('[name=city_id] option').evaluateAll(options=>options.find(o=>o.textContent==='Florianópolis')?.value);
+  await manual.locator('[name=city_id]').selectOption(cityOption);
+  await manual.locator('[name=lead_profile]').selectOption('Lojista');
+  await manual.locator('[name=stage]').selectOption('Negociação');
+  await manual.locator('[name=value]').fill('1250.50');
+  await manual.locator('[name=owner_id]').selectOption({label:'Vendedora de demonstração'});
+  await member.screenshot({path:__dirname+'/preview-manual-form.png',fullPage:true});
+  await manual.getByRole('button',{name:'Adicionar ao CRM'}).click();
+  await member.locator('#detail-dialog').getByRole('heading',{name:'Oportunidade por indicação',exact:true}).waitFor();
+  assert.equal(await member.locator('#detail .source').textContent(),'Manual');
+  assert.equal(await member.locator('#detail-form [name=city_id]').inputValue(),cityOption);
+  assert.equal(await member.locator('#detail-form [name=value]').inputValue(),'1250.5');
+  await member.locator('#close-detail').click();
+  await whatsapp('Mensagem recebida do cadastro manual',false,'5554999997666');
+  const manualData=await member.evaluate(async()=> (await api('/api/contacts')).contacts.find(c=>c.phone==='5554999997666'));
+  assert.equal(manualData.manual_origin,1);
+  assert.equal(manualData.ad_origin,0);
+  assert.equal(manualData.qualification_state,'human');
+  assert.equal(manualData.messages.length,1);
+  assert.equal(manualData.messages[0].body,'Mensagem recebida do cadastro manual');
+  await member.screenshot({path:__dirname+'/preview-manual.png',fullPage:true});
+  assert.equal((await member.evaluate(async()=> (await api('/api/contacts')).contacts)).some(c=>c.phone==='5554999997444'),false);
+  await admin.evaluate(async()=>{
+    await api('/api/contacts',{name:'Sem responsável privado',phone:'5554999997888',city_id:'4309407',owner_id:''});
+  });
+  await member.evaluate(async()=>await load());
+  assert.equal(await member.getByText('Sem responsável privado',{exact:true}).count(),0);
+  await member.locator('.card').filter({hasText:'Oportunidade por indicação'}).click();
+  await admin.evaluate(async()=>{
+    const row=(await api('/api/contacts')).contacts.find(c=>c.phone==='5554999997666');
+    await api('/api/update',{id:row.id,revision:row.revision,owner_id:'admin-test'});
+  });
+  await member.evaluate(async()=>await load());
+  assert.equal(await member.locator('#detail-dialog').isVisible(),false);
+  assert.equal(await member.locator('#detail').textContent(),'');
+  assert.equal((await member.evaluate(async()=> (await api('/api/contacts')).contacts)).some(c=>c.phone==='5554999997666'),false);
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({
@@ -337,7 +391,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: equipe, conflitos, mapa, captura de anúncios, qualificação, distribuição, tags, filtros, relatórios e mobile.",
+    "UI OK: oportunidades manuais, acesso restrito por responsável, transferência e revogação, conflitos, mapa, anúncios, qualificação, distribuição, tags, relatórios e mobile.",
   );
 })()
   .catch((e) => {

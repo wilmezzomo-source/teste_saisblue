@@ -126,10 +126,10 @@ def process_answer(db, cid, incoming_id, body, created, audit):
         audit(db, 'Perfil e localização qualificados', cid, {'perfil': profile, 'cidade': city['name'], 'uf': city['state']}, actor='Assistente Sais Blue')
         if config['assignment_mode'] == 'regional':
             group = routing_group(profile, city['state'])
-            person = db.execute('SELECT name FROM users WHERE id=? AND active=1', (config.get('regional_owners', {}).get(group, ''),)).fetchone()
+            person = db.execute('SELECT id,name FROM users WHERE id=? AND active=1', (config.get('regional_owners', {}).get(group, ''),)).fetchone()
             if person:
                 owner = person['name']
-                db.execute('UPDATE contacts SET owner=? WHERE id=?', (owner, cid))
+                db.execute('UPDATE contacts SET owner=?,owner_id=? WHERE id=?', (owner, person['id'], cid))
                 audit(db, 'Responsável atribuído', cid, {'responsável': owner, 'perfil':profile, 'uf':city['state']}, actor='Assistente Sais Blue')
             else:
                 audit(db, 'Atribuição pendente', cid, {'motivo':'Responsável do perfil indisponível; equipe deve assumir'}, actor='Assistente Sais Blue')

@@ -79,7 +79,7 @@
             <button id="simulate" class="secondary">
               ↓ &nbsp; Simular lead do anúncio</button
             ><button id="new-contact" class="primary">
-              ＋ &nbsp; Novo contato
+              ＋ &nbsp; Nova oportunidade
             </button>
           </div>
         </div>
@@ -96,7 +96,7 @@
         <div class="dialog-header">
           <div>
             <p class="eyebrow">SAIS BLUE CRM</p>
-            <h2 id="form-title">Novo contato</h2>
+            <h2 id="form-title">Nova oportunidade</h2>
           </div>
           <button
             type="button"
@@ -127,7 +127,9 @@
             name="instagram"
             placeholder="@usuario ou link do perfil"
             maxlength="180" /></label
-        ><label id="body-field" hidden
+        >
+        <div id="create-opportunity-fields" class="detail-grid"></div>
+        <label id="body-field" hidden
           >Mensagem recebida<textarea
             name="body"
             placeholder="Olá! Vi o anúncio e gostaria de saber mais."

@@ -1,20 +1,20 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.06.5
+## Aplicativo único para atualizar — 2026.11.09.1
 
 No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e confere o pacote, para somente os processos do CRM, faz backup, atualiza e reinicia em segundo plano. Cria um atalho com opções de abrir, iniciar/reconectar e parar. Veja [ATUALIZAR-COM-UM-APLICATIVO.md](ATUALIZAR-COM-UM-APLICATIVO.md). O aplicativo usa o Python e o banco já instalados, sem extrair ZIP manualmente. Inclui os ajustes de qualificação e tags da versão anterior.
 
-[Baixar o aplicativo para Windows](https://github.com/wilmezzomo-source/teste_saisblue/raw/refs/heads/crm-windows/desktop/SaisBlue-Atualizador.exe). O canal `windows-release.json` fixa a versão 2026.11.06.5, com commit imutável e integridade SHA-256 conferida. A compilação e os testes de parada/recuperação foram aprovados no workflow Windows; a aplicação no servidor da empresa é feita pelo próprio aplicativo, sob a conta Windows que opera o CRM.
+[Baixar o aplicativo para Windows](https://github.com/wilmezzomo-source/teste_saisblue/raw/refs/heads/crm-windows/desktop/SaisBlue-Atualizador.exe). O canal `windows-release.json` fixa a versão 2026.11.09.1, com commit imutável e integridade SHA-256 conferida. A compilação e os testes de parada/recuperação foram aprovados no workflow Windows; a aplicação no servidor da empresa é feita pelo próprio aplicativo, sob a conta Windows que opera o CRM.
 
-Versão própria para funil comercial e atendimento. Todas as pessoas com conta ativa podem ver e editar todos os cards. Administradores gerenciam os acessos. Dados centralizados em SQLite, com autenticação Flask e execução por Waitress em Windows ou Linux.
+Versão própria para funil comercial e atendimento. O administrador original vê todos os cards, inclusive os sem responsável. Atendentes veem e editam apenas os atribuídos às próprias contas e podem cadastrar oportunidades manuais para si. O administrador gerencia acessos e transferências. Dados centralizados em SQLite, com autenticação Flask e execução por Waitress em Windows ou Linux.
 
-**Estado real:** o usuário confirmou o recebimento no aplicativo WhatsApp Business e no CRM, além de resposta pelo CRM chegando ao remetente, com a versão anterior no servidor da empresa. A versão **2026.11.06.4** implementa os ajustes abaixo; precisa ser aplicada no Windows e validada com um lead real de anúncio. O domínio próprio e a operação persistente ainda não foram configurados nesta sessão.
+**Estado real:** o usuário confirmou recebimento e resposta no WhatsApp oficial, além do primeiro atendimento automático de leads de anúncio no servidor. A versão **2026.11.09.1** acrescenta o cadastro manual descrito em [OPORTUNIDADES-MANUAIS.md](OPORTUNIDADES-MANUAIS.md); precisa ser aplicada pelo atualizador no Windows. O domínio próprio e a operação persistente ainda não foram configurados nesta sessão.
 
 ## Anúncios, qualificação, tags e distribuição — 2026.11.06.4
 
 Consulte [ATUALIZACAO-ANUNCIOS-E-QUALIFICACAO.md](ATUALIZACAO-ANUNCIOS-E-QUALIFICACAO.md) para atualizar sem reinstalar, dar acesso à equipe e ativar o roteiro.
 
-- Novos contatos somente com origem de anúncio identificada pela Meta; continuações dos leads admitidos permanecem no histórico. Cadastros anteriores são preservados; novas inclusões manuais ficam desabilitadas.
+- Novos contatos somente com origem de anúncio identificada pela Meta; continuações dos leads admitidos permanecem no histórico. Cadastros anteriores são preservados. Nova oportunidade permite inclusão manual explícita, com origem Manual e sem iniciar o robô. Apenas as próximas mensagens desse telefone são admitidas, além dos leads de anúncios.
 - Roteiro fixo opcional no WhatsApp para Lojista/Revenda/Consumidor Final e cidade/UF, com respostas persistidas, fila durável e pausa para atendimento humano. Ativar em Integrações após escolher as contas ativas da equipe.
 - Lojista/Revenda de RS ou SC → Chai. Demais Lojista/Revenda e todo Consumidor Final → Grasi.
 - Tag de perfil, filtro compartilhado entre as visões e resultados separados por perfil. Assumir/encaminhar atendimento pausa o roteiro.
@@ -45,7 +45,7 @@ Siga `ENTRAR-EM-USO-HOJE.md` por etapas: atualizar com backup, validar o acesso 
 
 - Login individual, senha com scrypt, sessão de 12 horas com cookie HttpOnly e CSRF; Secure em produção.
 - Convites de uso único, validade de 48h; redefinição de senha por link de 1h; desativação de usuários e revogação de sessões.
-- Todos os membros podem alterar etapa/valor/responsável/perfil/observações e adicionar notas. Login não depende do responsável pelo card.
+- Atendentes podem alterar etapa, valor, perfil e observações e adicionar notas somente nas próprias oportunidades. Apenas o administrador original altera responsáveis e acessa cards de toda a equipe ou sem responsável.
 - Verificação de versão para impedir sobrescrita por edições simultâneas; sincronização do funil a cada 5 segundos; histórico com autor e alterações.
 - Cadastro automático por telefone no webhook, verificação HMAC, filtro do número receptor, deduplicação de eventos e dados do anúncio quando enviados pela Meta.
 - Adaptador oficial para responder texto na janela de 24h, identificador de pedido contra reenvio duplicado, estados de envio e atualizações de entrega/leitura.

@@ -83,7 +83,65 @@ class QualificationTest(unittest.TestCase):
         self.assertEqual(c['ad_origin'],1)
         self.assertEqual(c['source'],'Anúncio Meta')
         self.assertEqual(len(c['messages']),2)
-        self.assertEqual(self.post('/api/contacts',{'name':'Manual','phone':'5554999992222'}).status_code,403)
+        self.assertEqual(self.post('/api/contacts',{'name':'Manual','phone':'5554999992222'}).status_code,400)
+
+    def test_manual_opportunity_admits_only_its_future_messages_without_bot(self):
+        self.enable()
+        member = self.app.test_client()
+        csrf = member.post('/api/login', json={'email':'chai@example.test','password':'fixture-password-123'}).json['csrf']
+        fields = {'name':'Cliente cadastrado pela equipe','phone':'+55 (54) 99999-2222',
+                  'city_id':'4309407','lead_profile':'Revenda','owner_id':'chai','value':'1750.50',
+                  'stage':'Negociação','instagram':'@saisblue','note':'Indicação de cliente',
+                  'source':'Anúncio Meta','ad_origin':1,'manual_origin':0,'qualification_state':'waiting_profile'}
+        result = member.post('/api/contacts', json=fields, headers={'X-CSRF-Token':csrf})
+        self.assertEqual(result.status_code,201,result.json)
+        c = self.contact('5554999992222')
+        self.assertEqual((c['source'],c['ad_origin'],c['manual_origin'],c['qualification_state']),('Manual',0,1,'human'))
+        self.assertEqual((c['lead_profile'],c['city'],c['state'],c['owner'],c['value'],c['stage']),('Revenda','Guaporé','RS','Chai',1750.5,'Negociação'))
+        self.assertEqual(c['instagram'],'saisblue')
+        self.assertEqual(c['messages'],[])
+        self.assertEqual(c['audit'][0]['actor'],'Chai')
+        # A manually typed phone never fabricates a WhatsApp service window.
+        self.assertEqual(self.post('/api/send',{'id':c['id'],'body':'Olá','request_id':'a'*32}).status_code,409)
+        self.receive('Nova mensagem do cliente',number='5554999992222')
+        self.receive('Conversa comum de outro telefone',number='5554999993333')
+        self.drain()
+        self.assertEqual([m['body'] for m in self.contact('5554999992222')['messages']],['Nova mensagem do cliente'])
+        self.assertEqual(self.sent,[])
+        self.assertEqual(len(self.client.get('/api/contacts').json['contacts']),1)
+        # A later ad click must not restart the bot over the human's manual admission.
+        self.receive('Agora cliquei no anúncio',ad=True,number='5554999992222'); self.drain()
+        self.assertEqual(self.contact('5554999992222')['qualification_state'],'human')
+        self.assertEqual(self.sent,[])
+
+    def test_manual_opportunity_validation_and_duplicate_preserve_existing_card(self):
+        base = {'name':'Manual','phone':'5554999992222','city_id':'4309407'}
+        for changes in ({'name':''},{'phone':''},{'city_id':''},{'city_id':'invalid'},
+                        {'lead_profile':'Outro'},{'value':'nan'},{'value':-1},
+                        {'stage':'Inválida'},{'owner':'Conta inexistente'}):
+            with self.subTest(changes=changes):
+                self.assertEqual(self.post('/api/contacts',dict(base,**changes)).status_code,400)
+        self.assertEqual(self.post('/api/contacts',base).status_code,201)
+        duplicate = self.post('/api/contacts',dict(base,name='Não deve substituir',phone='+55 (54) 99999-2222'))
+        self.assertEqual(duplicate.status_code,409)
+        self.assertEqual(self.contact()['name'],'Manual')
+        self.receive('Oi',ad=True,number='5554999991111')
+        duplicate_ad = self.post('/api/contacts',dict(base,phone='5554999991111'))
+        self.assertEqual(duplicate_ad.status_code,409)
+        self.assertEqual(self.contact('5554999991111')['manual_origin'],0)
+
+    def test_manual_admission_is_explicit_and_preserved_after_restart(self):
+        self.enable()
+        self.post('/api/contacts',{'name':'Manual','phone':'5554999992222','city_id':'4309407'})
+        with database(self.app) as db:
+            db.execute("INSERT INTO contacts(id,name,phone,stage,source,created,updated) VALUES('old','Histórico','5554999993333','Novo contato','Manual',1,1)")
+        restarted = create_app(dict(self.app.config))
+        with database(restarted) as db:
+            self.assertEqual(db.execute("SELECT manual_origin FROM contacts WHERE id='old'").fetchone()[0],0)
+            self.assertEqual(db.execute("SELECT manual_origin FROM contacts WHERE phone='5554999992222'").fetchone()[0],1)
+            self.assertTrue(json.loads(db.execute("SELECT value FROM crm_settings WHERE key='qualification'").fetchone()[0])['enabled'])
+        self.receive('Mensagem do contato histórico sem admissão',number='5554999993333')
+        self.assertEqual(self.contact('5554999993333')['messages'],[])
 
     def test_all_profiles_and_state_routing_with_confirmed_city(self):
         self.enable()
@@ -96,6 +154,7 @@ class QualificationTest(unittest.TestCase):
                 c=self.contact(number)
                 expected='Chai' if profile!='Consumidor Final' and state in ('RS','SC') else 'Grasi'
                 self.assertEqual((c['lead_profile'],c['city'],c['state'],c['owner']),(profile,city,state,expected))
+                self.assertEqual(c['owner_id'],expected.lower())
                 self.assertFalse(c['location_pending'])
                 self.assertEqual(c['qualification_state'],'completed')
                 self.assertEqual(len([m for m in c['messages'] if m['automation']]),3)

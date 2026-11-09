@@ -23,7 +23,8 @@ let cities = [],
   mapStage = "",
   mapState = "",
   boundaryData = null,
-  mapSignature = "";
+  mapSignature = "",
+  currentDetailId = null;
 const titles = {
   map: [
     "Mapa de leads",
@@ -31,7 +32,7 @@ const titles = {
   ],
   team: [
     "Nossa equipe",
-    "Todos os membros ativos podem editar os cards e acompanhar as conversas.",
+    "Cada atendente acompanha suas oportunidades. O administrador acompanha toda a equipe.",
   ],
   pipeline: [
     "Funil de vendas",
@@ -112,6 +113,12 @@ async function load() {
   try {
     const data = await api("/api/contacts");
     contacts = data.contacts;
+    if (currentDetailId && !contacts.some(c=>c.id===currentDetailId)) {
+      $("#detail-dialog").close();
+      $("#detail").innerHTML = "";
+      currentDetailId = null;
+      toast("Esta oportunidade não está mais disponível para sua conta.");
+    }
     stages = data.stages;
     if (view === "map" && leadMap) {
       stats();
@@ -204,7 +211,7 @@ function card(c) {
 }
 function banner() {
   if (!systemStatus.simulation)
-    return `<div class="info-banner"><span>✓</span><div><strong>Novos leads somente de anúncios.</strong><p>A origem é identificada pela Meta. As próximas mensagens desses leads continuam no histórico. Todos os membros ativos podem editar os cards.</p></div></div>`;
+    return `<div class="info-banner"><span>✓</span><div><strong>Entrada automática somente por anúncios.</strong><p>A origem é identificada pela Meta. Para outros clientes, use Nova oportunidade. As próximas mensagens dos contatos admitidos continuam no histórico. Cada atendente vê e edita somente suas oportunidades. O administrador vê todas, inclusive as sem responsável.</p></div></div>`;
   return `<div class="info-banner"><span>↓</span><div><strong>Seu próximo cliente pode chegar de um anúncio.</strong><p>Simule uma mensagem do WhatsApp e veja o contato entrar automaticamente no funil. Nenhuma mensagem real será enviada.</p></div></div>`;
 }
 function render() {
@@ -317,6 +324,12 @@ function render() {
 function empty(title, body) {
   return `<div class="panel empty-state"><div class="empty-icon">◌</div><h3>${title}</h3><p>${body}</p>${systemStatus.simulation ? '<button class="secondary" id="empty-simulate">↓ Simular primeiro contato</button>' : ""}</div>`;
 }
+function ownerInput(c={owner_id:currentUser.id}) {
+  const people=teamUsers.filter(u=>u.active && (currentUser.role==="admin" || u.id===currentUser.id));
+  const empty=currentUser.role==="admin" ? '<option value="">Sem responsável</option>' : "";
+  const inactive=c.owner_id && !people.some(u=>u.id===c.owner_id) && currentUser.role==="admin" ? `<option value="${esc(c.owner_id)}" selected>${esc(c.owner)} · indisponível</option>` : "";
+  return `<label>Responsável<select name="owner_id">${empty}${people.map(u=>`<option value="${esc(u.id)}" ${u.id===c.owner_id?"selected":""}>${esc(u.name)}</option>`).join("")}${inactive}</select></label>`;
+}
 function openCreate(sim) {
   simulate = sim;
   $("#create-form").reset();
@@ -324,10 +337,11 @@ function openCreate(sim) {
   bindLocationFields($("#create-location-fields"));
   $("#form-title").textContent = sim
     ? "Simular lead do anúncio"
-    : "Novo contato";
+    : "Nova oportunidade";
   $("#form-description").textContent = sim
     ? "Teste o recebimento de uma mensagem. O telefone identifica o contato e evita duplicações."
-    : "Adicione um contato ao seu funil comercial.";
+    : "Cadastro manual, sem iniciar o assistente. As próximas mensagens desse número aparecerão no CRM. As demais conversas comuns continuam fora.";
+  $("#create-opportunity-fields").innerHTML = sim ? "" : `${profileInput({})}<label>Etapa do funil<select name="stage">${stages.map(s=>`<option>${esc(s)}</option>`).join("")}</select></label>${ownerInput()}<label>Valor da oportunidade (R$)<input type="number" name="value" value="0" min="0" max="1000000000000" step="0.01" required></label><label>Observação<input name="note" maxlength="5000"></label>`;
   $("#body-field").hidden = !sim;
   $("#create-form").elements.body.required = sim;
   $("#create-dialog").showModal();
@@ -339,37 +353,31 @@ function profileInput(c) {
   return `<label>Perfil do cliente<select name="lead_profile"><option value="">A identificar</option>${(systemStatus.lead_profiles || ["Lojista","Revenda","Consumidor Final"]).map(p => `<option ${c.lead_profile === p ? "selected" : ""}>${esc(p)}</option>`).join("")}</select></label>`;
 }
 function qualificationTools(c) {
-  const choices = teamUsers.filter(u=>u.active);
-  const selected = choices.some(u=>u.name===c.owner) ? c.owner : currentUser.name;
-  return `<section class="qualification-panel"><strong>${esc(qualificationLabel(c.qualification_state))}</strong><p>Ao assumir ou encaminhar, as perguntas automáticas são pausadas. Complete os dados pendentes na ficha.</p><div class="handoff-actions"><label>Encaminhar para<select id="handoff-owner">${choices.map(u=>`<option ${u.name===selected?"selected":""}>${esc(u.name)}</option>`).join("")}</select></label><button class="secondary" id="handoff-contact">Encaminhar atendimento</button><button class="primary" id="claim-contact">Assumir atendimento</button></div></section>`;
+  const choices=teamUsers.filter(u=>u.active);
+  const selected=c.owner_id || currentUser.id;
+  const transfer=currentUser.role==="admin" ? `<label>Encaminhar para<select id="handoff-owner">${choices.map(u=>`<option value="${esc(u.id)}" ${u.id===selected?"selected":""}>${esc(u.name)}</option>`).join("")}</select></label><button class="secondary" id="handoff-contact">Encaminhar atendimento</button>` : "";
+  return `<section class="qualification-panel"><strong>${esc(qualificationLabel(c.qualification_state))}</strong><p>Ao assumir, as perguntas automáticas são pausadas. Complete os dados pendentes na ficha.</p><div class="handoff-actions">${transfer}<button class="primary" id="claim-contact">Assumir atendimento</button></div></section>`;
 }
 function bindQualification(c) {
-  const claim = async (owner) => {
+  const claim=async owner_id=>{
     try {
-      await api("/api/claim",{id:c.id,revision:c.revision,owner});
+      await api("/api/claim",{id:c.id,revision:c.revision,owner_id});
       await load(); detail(c.id); toast("Responsável atualizado. Assistente pausado neste contato.");
-    } catch(e) { toast(e.message); if(e.status===409) { await load(); detail(c.id); } }
+    } catch(e) { toast(e.message); if(e.status===409 || e.status===404) { await load(); detail(c.id); } }
   };
-  $("#claim-contact").onclick=()=>claim(currentUser.name);
-  $("#handoff-contact").onclick=()=>claim($("#handoff-owner").value);
+  $("#claim-contact").onclick=()=>claim(currentUser.id);
+  if($("#handoff-contact")) $("#handoff-contact").onclick=()=>claim($("#handoff-owner").value);
 }
 function detail(id) {
   const c = contacts.find((c) => c.id === id);
   if (!c) return;
+  currentDetailId = id;
   let ref = null;
   try {
     ref = JSON.parse(c.referral);
   } catch {}
   $("#detail").innerHTML =
-    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div><span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Preencha cidade e estado para mapear este cliente. O WhatsApp não informa a cidade automaticamente.</div>' : ""}${qualificationTools(c)}<form id="detail-form"><div class="detail-grid">${profileInput(c)}${locationInputs(c)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label><label>Responsável<select name="owner"><option>Sem responsável</option>${teamUsers
-      .filter((u) => u.active)
-      .map(
-        (u) =>
-          `<option ${u.name === c.owner ? "selected" : ""}>${esc(u.name)}</option>`,
-      )
-      .join(
-        "",
-      )}${c.owner !== "Sem responsável" && !teamUsers.some((u) => u.active && u.name === c.owner) ? `<option selected>${esc(c.owner)}</option>` : ""}</select></label><label>Observação<input name="note" value="${esc(c.note)}" maxlength="5000"></label></div><div class="dialog-actions"><button type="button" class="secondary" id="refresh-detail">Recarregar card</button><button class="primary">Salvar oportunidade</button></div></form>${ref ? `<div class="referral">↓ Origem do anúncio: ${esc(ref.headline || ref.source_id || "Anúncio Meta")}${ref.ctwa_clid ? "<br>Identificador de clique recebido da Meta." : ""}</div>` : ""}<h3>Histórico do contato</h3><div class="conversation">${c.messages.length ? c.messages.map((m) => `<div class="message ${m.direction === "note" ? "note" : ""}">${esc(m.body)}<small>${esc(m.author || "")}${m.author ? " · " : ""}${m.direction === "note" ? "Nota interna" : m.direction === "out" ? "WhatsApp enviado" : "Mensagem recebida"}${m.channel === "simulation" ? " · Simulação" : ""}${m.direction === "out" ? " · " + esc(statusLabel(m.status)) : ""}${m.error_code ? " · Código " + esc(m.error_code) + ": " + esc(m.error_detail) : ""} · ${date(m.created)}</small></div>`).join("") : "<p>Nenhuma mensagem ou nota registrada.</p>"}</div><form id="note-form"><label>Nova nota interna<textarea name="body" required maxlength="5000" placeholder="Registre o próximo passo ou detalhes do atendimento."></textarea></label><p>Notas ficam no CRM. Não são enviadas pelo WhatsApp.</p><div class="dialog-actions"><button class="secondary">Adicionar nota</button></div></form>${sendView(c)}${auditView(c)}`;
+    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div><span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Preencha cidade e estado para mapear este cliente. O WhatsApp não informa a cidade automaticamente.</div>' : ""}${qualificationTools(c)}<form id="detail-form"><div class="detail-grid">${profileInput(c)}${locationInputs(c)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label>${ownerInput(c)}<label>Observação<input name="note" value="${esc(c.note)}" maxlength="5000"></label></div><div class="dialog-actions"><button type="button" class="secondary" id="refresh-detail">Recarregar card</button><button class="primary">Salvar oportunidade</button></div></form>${ref ? `<div class="referral">↓ Origem do anúncio: ${esc(ref.headline || ref.source_id || "Anúncio Meta")}${ref.ctwa_clid ? "<br>Identificador de clique recebido da Meta." : ""}</div>` : ""}<h3>Histórico do contato</h3><div class="conversation">${c.messages.length ? c.messages.map((m) => `<div class="message ${m.direction === "note" ? "note" : ""}">${esc(m.body)}<small>${esc(m.author || "")}${m.author ? " · " : ""}${m.direction === "note" ? "Nota interna" : m.direction === "out" ? "WhatsApp enviado" : "Mensagem recebida"}${m.channel === "simulation" ? " · Simulação" : ""}${m.direction === "out" ? " · " + esc(statusLabel(m.status)) : ""}${m.error_code ? " · Código " + esc(m.error_code) + ": " + esc(m.error_detail) : ""} · ${date(m.created)}</small></div>`).join("") : "<p>Nenhuma mensagem ou nota registrada.</p>"}</div><form id="note-form"><label>Nova nota interna<textarea name="body" required maxlength="5000" placeholder="Registre o próximo passo ou detalhes do atendimento."></textarea></label><p>Notas ficam no CRM. Não são enviadas pelo WhatsApp.</p><div class="dialog-actions"><button class="secondary">Adicionar nota</button></div></form>${sendView(c)}${auditView(c)}`;
   $("#close-detail").onclick = () => $("#detail-dialog").close();
   $("#refresh-detail").onclick = async () => {
     await load();
@@ -441,7 +449,7 @@ $("#create-form").onsubmit = async (e) => {
   const button = e.target.querySelector("[type=submit]");
   button.disabled = true;
   try {
-    await api(
+    const created = await api(
       simulate ? "/api/simulate" : "/api/contacts",
       Object.fromEntries(new FormData(e.target)),
     );
@@ -450,8 +458,9 @@ $("#create-form").onsubmit = async (e) => {
     toast(
       simulate
         ? "Mensagem recebida e contato registrado no CRM."
-        : "Contato criado.",
+        : "Oportunidade criada. Atendimento humano, sem mensagens automáticas.",
     );
+    if (!simulate && created.id) detail(created.id);
   } catch (err) {
     toast(err.message);
   } finally {
@@ -479,7 +488,7 @@ setInterval(() => {
 }, 5000);
 
 function teamView() {
-  return `<div class="panel"><h3>Pessoas com acesso</h3><p>Administradores e membros ativos podem ver todos os contatos, mover cards, editar oportunidades e registrar notas. Cada pessoa usa sua própria senha.</p><div class="table-wrap"><table><thead><tr><th>PESSOA</th><th>E-MAIL</th><th>PERFIL</th><th>SITUAÇÃO</th>${currentUser.role === "admin" ? "<th>AÇÕES</th>" : ""}</tr></thead><tbody>${teamUsers.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${u.role === "admin" ? "Administrador" : "Membro"}</td><td>${u.active ? "Ativo" : "Desativado"}</td>${currentUser.role === "admin" ? `<td><button class="secondary" data-reset-user="${u.id}" ${!u.active ? "disabled" : ""}>Redefinir senha</button> ${u.id !== currentUser.id ? `<button class="secondary" data-toggle-user="${u.id}">${u.active ? "Desativar" : "Reativar"}</button>` : ""}</td>` : ""}</tr>`).join("")}</tbody></table></div></div>${currentUser.role === "admin" ? `<div class="panel" style="margin-top:20px"><h3>Convidar alguém para a equipe</h3><p>Gere um link individual e compartilhe com a pessoa. O convite vale por 48 horas e só pode ser usado uma vez. O link não é enviado por e-mail automaticamente.</p><form id="invite-form"><div class="detail-grid"><label>E-mail da pessoa<input type="email" name="email" required autocomplete="off"></label><label>Perfil<select name="role"><option value="member">Membro · pode editar todos os cards</option><option value="admin">Administrador · também gerencia acessos</option></select></label></div><div class="dialog-actions"><button class="primary">Gerar convite</button></div></form><div id="invite-result" hidden><label>Link de acesso individual<input id="invite-link" readonly></label><p>Compartilhe somente com a pessoa convidada.</p><button id="copy-invite" class="secondary">Copiar link</button></div></div>` : '<div class="info-banner"><span>✓</span><div><strong>Você pode editar qualquer card.</strong><p>Para incluir outras pessoas ou recuperar senhas, fale com um administrador.</p></div></div>'}`;
+  return `<div class="panel"><h3>Pessoas com acesso</h3><p>Somente o administrador vê todas as oportunidades e as que estão sem responsável. Cada atendente vê e edita apenas as atribuídas à sua conta, inclusive no mapa, atendimento e indicadores.</p><div class="table-wrap"><table><thead><tr><th>PESSOA</th><th>E-MAIL</th><th>PERFIL</th><th>SITUAÇÃO</th>${currentUser.role === "admin" ? "<th>AÇÕES</th>" : ""}</tr></thead><tbody>${teamUsers.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${u.role === "admin" ? "Administrador" : "Membro"}</td><td>${u.active ? "Ativo" : "Desativado"}</td>${currentUser.role === "admin" ? `<td><button class="secondary" data-reset-user="${u.id}" ${!u.active ? "disabled" : ""}>Redefinir senha</button> ${u.id !== currentUser.id ? `<button class="secondary" data-toggle-user="${u.id}">${u.active ? "Desativar" : "Reativar"}</button>` : ""}</td>` : ""}</tr>`).join("")}</tbody></table></div></div>${currentUser.role === "admin" ? `<div class="panel" style="margin-top:20px"><h3>Convidar alguém para a equipe</h3><p>Gere um link individual e compartilhe com a pessoa. O convite vale por 48 horas e só pode ser usado uma vez. O link não é enviado por e-mail automaticamente.</p><form id="invite-form"><div class="detail-grid"><label>E-mail da pessoa<input type="email" name="email" required autocomplete="off"></label><label>Perfil<select name="role"><option value="member">Atendente · somente suas oportunidades</option></select></label></div><div class="dialog-actions"><button class="primary">Gerar convite</button></div></form><div id="invite-result" hidden><label>Link de acesso individual<input id="invite-link" readonly></label><p>Compartilhe somente com a pessoa convidada.</p><button id="copy-invite" class="secondary">Copiar link</button></div></div>` : '<div class="info-banner"><span>✓</span><div><strong>Você acessa somente suas oportunidades.</strong><p>Você também pode cadastrar oportunidades manuais para sua conta. Para transferir atendimentos ou recuperar senhas, fale com o administrador.</p></div></div>'}`;
 }
 function showInvite(path) {
   $("#invite-result").hidden = false;
@@ -555,7 +564,7 @@ function settingsView() {
   const a=systemStatus.automation || {enabled:false,assignment_mode:"regional",regional_owners:{}};
   const people=teamUsers.filter(u=>u.active);
   const select=(group,label)=>`<label>${label}<select name="${group}"><option value="">Selecione a conta da equipe</option>${people.map(u=>`<option value="${esc(u.id)}" ${a.regional_owners?.[group]===u.id?"selected":""}>${esc(u.name)}</option>`).join("")}</select></label>`;
-  return `<div class="panel"><h3>Entrada somente por anúncios</h3><p>Novos leads entram quando a Meta envia a identificação de um anúncio para o WhatsApp oficial <strong>+55 (54) 3443-6405</strong>. Conversas comuns e o texto “vim do anúncio” não criam novos cards. As próximas mensagens de um lead já identificado continuam no histórico.</p><p>Os cadastros anteriores à atualização são preservados. Um link comum para o WhatsApp pode não trazer identificação de anúncio; valide a entrada pelo anúncio publicado.</p></div><div class="panel automation-panel"><h3>Primeiro atendimento automático</h3><p>O assistente se apresenta, pergunta Lojista, Revenda ou Consumidor Final e depois cidade/UF. As respostas confirmadas são salvas na ficha e no mapa. O cliente pode pedir ATENDENTE.</p>${currentUser.role==="admin"?`<form id="automation-form"><label class="check-option"><input type="checkbox" name="enabled" ${a.enabled?"checked":""}>Ativar o roteiro para leads de anúncios</label><label>Distribuição após qualificar<select name="assignment_mode"><option value="regional" ${a.assignment_mode==="regional"?"selected":""}>Por perfil e estado · Chai / Grasi</option><option value="manual" ${a.assignment_mode==="manual"?"selected":""}>Escolher manualmente no card</option></select></label><div class="detail-grid">${select("chai","Chai · Lojista ou Revenda de RS e SC")}${select("grasi","Grasi · demais estados e todo Consumidor Final")}</div><p>Convide Chai e Grasi em Equipe e aguarde ambas criarem suas contas para selecioná-las aqui.</p><div class="dialog-actions"><button class="primary">Salvar primeiro atendimento</button></div></form>`:`<p>Roteiro: <strong>${a.enabled?"Ativado":"Desativado"}</strong>. Um administrador configura o atendimento automático e a distribuição.</p>`}<p>Em caso de resposta não reconhecida, pedido de atendimento humano ou falha de envio, a equipe deve assumir. O roteiro usa regras fixas e funciona na janela de atendimento de 24 horas.</p></div><div class="panel automation-panel"><h3>Acesso da equipe</h3><p>Endereço do CRM: <a href="${esc(systemStatus.team_url || location.origin)}">${esc(systemStatus.team_url || location.origin)}</a></p><p>Gere um convite individual em <strong>Equipe</strong>. Cada pessoa cria sua senha e acessa pelo navegador na rede da empresa. Todos os membros ativos podem editar os cards.</p><p>Credenciais de envio: ${systemStatus.sending_configured?"configuradas":"pendentes"}. Recebimento: ${systemStatus.webhook_configured?"configurado":"pendente"}.</p></div>`;
+  return `<div class="panel"><h3>Entrada automática somente por anúncios</h3><p>Novos leads entram quando a Meta envia a identificação de um anúncio para o WhatsApp oficial <strong>+55 (54) 3443-6405</strong>. Conversas comuns e o texto “vim do anúncio” não criam novos cards. As próximas mensagens de um lead já identificado continuam no histórico. Para uma indicação ou outro cliente, use <strong>Nova oportunidade</strong>: a origem será Manual, com atendimento humano e recebimento das próximas mensagens apenas desse número.</p><p>Os cadastros anteriores à atualização são preservados. Um link comum para o WhatsApp pode não trazer identificação de anúncio; valide a entrada pelo anúncio publicado.</p></div><div class="panel automation-panel"><h3>Primeiro atendimento automático</h3><p>O assistente se apresenta, pergunta Lojista, Revenda ou Consumidor Final e depois cidade/UF. As respostas confirmadas são salvas na ficha e no mapa. O cliente pode pedir ATENDENTE.</p>${currentUser.role==="admin"?`<form id="automation-form"><label class="check-option"><input type="checkbox" name="enabled" ${a.enabled?"checked":""}>Ativar o roteiro para leads de anúncios</label><label>Distribuição após qualificar<select name="assignment_mode"><option value="regional" ${a.assignment_mode==="regional"?"selected":""}>Por perfil e estado · Chai / Grasi</option><option value="manual" ${a.assignment_mode==="manual"?"selected":""}>Escolher manualmente no card</option></select></label><div class="detail-grid">${select("chai","Chai · Lojista ou Revenda de RS e SC")}${select("grasi","Grasi · demais estados e todo Consumidor Final")}</div><p>Convide Chai e Grasi em Equipe e aguarde ambas criarem suas contas para selecioná-las aqui.</p><div class="dialog-actions"><button class="primary">Salvar primeiro atendimento</button></div></form>`:`<p>Roteiro: <strong>${a.enabled?"Ativado":"Desativado"}</strong>. Um administrador configura o atendimento automático e a distribuição.</p>`}<p>Em caso de resposta não reconhecida, pedido de atendimento humano ou falha de envio, a equipe deve assumir. O roteiro usa regras fixas e funciona na janela de atendimento de 24 horas.</p></div><div class="panel automation-panel"><h3>Acesso da equipe</h3><p>Endereço do CRM: <a href="${esc(systemStatus.team_url || location.origin)}">${esc(systemStatus.team_url || location.origin)}</a></p><p>Gere um convite individual em <strong>Equipe</strong>. Cada pessoa cria sua senha e acessa pelo navegador na rede da empresa. Cada atendente vê e edita somente suas oportunidades. O administrador vê todas, inclusive as sem responsável.</p><p>Credenciais de envio: ${systemStatus.sending_configured?"configuradas":"pendentes"}. Recebimento: ${systemStatus.webhook_configured?"configurado":"pendente"}.</p></div>`;
 }
 function bindAutomation() {
   const form=$("#automation-form");
@@ -688,7 +697,8 @@ async function initMap() {
     4,
   );
   leadMap = instance;
-  mapSignature = "";
+  mapSignature = "",
+  currentDetailId = null;
   const localBase = L.layerGroup().addTo(instance);
   pinLayer = L.layerGroup().addTo(instance);
   const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {

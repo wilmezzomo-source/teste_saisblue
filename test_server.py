@@ -61,7 +61,7 @@ class CRMTest(unittest.TestCase):
         self.assertEqual(anonymous.post('/api/messages',json={'body':'test'}).status_code,401)
         self.assertEqual(self.client.post('/api/contacts',json={'name':'A','phone':'5511999991111','city_id':'4302105'}).status_code,403)
         r = self.post('/api/contacts', {'name':'A','phone':'5511999991111','city_id':'4302105'})
-        self.assertEqual(r.status_code,403)
+        self.assertEqual(r.status_code,201)
         self.assertEqual(self.post('/api/logout', {}).status_code,200)
         self.assertEqual(self.client.get('/api/contacts').status_code,401)
 
@@ -78,6 +78,9 @@ class CRMTest(unittest.TestCase):
     def test_capture_dedup_and_shared_member_edit(self):
         c = self.simulate()
         self.simulate()
+        current = self.client.get('/api/contacts').json['contacts'][0]
+        self.assertEqual(self.member.get('/api/contacts').json['contacts'],[])
+        self.assertEqual(self.post('/api/update',{'id':c['id'],'revision':current['revision'],'owner_id':'member-id'}).status_code,200)
         rows = self.member.get('/api/contacts').json['contacts']
         self.assertEqual(len(rows),1)
         self.assertEqual(len(rows[0]['messages']),2)
@@ -91,10 +94,12 @@ class CRMTest(unittest.TestCase):
 
     def test_stale_revision_cannot_overwrite(self):
         c=self.simulate()
-        def edit(owner):
+        self.post('/api/update',{'id':c['id'],'revision':c['revision'],'owner_id':'member-id'})
+        c=self.client.get('/api/contacts').json['contacts'][0]
+        def edit(note):
             client=self.app.test_client()
             csrf=self.login(client,'member')
-            return self.post('/api/update',{'id':c['id'],'revision':c['revision'],'owner':owner},client,csrf).status_code
+            return self.post('/api/update',{'id':c['id'],'revision':c['revision'],'note':note},client,csrf).status_code
         with ThreadPoolExecutor(max_workers=2) as executor:
             results=list(executor.map(edit,['Pessoa A','Pessoa B']))
         self.assertEqual(sorted(results),[200,409])
@@ -203,7 +208,7 @@ class CRMTest(unittest.TestCase):
         runner = self.app.test_cli_runner()
         with patch('server.getpass.getpass', return_value='another-password-123'):
             result = runner.invoke(args=['create-admin','--email','owner@example.test','--name','Owner'])
-        self.assertEqual(result.exit_code,0,result.output)
+        self.assertNotEqual(result.exit_code,0)
         self.assertNotIn('another-password-123',result.output)
         self.simulate()
         backup=Path(self.temp.name)/'backup.db'
@@ -211,7 +216,7 @@ class CRMTest(unittest.TestCase):
         self.assertEqual(result.exit_code,0,result.output)
         with sqlite_connection(backup) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM contacts').fetchone()[0],1)
-            self.assertEqual(db.execute('SELECT COUNT(*) FROM users').fetchone()[0],3)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM users').fetchone()[0],2)
 
     def test_required_location_and_instagram_normalization(self):
         self.signed(self.meta_payload())

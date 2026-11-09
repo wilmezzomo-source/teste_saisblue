@@ -30,7 +30,7 @@ O recebimento de uma mensagem não representa autorização irrestrita para camp
 
 ## Quem pode acessar e quais fornecedores participam
 
-A equipe autorizada da Sais Blue acessa o CRM por contas individuais. Os membros ativos têm acesso aos contatos e oportunidades compartilhados; o responsável indicado no card não restringe o acesso dos demais membros. Administradores gerenciam os acessos.
+A equipe autorizada da Sais Blue acessa o CRM por contas individuais. O administrador original vê todas as oportunidades, inclusive as sem responsável. Cada atendente vê apenas as atribuídas à sua própria conta, incluindo mensagens, notas, mapa e indicadores. Atendentes podem cadastrar oportunidades manuais para si. Somente o administrador gerencia os acessos e transferências.
 
 A integração usa a plataforma oficial da Meta/WhatsApp. Durante o piloto autorizado, o ngrok recebe as notificações do webhook e as encaminha ao servidor da empresa por um túnel HTTPS. Por esse caminho passam os eventos de mensagens; a tela de login e as APIs de contatos do CRM não são expostas pelo gateway desse túnel.
 

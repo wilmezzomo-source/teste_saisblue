@@ -1,3 +1,5 @@
+Para a atualização atual, use **Sais Blue CRM → Atualizar e abrir CRM**, conforme [OPORTUNIDADES-MANUAIS.md](OPORTUNIDADES-MANUAIS.md). O procedimento abaixo registra a instalação inicial.
+
 # Sais Blue — execução por etapas, com validação
 
 Versão **2026.11.06.4**. Objetivo inicial: equipe usando o CRM na rede da empresa. A integração com o WhatsApp oficial só está concluída quando uma mensagem real entra no CRM e uma resposta chega ao cliente; um token, um número listado ou um retorno `accepted` não comprovam isso.
@@ -22,7 +24,7 @@ Versão **2026.11.06.4**. Objetivo inicial: equipe usando o CRM na rede da empre
 3. Em **outro computador da mesma rede**, abra **http://192.168.0.219:3000**. Se o relatório apontar outro IP, use o do relatório, não este exemplo anterior.
 4. Se não abrir: na pasta antiga do servidor, execute **ATIVAR-REDE-E-WHATSAPP.cmd** como administrador, escolha **1**, selecione a placa Ethernet, reinicie o CRM e repita o teste. A regra vale só para a sub-rede e perfis Private/Domain; rede Public/segmentada exige revisão com TI.
 5. No servidor, abra o CRM pelo **mesmo endereço da equipe**, entre como administrador e crie um convite em **Equipe**. Envie individualmente à pessoa. Ela define sua senha; não precisa instalar Python ou o CRM.
-6. Uma pessoa entra no outro computador, cria um contato fictício com cidade/UF e move o card. Confira a alteração no servidor. Todos os membros ativos podem editar todos os cards.
+6. Uma pessoa entra no outro computador, cria um contato fictício com cidade/UF e move o card. Confira a alteração no servidor. Cada atendente vê e edita apenas os cards atribuídos à própria conta. Somente o administrador original vê todas as oportunidades e as sem responsável.
 7. Confira também Instagram, ficha e Mapa. Depois use dados reais apenas no escopo aprovado pela empresa.
 
 **Validação:** duas pessoas, em computadores distintos, veem e editam o mesmo card. A aplicação precisa permanecer rodando no servidor; fechar o navegador não a encerra, fechar o terminal manual pode encerrá-la. Para início automático e backups agendados, seguir `deploy/INSTALAR-WINDOWS.md` com TI.

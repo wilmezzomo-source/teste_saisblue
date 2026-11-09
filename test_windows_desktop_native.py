@@ -69,6 +69,7 @@ HTTPServer(('127.0.0.1',3000),Handler).serve_forever()
                 # Start the delivered GUI: staging means the original launcher exits.
                 encoded_root=str(root).replace("'","''")
                 do_update=(repo/'windows-release.json').is_file()
+                release_version=json.loads((repo/'windows-release.json').read_text())['version'] if do_update else None
                 action='Atualizar e abrir CRM' if do_update else 'Parar CRM'
                 subprocess.Popen([str(repo/'desktop/SaisBlue-Atualizador.exe'),'--action','update' if do_update else 'stop'])
                 code=r'''$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
@@ -115,9 +116,9 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
                 deadline=time.monotonic()+(120 if do_update else 45)
                 if do_update:
                     while time.monotonic()<deadline:
-                        if ops.health('2026.11.06.5'):break
+                        if ops.health(release_version):break
                         time.sleep(.5)
-                    self.assertTrue(ops.health('2026.11.06.5'),'GUI update did not start the verified new version')
+                    self.assertTrue(ops.health(release_version),'GUI update did not start the verified new version')
                     self.assertEqual((root/'.env').read_text(encoding='utf-8'),config)
                     with sqlite_connection(root/'data/crm.sqlite3') as db:
                         self.assertEqual(db.execute("SELECT name FROM contacts WHERE id='fixture'").fetchone()[0],'Preserved customer')

@@ -27,7 +27,7 @@ from qualification import PROFILES, is_ad_referral, settings as qualification_se
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.06.5'
+RELEASE = '2026.11.09.1'
 
 
 class Problem(Exception):
@@ -69,6 +69,21 @@ def password(value):
     return generate_password_hash(value, method='scrypt')
 
 
+def restrict_administration(db):
+    """Keep the original administrator as the only account with global access."""
+    saved = db.execute("SELECT value FROM crm_settings WHERE key='workspace_admin'").fetchone()
+    if not saved:
+        first = db.execute("SELECT id FROM users WHERE role='admin' ORDER BY created,id LIMIT 1").fetchone()
+        if not first:
+            return
+        primary = first['id']
+        db.execute("INSERT INTO crm_settings VALUES('workspace_admin',?)", (primary,))
+    else:
+        primary = saved['value']
+    db.execute("UPDATE users SET role='member' WHERE role='admin' AND id<>?", (primary,))
+    db.execute("UPDATE invites SET role='member' WHERE role='admin'")
+
+
 @contextmanager
 def database(app):
     db = sqlite3.connect(app.config['DATABASE'], timeout=20)
@@ -100,14 +115,22 @@ def init_db(app):
         CREATE INDEX IF NOT EXISTS audit_contact ON audit(contact_id,id);
         ''')
         # Additive migration preserves the first prototype's data.
+        migrate_owners = 'owner_id' not in {r['name'] for r in db.execute('PRAGMA table_info(contacts)')}
         for table, additions in {
-            'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''"), ('ad_origin', 'INTEGER NOT NULL DEFAULT 0'), ('lead_profile', "TEXT NOT NULL DEFAULT ''"), ('qualification_state', "TEXT NOT NULL DEFAULT 'not_started'"), ('qualification_attempts', 'INTEGER NOT NULL DEFAULT 0'), ('qualification_last_at', 'REAL NOT NULL DEFAULT 0')],
+            'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''"), ('ad_origin', 'INTEGER NOT NULL DEFAULT 0'), ('manual_origin', 'INTEGER NOT NULL DEFAULT 0'), ('lead_profile', "TEXT NOT NULL DEFAULT ''"), ('qualification_state', "TEXT NOT NULL DEFAULT 'not_started'"), ('qualification_attempts', 'INTEGER NOT NULL DEFAULT 0'), ('qualification_last_at', 'REAL NOT NULL DEFAULT 0')],
             'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''"), ('error_code','INTEGER'), ('error_detail', "TEXT NOT NULL DEFAULT ''"), ('automation', 'INTEGER NOT NULL DEFAULT 0'), ('automation_step', "TEXT NOT NULL DEFAULT ''"), ('send_started', 'REAL NOT NULL DEFAULT 0')],
         }.items():
             existing = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
             for column, declaration in additions:
                 if column not in existing:
                     db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {declaration}')
+        if migrate_owners:
+            db.execute("ALTER TABLE contacts ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''")
+            # One-time legacy migration. Ambiguous names remain admin-only, never guessed.
+            db.execute('''UPDATE contacts SET owner_id=COALESCE(
+                (SELECT MIN(id) FROM users WHERE users.name=contacts.owner HAVING COUNT(*)=1),'')
+                WHERE owner<>'Sem responsável' ''')
+        restrict_administration(db)
         db.execute('CREATE UNIQUE INDEX IF NOT EXISTS messages_external ON messages(external_id) WHERE external_id IS NOT NULL')
         db.execute('CREATE INDEX IF NOT EXISTS messages_automation ON messages(automation,status,created)')
         for row in db.execute("SELECT id FROM contacts WHERE stage='Proposta enviada'").fetchall():
@@ -133,11 +156,11 @@ def ingest(db, number, name, body, message_id, referral=None, source='WhatsApp',
     if db.execute('SELECT 1 FROM messages WHERE id=? OR external_id=?', (message_id, message_id)).fetchone():
         return False
     number = phone(number)
-    row = db.execute('SELECT id,ad_origin FROM contacts WHERE phone=?', (number,)).fetchone()
+    row = db.execute('SELECT id,ad_origin,manual_origin FROM contacts WHERE phone=?', (number,)).fetchone()
     ad_origin = is_ad_referral(referral)
     # A signed ad referral admits the lead; subsequent messages need no repeated referral.
-    # Organic conversations never create a card or store message content in this CRM.
-    if channel == 'meta' and not ad_origin and not (row and row['ad_origin']):
+    # Manual admission is explicit; unrelated organic conversations stay outside the CRM.
+    if channel == 'meta' and not ad_origin and not (row and (row['ad_origin'] or row['manual_origin'])):
         return False
     cid = row['id'] if row else secrets.token_hex(12)
     if not row:
@@ -240,7 +263,36 @@ def create_app(config=None):
     def user_public(u):
         return {k: u[k] for k in ('id', 'email', 'name', 'role', 'active')}
 
+    def accessible_contact(db, cid):
+        row = db.execute('SELECT * FROM contacts WHERE id=?', (cid,)).fetchone()
+        if not row or (g.user['role'] != 'admin' and row['owner_id'] != g.user['id']):
+            raise Problem('Oportunidade não encontrada ou indisponível para sua conta.', 404)
+        return row
+
+    def selected_owner(db, fields, default_id=''):
+        uid = fields.get('owner_id', default_id)
+        if 'owner_id' not in fields and 'owner' in fields:
+            name = text(fields['owner'], 120)
+            if name == 'Sem responsável':
+                uid = ''
+            else:
+                people = db.execute('SELECT id FROM users WHERE name=? AND active=1', (name,)).fetchall()
+                if len(people) != 1:
+                    raise Problem('Selecione uma conta ativa da equipe como responsável.')
+                uid = people[0]['id']
+        uid = text(uid, 120)
+        if g.user['role'] != 'admin' and uid != g.user['id']:
+            raise Problem('Apenas o administrador pode atribuir oportunidades a outra pessoa ou deixá-las sem responsável.', 403)
+        if not uid:
+            return '', 'Sem responsável'
+        person = db.execute('SELECT id,name FROM users WHERE id=? AND active=1', (uid,)).fetchone()
+        if not person:
+            raise Problem('Selecione uma conta ativa da equipe como responsável.')
+        return person['id'], person['name']
+
     def session(db, user):
+        restrict_administration(db)
+        user = db.execute('SELECT * FROM users WHERE id=?', (user['id'],)).fetchone()
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
         db.execute('DELETE FROM sessions WHERE expires<?', (now(),))
         db.execute('INSERT INTO sessions VALUES(?,?,?,?)', (digest(token), user['id'], csrf, now() + SESSION_TTL))
@@ -272,6 +324,7 @@ def create_app(config=None):
             return
         token = request.cookies.get('crm_session', '')
         with database(app) as db:
+            restrict_administration(db)
             row = db.execute('SELECT u.*,s.csrf FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>? AND u.active=1', (digest(token), now())).fetchone()
             if not row:
                 raise Problem('Entre na sua conta para continuar.', 401)
@@ -381,6 +434,8 @@ def create_app(config=None):
     @app.get('/api/team')
     def team():
         with database(app) as db:
+            if g.user['role'] != 'admin':
+                return jsonify(users=[user_public(g.user)])
             return jsonify(users=[user_public(r) for r in db.execute('SELECT * FROM users ORDER BY name')])
 
     @app.post('/api/invites')
@@ -388,8 +443,8 @@ def create_app(config=None):
         admin()
         d = data()
         address, role = email(d.get('email', '')), d.get('role', 'member')
-        if role not in ('admin', 'member'):
-            raise Problem('Perfil inválido.')
+        if role != 'member':
+            raise Problem('Novas contas são de atendentes, com acesso apenas às próprias oportunidades.')
         token = secrets.token_urlsafe(32)
         with database(app) as db:
             existing = db.execute('SELECT id FROM users WHERE email=?', (address,)).fetchone()
@@ -458,7 +513,8 @@ def create_app(config=None):
     @app.get('/api/contacts')
     def contacts():
         with database(app) as db:
-            rows = [dict(r) for r in db.execute('SELECT * FROM contacts ORDER BY updated DESC')]
+            query, args = ('SELECT * FROM contacts ORDER BY updated DESC', ()) if g.user['role'] == 'admin' else ('SELECT * FROM contacts WHERE owner_id=? ORDER BY updated DESC', (g.user['id'],))
+            rows = [dict(r) for r in db.execute(query, args)]
             for row in rows:
                 city = CITY_BY_ID.get(row['city_id'])
                 row['location_pending'] = city is None
@@ -470,10 +526,38 @@ def create_app(config=None):
 
     @app.post('/api/contacts')
     def new_contact():
-        raise Problem('Novos contatos entram somente por anúncios identificados pela Meta.', 403)
+        d = data()
+        name, number = text(d.get('name', ''), 120), phone(d.get('phone', ''))
+        if not name:
+            raise Problem('Informe o nome do cliente.')
+        place = location_fields(d.get('city_id', ''))
+        instagram = instagram_handle(d.get('instagram', ''))
+        profile = d.get('lead_profile', '')
+        stage = d.get('stage', STAGES[0])
+        note = text(d.get('note', ''))
+        if profile not in ('', *PROFILES):
+            raise Problem('Selecione Lojista, Revenda ou Consumidor Final.')
+        if stage not in STAGES:
+            raise Problem('Etapa inválida.')
+        value = float(d.get('value', 0))
+        if not math.isfinite(value) or not 0 <= value <= 1e12:
+            raise Problem('Valor inválido.')
+        with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            owner_id, owner = selected_owner(db, d, g.user['id'])
+            if db.execute('SELECT 1 FROM contacts WHERE phone=?', (number,)).fetchone():
+                raise Problem('Este WhatsApp já está cadastrado. Consulte suas oportunidades ou fale com o administrador.', 409)
+            cid = secrets.token_hex(12)
+            db.execute('''INSERT INTO contacts(id,name,phone,stage,value,owner,source,note,created,updated,
+                          city_id,city,state,instagram,manual_origin,lead_profile,qualification_state,owner_id)
+                          VALUES(?,?,?,?,?,?,'Manual',?,?,?,?,?,?,?,1,?,'human',?)''',
+                       (cid,name,number,stage,value,owner,note,now(),now(),place['city_id'],place['city'],place['state'],instagram,profile,owner_id))
+            audit(db, 'Oportunidade criada manualmente', cid, {'origem':'Manual','perfil':profile,'responsável':owner})
+        return jsonify(ok=True, id=cid), 201
 
     @app.post('/api/simulate')
     def simulate():
+        admin()
         if not app.config['ALLOW_SIMULATION']:
             raise Problem('Simulações estão desabilitadas neste ambiente.', 403)
         d = data()
@@ -492,7 +576,7 @@ def create_app(config=None):
     @app.post('/api/update')
     def update():
         d = data()
-        patch = {key: d[key] for key in ('stage', 'value', 'owner', 'note', 'instagram', 'lead_profile') if key in d}
+        patch = {key: d[key] for key in ('stage', 'value', 'owner', 'owner_id', 'note', 'instagram', 'lead_profile') if key in d}
         if 'city_id' in d:
             patch.update(location_fields(d['city_id']))
         if 'instagram' in patch:
@@ -512,13 +596,13 @@ def create_app(config=None):
                 patch[key] = text(patch[key], 120 if key == 'owner' else 5000)
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
-            row = db.execute('SELECT * FROM contacts WHERE id=?', (d.get('id'),)).fetchone()
-            if not row:
-                raise Problem('Contato não encontrado.', 404)
+            row = accessible_contact(db, d.get('id'))
             if not patch.get('city_id',row['city_id']):
                 raise Problem('Preencha cidade e estado na ficha antes de alterar esta oportunidade.')
             if row['revision'] != d['revision']:
                 raise Problem('Este card foi atualizado por outra pessoa. Recarregue os dados e revise sua alteração.', 409)
+            if 'owner' in patch or 'owner_id' in patch:
+                patch['owner_id'], patch['owner'] = selected_owner(db, patch, row['owner_id'])
             assignments = ','.join(key + '=?' for key in patch)
             db.execute(f'UPDATE contacts SET {assignments},updated=?,revision=revision+1 WHERE id=?', (*patch.values(), now(), row['id']))
             if patch.get('owner', 'Sem responsável') != 'Sem responsável' or patch.get('stage', STAGES[0]) != STAGES[0]:
@@ -534,16 +618,14 @@ def create_app(config=None):
         d = data()
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
-            c = db.execute('SELECT * FROM contacts WHERE id=?', (d.get('id'),)).fetchone()
-            if not c:
-                raise Problem('Contato não encontrado.', 404)
+            c = accessible_contact(db, d.get('id'))
             if c['revision'] != d.get('revision'):
                 raise Problem('Este card foi atualizado. Recarregue antes de assumir.', 409)
-            owner = d.get('owner', g.user['name'])
-            if not db.execute('SELECT 1 FROM users WHERE name=? AND active=1', (owner,)).fetchone():
-                raise Problem('Selecione uma pessoa ativa da equipe.')
+            owner_id, owner = selected_owner(db, d, g.user['id'])
+            if not owner_id:
+                raise Problem('Selecione uma conta ativa da equipe.')
             handover(db, c['id'], audit, 'Transferência para atendimento humano')
-            db.execute('UPDATE contacts SET owner=?,stage=? WHERE id=?', (owner, STAGES[1], c['id']))
+            db.execute('UPDATE contacts SET owner=?,owner_id=?,stage=? WHERE id=?', (owner, owner_id, STAGES[1], c['id']))
             audit(db, 'Atendimento assumido', c['id'], {'responsável':owner})
         return jsonify(ok=True)
 
@@ -554,6 +636,8 @@ def create_app(config=None):
         if not body:
             raise Problem('Escreva uma nota.')
         with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            accessible_contact(db, d.get('id'))
             db.execute('INSERT INTO messages(id,contact_id,body,direction,created,author) VALUES(?,?,?,?,?,?)', (secrets.token_hex(16), d.get('id'), body, 'note', now(), g.user['name']))
             db.execute('UPDATE contacts SET updated=? WHERE id=?', (now(), d.get('id')))
             audit(db, 'Nota adicionada', d.get('id'))
@@ -566,9 +650,9 @@ def create_app(config=None):
         with database(app) as db:
             automation = qualification_settings(db)
         return jsonify(version=RELEASE, mode='Equipe Sais Blue', webhook_configured=receive, sending_configured=sending,
-                       connection_verified=False, simulation=app.config['ALLOW_SIMULATION'], ads_only=True,
-                       manual_contacts_enabled=False, automation=automation, lead_profiles=PROFILES,
-                       team_url=app.config['APP_URL'] or request.host_url.rstrip('/'))
+                       connection_verified=False, simulation=app.config['ALLOW_SIMULATION'] and g.user['role'] == 'admin', ads_only=True,
+                       manual_contacts_enabled=True, automation=automation, lead_profiles=PROFILES,
+                       own_opportunities_only=g.user['role'] != 'admin', team_url=app.config['APP_URL'] or request.host_url.rstrip('/'))
 
     @app.post('/api/automation')
     def configure_automation():
@@ -649,9 +733,7 @@ def create_app(config=None):
         mid = 'out:' + key
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
-            contact = db.execute('SELECT * FROM contacts WHERE id=?', (d.get('id'),)).fetchone()
-            if not contact:
-                raise Problem('Contato não encontrado.', 404)
+            contact = accessible_contact(db, d.get('id'))
             prior = db.execute('SELECT * FROM messages WHERE id=?', (mid,)).fetchone()
             if prior:
                 if prior['contact_id'] != contact['id'] or prior['body'] != body:
@@ -679,7 +761,10 @@ def create_app(config=None):
         """Create the first administrator from the server's terminal."""
         hashed = password(getpass.getpass('Senha (mínimo 12 caracteres): '))
         with database(app) as db:
+            if db.execute("SELECT 1 FROM users WHERE role='admin'").fetchone():
+                raise Problem('Já existe um administrador. Novas pessoas entram como atendentes por convite.')
             db.execute('INSERT INTO users VALUES(?,?,?,?,?,1,?)', (secrets.token_hex(12), email(address), text(name, 120), hashed, 'admin', now()))
+            restrict_administration(db)
         click.echo('Administrador criado. Entre com o e-mail e a senha escolhidos.')
 
     @app.cli.command('backup')

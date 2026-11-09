@@ -29,7 +29,7 @@ Os processos são identificados pelo caminho da instalação, script, PID e inst
 
 O conector tenta reutilizar o domínio ngrok já cadastrado na Meta. Credenciais não são pedidas novamente nem enviadas ao GitHub. O retorno de “conexão HTTPS pronta” comprova a verificação do callback e do isolamento das rotas privadas, não a entrega de uma mensagem pela Meta. Se o túnel não puder ser reaberto, a janela informa a pendência e permite tentar **Iniciar / reconectar**. O CRM não publica sua tela de login pelo túnel do WhatsApp.
 
-As melhorias de anúncios, roteiro de qualificação, tags, relatórios e distribuição Chai/Grasi estão incluídas. Depois da primeira atualização, convide as duas em Equipe e ative o primeiro atendimento em Integrações conforme `ATUALIZACAO-ANUNCIOS-E-QUALIFICACAO.md`.
+As melhorias de anúncios, roteiro de qualificação, tags, relatórios, distribuição Chai/Grasi, cadastro manual e acesso restrito por responsável estão incluídas. O administrador original vê todos os cards; atendentes veem apenas os seus. Consulte `OPORTUNIDADES-MANUAIS.md`. Depois da primeira atualização, convide as duas em Equipe e ative o primeiro atendimento em Integrações conforme `ATUALIZACAO-ANUNCIOS-E-QUALIFICACAO.md`.
 
 ## Código e manutenção
 
