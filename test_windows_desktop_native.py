@@ -118,6 +118,21 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
                     while time.monotonic()<deadline:
                         if ops.health(release_version):break
                         time.sleep(.5)
+                    if not ops.health(release_version):
+                        # These values come only from this isolated CI fixture, never company data.
+                        try:
+                            with urllib.request.urlopen('http://127.0.0.1:3000/healthz',timeout=3) as response:
+                                actual=json.loads(response.read(4096))
+                        except Exception as exc:
+                            actual={'unavailable':type(exc).__name__}
+                        print('::error title=Expected and running fixture versions::'+json.dumps({'expected':release_version,'actual':actual}),flush=True)
+                        diagnostic=code.split('$deadline=')[0]+"\n$p=Get-Process -Id "+str(result['pid'])+" -ErrorAction SilentlyContinue; $text=if($p){@([SaisBlueGui]::Children($p.MainWindowHandle)|ForEach-Object {[SaisBlueGui]::Text($_)}) -join '; '}else{'GUI closed'}; @{text=$text}|ConvertTo-Json -Compress"
+                        text=ops.powershell(diagnostic)['text']
+                        print('::error title=Isolated updater window::'+text.replace('%','%25').replace('\r','%0D').replace('\n','%0A'),flush=True)
+                        packages=Path(os.environ['LOCALAPPDATA'])/'SaisBlueCRM/packages'
+                        for manifest in sorted(packages.glob('*/release.json'),key=lambda p:p.stat().st_mtime)[-2:]:
+                            record=json.loads(manifest.read_text())
+                            print('::error title=Downloaded public release manifest::'+json.dumps({k:record.get(k) for k in ('version','commit','sha256')}),flush=True)
                     self.assertTrue(ops.health(release_version),'GUI update did not start the verified new version')
                     self.assertEqual((root/'.env').read_text(encoding='utf-8'),config)
                     with sqlite_connection(root/'data/crm.sqlite3') as db:
