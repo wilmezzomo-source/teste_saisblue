@@ -8,7 +8,7 @@ No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e co
 
 Versão própria para funil comercial e atendimento. O administrador original vê todos os cards, inclusive os sem responsável. Atendentes veem e editam apenas os atribuídos às próprias contas e podem cadastrar oportunidades manuais para si. O administrador gerencia acessos e transferências. Dados centralizados em SQLite, com autenticação Flask e execução por Waitress em Windows ou Linux.
 
-**Estado real:** o usuário confirmou recebimento e resposta no WhatsApp oficial, além do primeiro atendimento automático de leads de anúncio no servidor. A versão **2026.11.09.5** acrescenta o cadastro manual descrito em [OPORTUNIDADES-MANUAIS.md](OPORTUNIDADES-MANUAIS.md); precisa ser aplicada pelo atualizador no Windows. O domínio próprio e a operação persistente ainda não foram configurados nesta sessão.
+**Estado real:** o usuário confirmou recebimento e resposta no WhatsApp oficial, além do primeiro atendimento automático de leads de anúncio no servidor. A versão **2026.11.09.5** entrega o app instalável no iPhone, Web Push e o assistente de HTTPS; precisa ser aplicada pelo atualizador no Windows. O DNS, a rede da empresa e a entrega real na tela bloqueada ainda dependem de ativação e validação com Telium/TI. Veja [VALIDACAO-IPHONE.md](VALIDACAO-IPHONE.md) para os testes concluídos e os limites.
 
 ## iPhone e notificações na tela bloqueada — 2026.11.09.5
 
