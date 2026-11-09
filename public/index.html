@@ -27,7 +27,8 @@
         ><button data-view="contacts"><span>♧</span> Contatos</button
         ><button data-view="map"><span>⌖</span> Mapa</button
         ><button data-view="team"><span>♧</span> Equipe</button
-        ><button data-view="reports"><span>↑</span> Visão geral</button>
+        ><button data-view="reports"><span>↑</span> Visão geral</button
+        ><button id="trash-nav" data-view="trash" hidden><span>⌫</span> Lixeira</button>
       </nav>
       <div class="aside-bottom">
         <div class="help-card">
@@ -69,6 +70,10 @@
             </p>
           </div>
           <div class="actions">
+            <select id="owner-filter" aria-label="Filtrar por responsável" hidden>
+              <option value="">Todos os responsáveis</option>
+              <option value="__unassigned__">Sem responsável</option>
+            </select>
             <select id="profile-filter" aria-label="Filtrar por perfil">
               <option value="">Todos os perfis</option>
               <option>Lojista</option>

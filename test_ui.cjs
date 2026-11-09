@@ -78,7 +78,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL("**/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.09.1"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.09.2"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   assert.equal(await admin.locator('.column[data-stage="Proposta enviada"]').count(),0);
   await admin.evaluate(() => document.fonts.load("400 14px Montserrat"));
@@ -94,7 +94,10 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.locator("[name=password]").fill(secret);
   await member.getByRole("button", { name: "Ativar meu acesso" }).click();
   await member.locator("body[data-auth=ready]").waitFor();
+  assert.equal(await member.locator('#owner-filter').isHidden(),true);
+  assert.equal(await member.locator('#trash-nav').isHidden(),true);
   await admin.locator("[data-view=pipeline]").click();
+  assert.equal(await admin.locator('#owner-filter').isVisible(),true);
   await admin.getByRole("button", { name: "Simular lead do anúncio" }).click();
   await admin.locator("[name=name]").fill("Cliente de demonstração");
   await admin.locator("[name=phone]").fill("5511999991234");
@@ -126,6 +129,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .locator(".card")
     .filter({ hasText: "Cliente de demonstração" })
     .click();
+  assert.equal(await member.locator('#delete-contact').count(),0);
   await member.locator("[name=stage]").selectOption("Em atendimento");
   await member.locator("[name=value]").fill("2500");
   await member.getByRole("button", { name: "Salvar oportunidade" }).click();
@@ -310,6 +314,9 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.locator('#profile-filter').selectOption('Revenda');
   assert.equal(await admin.locator('.card').count(),1);
   assert.equal(await admin.locator('.profile-tag.revenda').count(),1);
+  assert.equal(await admin.locator('.card .source').count(),0);
+  assert.equal(await admin.locator('.card .owner-tag').textContent(),'Admin de demonstração');
+  assert.equal(await admin.locator('.card').getByText('Qualificação concluída',{exact:true}).count(),0);
   await admin.locator('.card').click();
   assert.equal(await admin.locator('#detail-form [name=lead_profile]').inputValue(),'Revenda');
   assert.equal(await admin.locator('#detail-form [name=city_id]').inputValue(),'4309407');
@@ -371,6 +378,77 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(await member.locator('#detail-dialog').isVisible(),false);
   assert.equal(await member.locator('#detail').textContent(),'');
   assert.equal((await member.evaluate(async()=> (await api('/api/contacts')).contacts)).some(c=>c.phone==='5554999997666'),false);
+  // Admin combines stable account IDs and profiles across every opportunity view.
+  await admin.evaluate(async()=>{
+    const row=(await api('/api/contacts')).contacts.find(c=>c.name==='Cliente de demonstração');
+    await api('/api/update',{id:row.id,revision:row.revision,lead_profile:'Revenda'});
+    await load();
+  });
+  await admin.locator('[data-view=pipeline]').click();
+  await admin.locator('#owner-filter').selectOption(seller.id);
+  await admin.locator('#profile-filter').selectOption('Revenda');
+  assert.equal(await admin.locator('#owner-filter').inputValue(),seller.id);
+  assert.equal(await admin.locator('.card').count(),1);
+  assert.match(await admin.locator('.card').textContent(),/Cliente de demonstração/);
+  assert.equal(await admin.locator('.card .profile-tag').textContent(),'Revenda');
+  assert.equal(await admin.locator('.card .owner-tag').textContent(),'Vendedora de demonstração');
+  assert.equal(await admin.locator('.card .source').count(),0);
+  assert.equal((await admin.locator('.stat-number').first().textContent()).trim(),'1');
+  await admin.screenshot({path:__dirname+'/preview-owner-filter.png',fullPage:true});
+  await admin.locator('[data-view=contacts]').click();
+  assert.equal(await admin.getByRole('cell',{name:'Cliente de demonstração',exact:true}).count(),1);
+  assert.equal(await admin.getByRole('cell',{name:'Lead qualificado UI',exact:true}).count(),0);
+  await admin.locator('[data-view=inbox]').click();
+  assert.equal(await admin.locator('.inbox-item').count(),1);
+  await admin.locator('[data-view=reports]').click();
+  assert.equal(await admin.locator('[data-profile-summary=Revenda] td').nth(1).textContent(),'1');
+  await admin.locator('[data-view=map]').click();
+  await admin.locator('#map-count').filter({hasText:'1 lead(s) em 1 cidade(s)'}).waitFor();
+  assert.equal(await admin.locator('.lead-pin').count(),1);
+  await admin.locator('#profile-filter').selectOption('Lojista');
+  await admin.locator('#map-count').filter({hasText:'0 lead(s)'}).waitFor();
+  assert.equal(await admin.locator('.lead-pin').count(),0);
+  await admin.locator('#owner-filter').selectOption('admin-test');
+  await admin.locator('#map-count').filter({hasText:'1 lead(s) em 1 cidade(s)'}).waitFor();
+  await admin.locator('[data-view=pipeline]').click();
+  assert.equal(await admin.locator('.card').count(),1);
+  assert.match(await admin.locator('.card').textContent(),/Oportunidade por indicação/);
+  await admin.locator('#owner-filter').selectOption('__unassigned__');
+  assert.equal(await admin.locator('.card').count(),0);
+  await admin.locator('#profile-filter').selectOption('__pending__');
+  assert.equal(await admin.locator('.card').count(),1);
+  assert.match(await admin.locator('.card').textContent(),/Sem responsável privado/);
+  await admin.locator('#owner-filter').selectOption(seller.id);
+  assert.equal(await admin.locator('.card').count(),3);
+  await admin.locator('#profile-filter').selectOption('Revenda');
+  await admin.locator('#owner-filter').selectOption('');
+  assert.equal(await admin.locator('#profile-filter').inputValue(),'Revenda');
+  assert.equal(await admin.locator('.card').count(),2);
+  await admin.locator('#profile-filter').selectOption('');
+  await admin.locator('[data-view=team]').click();
+  await admin.locator('#owner-filter').waitFor({state:'hidden'});
+  await admin.locator('[data-view=pipeline]').click();
+  await admin.setViewportSize({width:390,height:844});
+  assert.equal(await admin.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  assert.equal(await admin.locator('#owner-filter').isVisible(),true);
+  await admin.screenshot({path:__dirname+'/preview-owner-filter-mobile.png',fullPage:true});
+  await admin.setViewportSize({width:1440,height:1000});
+  await admin.locator('.card').filter({hasText:'Oportunidade por indicação'}).click();
+  admin.once('dialog',dialog=>dialog.dismiss());
+  await admin.getByRole('button',{name:'Excluir card',exact:true}).click();
+  assert.equal(await admin.locator('#detail-dialog').isVisible(),true);
+  admin.once('dialog',dialog=>dialog.accept());
+  await admin.getByRole('button',{name:'Excluir card',exact:true}).click();
+  await admin.locator('#detail-dialog').waitFor({state:'hidden'});
+  assert.equal(await admin.locator('.card').filter({hasText:'Oportunidade por indicação'}).count(),0);
+  await admin.locator('#trash-nav').click();
+  await admin.getByRole('heading',{name:'Cards excluídos',exact:true}).waitFor();
+  const deletedRow=admin.locator('tbody tr').filter({hasText:'Oportunidade por indicação'});
+  await deletedRow.getByRole('button',{name:'Restaurar card'}).click();
+  await admin.getByRole('status').filter({hasText:'Card restaurado.'}).waitFor();
+  assert.equal(await admin.locator('tbody tr').filter({hasText:'Oportunidade por indicação'}).count(),0);
+  await admin.locator('[data-view=pipeline]').click();
+  assert.equal(await admin.locator('.card').filter({hasText:'Oportunidade por indicação'}).count(),1);
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({
@@ -391,7 +469,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: oportunidades manuais, acesso restrito por responsável, transferência e revogação, conflitos, mapa, anúncios, qualificação, distribuição, tags, relatórios e mobile.",
+    "UI OK: filtros combinados de responsável e perfil, etiquetas dos cards, exclusão e restauração, acesso restrito, mapa, anúncios, qualificação, distribuição, indicadores e mobile.",
   );
 })()
   .catch((e) => {

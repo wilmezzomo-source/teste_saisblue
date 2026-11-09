@@ -278,6 +278,25 @@ class QualificationTest(unittest.TestCase):
             self.assertEqual(db.execute('SELECT revision FROM contacts WHERE id=?',(c['id'],)).fetchone()[0],row['revision'])
             self.assertEqual(db.execute("SELECT COUNT(*) FROM audit WHERE action='Etapa removida do funil'").fetchone()[0],1)
 
+    def test_delete_cancels_qualification_and_ignores_new_messages_until_restored(self):
+        self.enable(); self.receive('Oi',ad=True)
+        c = self.contact()
+        self.assertEqual(self.post('/api/contacts/delete',{'id':c['id'],'revision':c['revision']}).status_code,200)
+        self.drain()
+        self.receive('Novo clique no anúncio',ad=True)
+        self.drain()
+        self.assertEqual(self.sent,[])
+        self.assertEqual(self.client.get('/api/contacts').json['contacts'],[])
+        with database(self.app) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM messages WHERE direction='in'").fetchone()[0],1)
+            self.assertEqual(db.execute("SELECT status FROM messages WHERE automation=1").fetchone()[0],'cancelled')
+        deleted = self.client.get('/api/trash').json['contacts'][0]
+        self.assertEqual(self.post('/api/contacts/restore',{'id':c['id'],'revision':deleted['revision']}).status_code,200)
+        self.receive('Retomar com uma pessoa')
+        self.drain()
+        self.assertEqual(self.contact()['qualification_state'],'human')
+        self.assertEqual(self.sent,[])
+
 
 if __name__ == '__main__':
     unittest.main()

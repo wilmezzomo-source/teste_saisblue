@@ -27,7 +27,7 @@ from qualification import PROFILES, is_ad_referral, settings as qualification_se
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.09.1'
+RELEASE = '2026.11.09.2'
 
 
 class Problem(Exception):
@@ -115,7 +115,10 @@ def init_db(app):
         CREATE INDEX IF NOT EXISTS audit_contact ON audit(contact_id,id);
         ''')
         # Additive migration preserves the first prototype's data.
-        migrate_owners = 'owner_id' not in {r['name'] for r in db.execute('PRAGMA table_info(contacts)')}
+        columns = {r['name'] for r in db.execute('PRAGMA table_info(contacts)')}
+        migrate_owners = 'owner_id' not in columns
+        if 'deleted_at' not in columns:
+            db.execute('ALTER TABLE contacts ADD COLUMN deleted_at REAL NOT NULL DEFAULT 0')
         for table, additions in {
             'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''"), ('ad_origin', 'INTEGER NOT NULL DEFAULT 0'), ('manual_origin', 'INTEGER NOT NULL DEFAULT 0'), ('lead_profile', "TEXT NOT NULL DEFAULT ''"), ('qualification_state', "TEXT NOT NULL DEFAULT 'not_started'"), ('qualification_attempts', 'INTEGER NOT NULL DEFAULT 0'), ('qualification_last_at', 'REAL NOT NULL DEFAULT 0')],
             'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''"), ('error_code','INTEGER'), ('error_detail', "TEXT NOT NULL DEFAULT ''"), ('automation', 'INTEGER NOT NULL DEFAULT 0'), ('automation_step', "TEXT NOT NULL DEFAULT ''"), ('send_started', 'REAL NOT NULL DEFAULT 0')],
@@ -156,7 +159,9 @@ def ingest(db, number, name, body, message_id, referral=None, source='WhatsApp',
     if db.execute('SELECT 1 FROM messages WHERE id=? OR external_id=?', (message_id, message_id)).fetchone():
         return False
     number = phone(number)
-    row = db.execute('SELECT id,ad_origin,manual_origin FROM contacts WHERE phone=?', (number,)).fetchone()
+    row = db.execute('SELECT id,ad_origin,manual_origin,deleted_at FROM contacts WHERE phone=?', (number,)).fetchone()
+    if row and row['deleted_at']:
+        return False
     ad_origin = is_ad_referral(referral)
     # A signed ad referral admits the lead; subsequent messages need no repeated referral.
     # Manual admission is explicit; unrelated organic conversations stay outside the CRM.
@@ -265,7 +270,7 @@ def create_app(config=None):
 
     def accessible_contact(db, cid):
         row = db.execute('SELECT * FROM contacts WHERE id=?', (cid,)).fetchone()
-        if not row or (g.user['role'] != 'admin' and row['owner_id'] != g.user['id']):
+        if not row or row['deleted_at'] or (g.user['role'] != 'admin' and row['owner_id'] != g.user['id']):
             raise Problem('Oportunidade não encontrada ou indisponível para sua conta.', 404)
         return row
 
@@ -513,7 +518,7 @@ def create_app(config=None):
     @app.get('/api/contacts')
     def contacts():
         with database(app) as db:
-            query, args = ('SELECT * FROM contacts ORDER BY updated DESC', ()) if g.user['role'] == 'admin' else ('SELECT * FROM contacts WHERE owner_id=? ORDER BY updated DESC', (g.user['id'],))
+            query, args = ('SELECT * FROM contacts WHERE deleted_at=0 ORDER BY updated DESC', ()) if g.user['role'] == 'admin' else ('SELECT * FROM contacts WHERE deleted_at=0 AND owner_id=? ORDER BY updated DESC', (g.user['id'],))
             rows = [dict(r) for r in db.execute(query, args)]
             for row in rows:
                 city = CITY_BY_ID.get(row['city_id'])
@@ -523,6 +528,43 @@ def create_app(config=None):
                 row['messages'] = [dict(m) for m in db.execute('SELECT * FROM messages WHERE contact_id=? ORDER BY created,id', (row['id'],))]
                 row['audit'] = [dict(a) for a in db.execute('SELECT actor,action,details,created FROM audit WHERE contact_id=? ORDER BY id DESC LIMIT 30', (row['id'],))]
         return jsonify(contacts=rows, stages=STAGES)
+
+    @app.get('/api/trash')
+    def trash():
+        admin()
+        with database(app) as db:
+            rows = [dict(r) for r in db.execute('''SELECT id,name,phone,owner,owner_id,lead_profile,city,state,
+                stage,value,deleted_at,revision FROM contacts WHERE deleted_at>0 ORDER BY deleted_at DESC''')]
+        return jsonify(contacts=rows)
+
+    @app.post('/api/contacts/delete')
+    def delete_contact():
+        admin()
+        d = data()
+        with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            c = accessible_contact(db, d.get('id'))
+            if c['revision'] != d.get('revision'):
+                raise Problem('Este card foi atualizado. Recarregue a ficha antes de excluir.', 409)
+            handover(db, c['id'], audit, 'Card movido para a lixeira pelo administrador')
+            db.execute('UPDATE contacts SET deleted_at=?,updated=? WHERE id=?', (now(),now(),c['id']))
+            audit(db, 'Card movido para a lixeira', c['id'])
+        return jsonify(ok=True)
+
+    @app.post('/api/contacts/restore')
+    def restore_contact():
+        admin()
+        d = data()
+        with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            c = db.execute('SELECT * FROM contacts WHERE id=? AND deleted_at>0', (d.get('id'),)).fetchone()
+            if not c:
+                raise Problem('Card não encontrado na lixeira.', 404)
+            if c['revision'] != d.get('revision'):
+                raise Problem('Este card foi atualizado. Recarregue a lixeira antes de restaurar.', 409)
+            db.execute("UPDATE contacts SET deleted_at=0,qualification_state='human',updated=?,revision=revision+1 WHERE id=?", (now(),c['id']))
+            audit(db, 'Card restaurado da lixeira', c['id'])
+        return jsonify(ok=True)
 
     @app.post('/api/contacts')
     def new_contact():
@@ -545,7 +587,10 @@ def create_app(config=None):
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
             owner_id, owner = selected_owner(db, d, g.user['id'])
-            if db.execute('SELECT 1 FROM contacts WHERE phone=?', (number,)).fetchone():
+            existing = db.execute('SELECT deleted_at FROM contacts WHERE phone=?', (number,)).fetchone()
+            if existing and existing['deleted_at'] and g.user['role'] == 'admin':
+                raise Problem('Este WhatsApp está na lixeira. Restaure o card existente para retomar o atendimento.', 409)
+            if existing:
                 raise Problem('Este WhatsApp já está cadastrado. Consulte suas oportunidades ou fale com o administrador.', 409)
             cid = secrets.token_hex(12)
             db.execute('''INSERT INTO contacts(id,name,phone,stage,value,owner,source,note,created,updated,

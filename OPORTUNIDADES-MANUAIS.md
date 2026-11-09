@@ -1,6 +1,6 @@
-# Oportunidades manuais — 2026.11.09.1
+# Oportunidades manuais — 2026.11.09.2
 
-No servidor Windows, abra o aplicativo **Sais Blue CRM**, clique em **Atualizar e abrir CRM** e atualize a página no navegador. Não é necessário reinstalar ou parar processos manualmente. O rodapé deve mostrar **2026.11.09.1**.
+No servidor Windows, abra o aplicativo **Sais Blue CRM**, clique em **Atualizar e abrir CRM** e atualize a página no navegador. Não é necessário reinstalar ou parar processos manualmente. O rodapé deve mostrar **2026.11.09.2**.
 
 ## Cadastrar uma oportunidade
 
@@ -35,3 +35,23 @@ Os testes verificam cadastro e edição apenas por quem tem acesso, cidade obrig
 - Os responsáveis já cadastrados são associados às contas existentes. Se houver dois usuários com o mesmo nome ou nenhum usuário correspondente, o card permanece visível só ao administrador até ele escolher a conta correta. A autorização usa o identificador da conta, nunca apenas o nome.
 
 Após atualizar, cada pessoa deve recarregar o navegador. As permissões do servidor valem inclusive para sessões que já estavam abertas; não é preciso redefinir senhas.
+
+## Filtrar por responsável e perfil
+
+Como administrador, escolha uma conta em **Todos os responsáveis** e um perfil em **Todos os perfis**. Por exemplo: **Grasi + Revenda** mostra somente as revendas atribuídas a Grasi.
+
+Os dois filtros funcionam juntos no funil, contatos, atendimento, mapa e indicadores. **Sem responsável** também pode ser combinado com Lojista, Revenda, Consumidor Final ou Perfil pendente. Voltar para **Todos os responsáveis** preserva o perfil escolhido; voltar para **Todos os perfis** preserva a responsável escolhida. As seleções são mantidas ao trocar de aba enquanto a página estiver aberta.
+
+O filtro de responsável aparece apenas para o administrador. Atendentes continuam com acesso somente às próprias oportunidades.
+
+## Cards no funil
+
+O preview mostra a tag do perfil e uma etiqueta colorida com o nome da responsável. A origem do contato e a situação da qualificação ficam dentro da ficha, sem ocupar o card. A distribuição permanece: Lojista/Revenda de RS e SC para Chai; Lojista/Revenda dos demais estados e todo Consumidor Final para Grasi.
+
+## Excluir e restaurar cards
+
+Apenas o administrador abre a ficha e usa **Excluir card**, confirmando o nome do cliente. O card vai para **Lixeira** e sai do funil, atendimento, contatos, mapa e indicadores. A exclusão pausa o roteiro e cancela perguntas ainda na fila. Enquanto estiver na lixeira, novas mensagens desse número são ignoradas, inclusive novos cliques em anúncio.
+
+Para recuperar, abra **Lixeira → Restaurar card**. O histórico, os dados e a responsável são preservados, e o atendimento permanece humano. Atendentes não podem excluir, restaurar ou consultar a lixeira. Se um telefone já estiver na lixeira, restaure o card em vez de criar outro.
+
+A lixeira não apaga definitivamente os dados pessoais. Solicitações de exclusão de dados seguem o canal informado na política de privacidade. Uma mensagem já em envio pode chegar mesmo após o card ser movido; a exclusão impede novos envios da fila e o início de novas perguntas.

@@ -129,6 +129,42 @@ class AccessControlTest(unittest.TestCase):
         self.assertEqual(self.rows('grasi'),[])
         self.assertEqual(len(self.rows('willian')),1)
 
+    def test_only_admin_can_delete_and_restore_preserving_history_and_assignment(self):
+        c = self.create('grasi')
+        self.post('willian','/api/messages',{'id':c['id'],'body':'Preservar esta nota'})
+        self.assertEqual(self.clients['grasi'][0].get('/api/trash').status_code,403)
+        for path in ('/api/contacts/delete','/api/contacts/restore'):
+            self.assertEqual(self.post('grasi',path,{'id':c['id'],'revision':c['revision']}).status_code,403)
+        self.post('willian','/api/update',{'id':c['id'],'revision':c['revision'],'value':1250})
+        self.assertEqual(self.post('willian','/api/contacts/delete',{'id':c['id'],'revision':c['revision']}).status_code,409)
+        current = self.rows('willian')[0]
+        self.assertEqual(self.post('willian','/api/contacts/delete',{'id':c['id'],'revision':current['revision']}).status_code,200)
+        self.assertEqual(self.rows('willian'),[])
+        self.assertEqual(self.rows('grasi'),[])
+        for uid in ('willian','grasi'):
+            self.assertEqual(self.post(uid,'/api/messages',{'id':c['id'],'body':'Não gravar'}).status_code,404)
+            self.assertEqual(self.post(uid,'/api/send',{'id':c['id'],'body':'Não enviar','request_id':'a'*32}).status_code,404)
+        deleted = self.clients['willian'][0].get('/api/trash').json['contacts'][0]
+        duplicate = self.post('willian','/api/contacts',{'name':'Duplicado','phone':c['phone'],'city_id':'4309407'})
+        self.assertEqual(duplicate.status_code,409)
+        self.assertIn('lixeira',duplicate.json['error'])
+        self.assertEqual(self.post('willian','/api/contacts/restore',{'id':c['id'],'revision':-1}).status_code,409)
+        self.assertEqual(self.post('willian','/api/contacts/restore',{'id':c['id'],'revision':deleted['revision']}).status_code,200)
+        restored = self.rows('grasi')[0]
+        self.assertEqual((restored['owner_id'],restored['value'],restored['qualification_state']),('grasi',1250,'human'))
+        self.assertEqual(restored['messages'][0]['body'],'Preservar esta nota')
+        self.assertEqual(self.clients['willian'][0].get('/api/trash').json['contacts'],[])
+        self.assertEqual(restored['audit'][0]['action'],'Card restaurado da lixeira')
+
+    def test_deleted_cards_stay_deleted_after_restart_and_never_become_visible_to_members(self):
+        c = self.create('')
+        self.post('willian','/api/contacts/delete',{'id':c['id'],'revision':c['revision']})
+        create_app(dict(self.app.config))
+        self.assertEqual(self.rows('willian'),[])
+        self.assertEqual(self.rows('chai'),[])
+        self.assertEqual(self.clients['chai'][0].get('/api/trash').status_code,403)
+        self.assertEqual(self.clients['willian'][0].get('/api/trash').json['contacts'][0]['id'],c['id'])
+
 
 if __name__ == '__main__':
     unittest.main()

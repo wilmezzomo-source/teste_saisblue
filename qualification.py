@@ -84,7 +84,7 @@ def enqueue(db, cid, incoming_id, body, step):
 def process_answer(db, cid, incoming_id, body, created, audit):
     config = settings(db)
     c = db.execute('SELECT * FROM contacts WHERE id=?', (cid,)).fetchone()
-    if not config['enabled'] or not c['ad_origin'] or c['qualification_state'] in ('human', 'completed'):
+    if not config['enabled'] or c['deleted_at'] or not c['ad_origin'] or c['qualification_state'] in ('human', 'completed'):
         return
     if time.time() - created >= 86400 or created < c['qualification_last_at']:
         return
@@ -149,7 +149,7 @@ def process_outbox(app, connect, transmit, audit):
             return False
         c = db.execute('SELECT * FROM contacts WHERE id=?', (row['contact_id'],)).fetchone()
         last = db.execute("SELECT MAX(created) FROM messages WHERE contact_id=? AND direction='in' AND channel='meta'", (c['id'],)).fetchone()[0]
-        if not settings(db)['enabled'] or c['qualification_state'] != row['automation_step'] or not last or time.time()-last >= 86400:
+        if c['deleted_at'] or not settings(db)['enabled'] or c['qualification_state'] != row['automation_step'] or not last or time.time()-last >= 86400:
             db.execute("UPDATE messages SET status='cancelled' WHERE id=?", (row['id'],))
             return True
         if not app.config['META_ACCESS_TOKEN'] or not app.config['META_PHONE_NUMBER_ID']:

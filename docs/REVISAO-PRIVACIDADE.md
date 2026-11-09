@@ -40,6 +40,8 @@ O mapa resolve as coordenadas dos municípios em um catálogo local, sem enviar 
 
 ## Por quanto tempo os dados são mantidos
 
+Excluir um card na interface move a oportunidade para uma lixeira restrita ao administrador e permite restauração. Isso interrompe o atendimento automático, mas não apaga definitivamente os dados pessoais nem substitui uma solicitação pelo canal desta política.
+
 A conservação deve ser limitada à necessidade do atendimento e do relacionamento comercial, à administração de acesso e ao cumprimento das obrigações aplicáveis. A versão atual não estabelece um prazo único de exclusão automática de todos os contatos. A Sais Blue deve revisar a necessidade de manutenção e atender solicitações de titulares conforme o caso.
 
 Pedidos de exclusão são analisados considerando dados da aplicação, registros associados e eventuais cópias de segurança. Pode haver conservação de informações quando necessária ao cumprimento de obrigações legais ou ao exercício regular de direitos.

@@ -1,4 +1,5 @@
 let contacts = [],
+  trashContacts = [],
   stages = [],
   view = "pipeline",
   query = "",
@@ -17,6 +18,7 @@ const colors = [
 ];
 let cities = [],
   profileFilter = "",
+  ownerFilter = "",
   states = [],
   leadMap = null,
   pinLayer = null,
@@ -44,6 +46,7 @@ const titles = {
   ],
   contacts: ["Contatos", "Conheça as pessoas por trás de cada oportunidade."],
   reports: ["Visão geral", "Um olhar sobre o movimento do seu comercial."],
+  trash: ["Lixeira", "Recupere oportunidades excluídas por engano."],
   settings: ["Integrações", "Conecte os canais que aproximam seus clientes."],
 };
 const $ = (s) => document.querySelector(s);
@@ -113,6 +116,7 @@ async function load() {
   try {
     const data = await api("/api/contacts");
     contacts = data.contacts;
+    if(view==="trash" && currentUser.role==="admin") trashContacts=(await api("/api/trash")).contacts;
     if (currentDetailId && !contacts.some(c=>c.id===currentDetailId)) {
       $("#detail-dialog").close();
       $("#detail").innerHTML = "";
@@ -120,6 +124,7 @@ async function load() {
       toast("Esta oportunidade não está mais disponível para sua conta.");
     }
     stages = data.stages;
+    syncOwnerFilter();
     if (view === "map" && leadMap) {
       stats();
       refreshPins();
@@ -148,6 +153,7 @@ async function bootstrap() {
       currentUser.role === "admin" ? "Administrador" : "Membro da equipe";
     $("#simulate").hidden = !status.simulation;
     $("#new-contact").hidden = !status.manual_contacts_enabled;
+    $("#trash-nav").hidden = currentUser.role!=="admin";
     document.body.dataset.auth = "ready";
     await load();
   } catch (e) {
@@ -157,12 +163,39 @@ async function bootstrap() {
 function matchesProfile(c) {
   return !profileFilter || (profileFilter === "__pending__" ? !c.lead_profile : c.lead_profile === profileFilter);
 }
+function syncOwnerFilter() {
+  const select=$("#owner-filter");
+  select.hidden=currentUser.role!=="admin" || ["team","settings","trash"].includes(view);
+  if(currentUser.role!=="admin") {
+    ownerFilter="";
+    return;
+  }
+  const people=new Map(teamUsers.map(u=>[u.id,u.name+(u.active?"":" · desativada")]));
+  for(const c of contacts) if(c.owner_id && !people.has(c.owner_id)) people.set(c.owner_id,c.owner);
+  if(ownerFilter && ownerFilter!=="__unassigned__" && !people.has(ownerFilter)) ownerFilter="";
+  select.innerHTML='<option value="">Todos os responsáveis</option><option value="__unassigned__">Sem responsável</option>'+[...people].sort((a,b)=>a[1].localeCompare(b[1],"pt-BR")).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join("");
+  select.value=ownerFilter;
+}
+function matchesSelection(c) {
+  const ownerMatches=currentUser.role!=="admin" || !ownerFilter || (ownerFilter==="__unassigned__" ? !c.owner_id : c.owner_id===ownerFilter);
+  return ownerMatches && matchesProfile(c);
+}
 function profileTag(profile) {
   const kind=({Lojista:"lojista",Revenda:"revenda","Consumidor Final":"consumidor"})[profile] || "pending";
   return `<span class="profile-tag ${kind}">${esc(profile || "Perfil pendente")}</span>`;
 }
+function ownerTag(c) {
+  let tone="pending";
+  if(c.owner_id) {
+    const owners=systemStatus.automation?.regional_owners || {};
+    let hash=0;
+    for(const ch of c.owner_id) hash=(hash*31+ch.charCodeAt(0))>>>0;
+    tone=c.owner_id===owners.chai ? "blue" : c.owner_id===owners.grasi ? "rose" : ["blue","rose","teal","amber","lavender"][hash%5];
+  }
+  return `<span class="owner-tag owner-${tone}" title="Responsável: ${esc(c.owner)}" aria-label="Responsável: ${esc(c.owner)}">${esc(c.owner)}</span>`;
+}
 function matches(c) {
-  return matchesProfile(c) && [
+  return matchesSelection(c) && [
     c.name,
     c.phone,
     c.source,
@@ -174,14 +207,14 @@ function matches(c) {
   ].some((x) => x.toLowerCase().includes(query.toLowerCase()));
 }
 function stats() {
-  const selected = contacts.filter(matchesProfile);
+  const selected = contacts.filter(matchesSelection);
   const open = selected.filter((c) => !["Ganho", "Perdido"].includes(c.stage));
   const won = selected.filter((c) => c.stage === "Ganho");
   const withMessages = selected.filter((c) =>
     c.messages.some((m) => m.direction === "in"),
   );
   $("#stats").innerHTML = [
-    ["Contatos no CRM", selected.length, profileFilter ? "Perfil selecionado" : "Todos os perfis", "♧"],
+    ["Contatos no CRM", selected.length, ownerFilter && profileFilter ? "Responsável e perfil selecionados" : ownerFilter ? "Responsável selecionado" : profileFilter ? "Perfil selecionado" : "Todos os perfis", "♧"],
     ["Oportunidades abertas", open.length, "Em acompanhamento no funil", "▥"],
     [
       "Valor em negociação",
@@ -207,7 +240,7 @@ function toolbar(title, subtitle = "") {
   return `<div class="toolbar"><div class="toolbar-title">${title}<span>${subtitle}</span></div><input id="search" class="search" aria-label="Buscar contatos" placeholder="⌕  Buscar nome, telefone ou origem" value="${esc(query)}"></div>`;
 }
 function card(c) {
-  return `<button class="card" data-contact="${c.id}" draggable="true"><div class="card-top"><span class="avatar">${esc(initials(c.name))}</span>${esc(c.name)}</div><div class="card-phone">+${esc(c.phone)}</div><div class="card-location ${c.location_pending ? "missing-location" : ""}">${c.location_pending ? "⚑ Cidade/UF pendentes" : "⌖ " + esc(c.city) + " / " + esc(c.state)}</div><span class="source">${esc(c.source)}</span><p class="card-qualification">${profileTag(c.lead_profile)} · ${esc(qualificationLabel(c.qualification_state))}</p><small class="card-owner">Responsável: ${esc(c.owner)}</small><div class="card-bottom"><strong>${money(c.value)}</strong><span>${c.messages.filter((m) => m.direction === "in").length} conversa(s)</span></div></button>`;
+  return `<button class="card" data-contact="${c.id}" draggable="true"><div class="card-top"><span class="avatar">${esc(initials(c.name))}</span>${esc(c.name)}</div><div class="card-phone">+${esc(c.phone)}</div><div class="card-location ${c.location_pending ? "missing-location" : ""}">${c.location_pending ? "⚑ Cidade/UF pendentes" : "⌖ " + esc(c.city) + " / " + esc(c.state)}</div><div class="card-tags">${profileTag(c.lead_profile)}${ownerTag(c)}</div><div class="card-bottom"><strong>${money(c.value)}</strong><span>${c.messages.filter((m) => m.direction === "in").length} conversa(s)</span></div></button>`;
 }
 function banner() {
   if (!systemStatus.simulation)
@@ -220,9 +253,11 @@ function render() {
     leadMap = null;
     pinLayer = null;
   }
+  syncOwnerFilter();
   stats();
+  $("#stats").hidden = view==="trash";
   $("#page-title").textContent = titles[view][0];
-  $("#profile-filter").hidden = ["team", "settings"].includes(view);
+  $("#profile-filter").hidden = ["team", "settings", "trash"].includes(view);
   $("#breadcrumb-current").textContent = titles[view][0];
   $("#page-subtitle").textContent = titles[view][1];
   document
@@ -244,7 +279,7 @@ function render() {
     html =
       toolbar(
         "Sua base de contatos",
-        `${contacts.length} contatos cadastrados`,
+        `${list.length} contatos encontrados`,
       ) +
       (list.length
         ? `<div class="table-wrap"><table><thead><tr><th>CONTATO</th><th>WHATSAPP</th><th>CIDADE / UF</th><th>INSTAGRAM</th><th>PERFIL</th><th>ETAPA</th><th>ORIGEM</th><th>RESPONSÁVEL</th></tr></thead><tbody>${list.map((c) => `<tr data-contact="${c.id}" tabindex="0"><td><strong>${esc(c.name)}</strong></td><td>+${esc(c.phone)}</td><td>${c.location_pending ? '<span class="missing-location">Preencher localização</span>' : esc(c.city) + " / " + esc(c.state)}</td><td>${c.instagram ? `<a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">@${esc(c.instagram)}</a>` : "—"}</td><td>${profileTag(c.lead_profile)}</td><td><span class="tag">${esc(c.stage)}</span></td><td>${esc(c.source)}</td><td>${esc(c.owner)}</td></tr>`).join("")}</tbody></table></div>`
@@ -268,6 +303,8 @@ function render() {
     html = mapView();
   } else if (view === "team") {
     html = teamView();
+  } else if (view === "trash") {
+    html = trashView();
   } else {
     html = settingsView();
   }
@@ -275,6 +312,7 @@ function render() {
   if (view === "team") bindTeam();
   if (view === "map") initMap();
   if (view === "settings") bindAutomation();
+  if (view === "trash") bindTrash();
   $("#empty-simulate")?.addEventListener("click", () => openCreate(true));
   $("#search")?.addEventListener("input", (e) => {
     const pos = e.target.selectionStart;
@@ -386,6 +424,26 @@ function detail(id) {
   bindLocationFields($("#detail-form"));
   bindSend(c);
   bindQualification(c);
+  if(currentUser.role==="admin") {
+    const button=document.createElement("button");
+    button.type="button";
+    button.className="danger";
+    button.id="delete-contact";
+    button.textContent="Excluir card";
+    $("#detail-form .dialog-actions").prepend(button);
+    button.onclick=async()=>{
+      if(!confirm(`Mover o card de ${c.name} para a lixeira? O atendimento automático será interrompido. Você poderá restaurar o card depois.`)) return;
+      button.disabled=true;
+      try {
+        await api("/api/contacts/delete",{id:c.id,revision:c.revision});
+        await load();
+        toast("Card movido para a lixeira.");
+      } catch(err) {
+        toast(err.message);
+        if(err.status===409 || err.status===404) { await load(); detail(id); }
+      } finally {button.disabled=false;}
+    };
+  }
   $("#detail-form").onsubmit = async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target));
@@ -421,6 +479,7 @@ function detail(id) {
   if (!$("#detail-dialog").open) $("#detail-dialog").showModal();
 }
 $("#profile-filter").onchange = (e) => {profileFilter=e.target.value; render();};
+$("#owner-filter").onchange = (e) => {ownerFilter=e.target.value; render();};
 $("#new-contact").onclick = () => openCreate(false);
 $("#simulate").onclick = () => openCreate(true);
 document
@@ -433,6 +492,7 @@ document.querySelectorAll("[data-view]").forEach(
     (b.onclick = async () => {
       view = b.dataset.view;
       query = "";
+      if(view==="trash") { await load(); return; }
       if (view === "team" || view === "settings") {
         try {
           teamUsers = (await api("/api/team")).users;
@@ -487,6 +547,24 @@ setInterval(() => {
     load();
 }, 5000);
 
+function trashView() {
+  if(currentUser.role!=="admin") return '<div class="panel">Apenas o administrador acessa a lixeira.</div>';
+  return `<div class="panel"><h3>Cards excluídos</h3><p>Cards na lixeira ficam fora do funil, mapa, indicadores e atendimento. Novas mensagens desses números não são gravadas enquanto estiverem excluídos. Ao restaurar, o histórico e o responsável são preservados e o atendimento continua humano.</p>${trashContacts.length?`<div class="table-wrap"><table><thead><tr><th>CLIENTE</th><th>PERFIL</th><th>RESPONSÁVEL</th><th>EXCLUÍDO EM</th><th>AÇÃO</th></tr></thead><tbody>${trashContacts.map(c=>`<tr><td><strong>${esc(c.name)}</strong><br>+${esc(c.phone)}</td><td>${profileTag(c.lead_profile)}</td><td>${ownerTag(c)}</td><td>${date(c.deleted_at)}</td><td><button class="secondary" data-restore="${esc(c.id)}">Restaurar card</button></td></tr>`).join("")}</tbody></table></div>`:'<p>A lixeira está vazia.</p>'}</div>`;
+}
+function bindTrash() {
+  document.querySelectorAll("[data-restore]").forEach(button=>{
+    button.onclick=async()=>{
+      const c=trashContacts.find(c=>c.id===button.dataset.restore);
+      button.disabled=true;
+      try {
+        await api("/api/contacts/restore",{id:c.id,revision:c.revision});
+        await load();
+        toast("Card restaurado. Atendimento humano mantido.");
+      } catch(err) {toast(err.message); await load();}
+      finally {button.disabled=false;}
+    };
+  });
+}
 function teamView() {
   return `<div class="panel"><h3>Pessoas com acesso</h3><p>Somente o administrador vê todas as oportunidades e as que estão sem responsável. Cada atendente vê e edita apenas as atribuídas à sua conta, inclusive no mapa, atendimento e indicadores.</p><div class="table-wrap"><table><thead><tr><th>PESSOA</th><th>E-MAIL</th><th>PERFIL</th><th>SITUAÇÃO</th>${currentUser.role === "admin" ? "<th>AÇÕES</th>" : ""}</tr></thead><tbody>${teamUsers.map((u) => `<tr><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${u.role === "admin" ? "Administrador" : "Membro"}</td><td>${u.active ? "Ativo" : "Desativado"}</td>${currentUser.role === "admin" ? `<td><button class="secondary" data-reset-user="${u.id}" ${!u.active ? "disabled" : ""}>Redefinir senha</button> ${u.id !== currentUser.id ? `<button class="secondary" data-toggle-user="${u.id}">${u.active ? "Desativar" : "Reativar"}</button>` : ""}</td>` : ""}</tr>`).join("")}</tbody></table></div></div>${currentUser.role === "admin" ? `<div class="panel" style="margin-top:20px"><h3>Convidar alguém para a equipe</h3><p>Gere um link individual e compartilhe com a pessoa. O convite vale por 48 horas e só pode ser usado uma vez. O link não é enviado por e-mail automaticamente.</p><form id="invite-form"><div class="detail-grid"><label>E-mail da pessoa<input type="email" name="email" required autocomplete="off"></label><label>Perfil<select name="role"><option value="member">Atendente · somente suas oportunidades</option></select></label></div><div class="dialog-actions"><button class="primary">Gerar convite</button></div></form><div id="invite-result" hidden><label>Link de acesso individual<input id="invite-link" readonly></label><p>Compartilhe somente com a pessoa convidada.</p><button id="copy-invite" class="secondary">Copiar link</button></div></div>` : '<div class="info-banner"><span>✓</span><div><strong>Você acessa somente suas oportunidades.</strong><p>Você também pode cadastrar oportunidades manuais para sua conta. Para transferir atendimentos ou recuperar senhas, fale com o administrador.</p></div></div>'}`;
 }
@@ -550,7 +628,7 @@ function bindTeam() {
   );
 }
 function reportsView() {
-  const selected=contacts.filter(matchesProfile);
+  const selected=contacts.filter(matchesSelection);
   const profiles=["Lojista","Revenda","Consumidor Final",""];
   const profileRows=profiles.filter(p=>!profileFilter || (profileFilter==="__pending__"?!p:p===profileFilter)).map(profile=>{
     const rows=selected.filter(c=>(c.lead_profile || "")===profile);
@@ -558,7 +636,7 @@ function reportsView() {
     const won=rows.filter(c=>c.stage==="Ganho");
     return `<tr data-profile-summary="${esc(profile || "pending")}"><td>${profileTag(profile)}</td><td>${rows.length}</td><td>${open.length}</td><td>${money(open.reduce((sum,c)=>sum+c.value,0))}</td><td>${won.length}</td><td>${money(won.reduce((sum,c)=>sum+c.value,0))}</td></tr>`;
   }).join("");
-  return `<div class="panel"><h3>Resultados por perfil</h3><p>Compare os leads, oportunidades abertas e vendas de cada perfil. O seletor no topo também filtra o funil, os contatos e o mapa.</p><div class="table-wrap"><table><thead><tr><th>PERFIL</th><th>LEADS</th><th>OPORTUNIDADES ABERTAS</th><th>VALOR EM NEGOCIAÇÃO</th><th>VENDAS</th><th>VALOR GANHO</th></tr></thead><tbody>${profileRows}</tbody></table></div></div><div class="grid-two automation-panel"><div class="panel"><h3>Distribuição no funil</h3>${stages.map((stage,i)=>{const count=selected.filter(c=>c.stage===stage).length;return `<div class="report-row"><span>${esc(stage)}</span><div class="bar"><div style="width:${selected.length?count/selected.length*100:0}%;background:${colors[i]}"></div></div><strong>${count}</strong></div>`;}).join("")}</div><div class="panel"><h3>Origem dos contatos</h3>${[...new Set(selected.map(c=>c.source))].map(source=>{const count=selected.filter(c=>c.source===source).length;return `<div class="report-row"><span>${esc(source)}</span><strong>${count}</strong></div>`;}).join("") || "<p>Os dados aparecerão após o primeiro lead.</p>"}</div></div>`;
+  return `<div class="panel"><h3>Resultados por perfil</h3><p>Compare os leads, oportunidades abertas e vendas de cada perfil. Os filtros no topo combinam perfil e responsável no funil, contatos, atendimento, mapa e indicadores.</p><div class="table-wrap"><table><thead><tr><th>PERFIL</th><th>LEADS</th><th>OPORTUNIDADES ABERTAS</th><th>VALOR EM NEGOCIAÇÃO</th><th>VENDAS</th><th>VALOR GANHO</th></tr></thead><tbody>${profileRows}</tbody></table></div></div><div class="grid-two automation-panel"><div class="panel"><h3>Distribuição no funil</h3>${stages.map((stage,i)=>{const count=selected.filter(c=>c.stage===stage).length;return `<div class="report-row"><span>${esc(stage)}</span><div class="bar"><div style="width:${selected.length?count/selected.length*100:0}%;background:${colors[i]}"></div></div><strong>${count}</strong></div>`;}).join("")}</div><div class="panel"><h3>Origem dos contatos</h3>${[...new Set(selected.map(c=>c.source))].map(source=>{const count=selected.filter(c=>c.source===source).length;return `<div class="report-row"><span>${esc(source)}</span><strong>${count}</strong></div>`;}).join("") || "<p>Os dados aparecerão após o primeiro lead.</p>"}</div></div>`;
 }
 function settingsView() {
   const a=systemStatus.automation || {enabled:false,assignment_mode:"regional",regional_owners:{}};
@@ -777,7 +855,7 @@ async function initMap() {
 function mapContacts() {
   return contacts.filter(
     (c) =>
-      matchesProfile(c) &&
+      matchesSelection(c) &&
       (!mapState || c.state === mapState) &&
       (!mapStage || c.stage === mapStage),
   );
@@ -788,6 +866,7 @@ function refreshPins(fit = false) {
     mapState,
     mapStage,
     profileFilter,
+    ownerFilter,
     contacts.map((c) => [c.id, c.revision, c.city_id, c.location_pending]),
   ]);
   if (!fit && signature === mapSignature) return;
@@ -841,7 +920,7 @@ function refreshPins(fit = false) {
   }
   $("#map-count").textContent =
     located.length + " lead(s) em " + groups.size + " cidade(s)";
-  const allPending = contacts.filter((c) => matchesProfile(c) && c.location_pending);
+  const allPending = contacts.filter((c) => matchesSelection(c) && c.location_pending);
   $("#map-pending-count").textContent = allPending.length
     ? allPending.length + " contato(s) ainda precisam de cidade/UF."
     : "Todos os contatos têm cidade e estado preenchidos.";
