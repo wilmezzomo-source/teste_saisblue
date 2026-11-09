@@ -1,6 +1,6 @@
-# Oportunidades manuais — 2026.11.09.2
+# Oportunidades manuais — 2026.11.09.3
 
-No servidor Windows, abra o aplicativo **Sais Blue CRM**, clique em **Atualizar e abrir CRM** e atualize a página no navegador. Não é necessário reinstalar ou parar processos manualmente. O rodapé deve mostrar **2026.11.09.2**.
+No servidor Windows, abra o aplicativo **Sais Blue CRM**, clique em **Atualizar e abrir CRM** e atualize a página no navegador. Não é necessário reinstalar ou parar processos manualmente. O rodapé deve mostrar **2026.11.09.3**.
 
 ## Cadastrar uma oportunidade
 
@@ -55,3 +55,9 @@ Apenas o administrador abre a ficha e usa **Excluir card**, confirmando o nome d
 Para recuperar, abra **Lixeira → Restaurar card**. O histórico, os dados e a responsável são preservados, e o atendimento permanece humano. Atendentes não podem excluir, restaurar ou consultar a lixeira. Se um telefone já estiver na lixeira, restaure o card em vez de criar outro.
 
 A lixeira não apaga definitivamente os dados pessoais. Solicitações de exclusão de dados seguem o canal informado na política de privacidade. Uma mensagem já em envio pode chegar mesmo após o card ser movido; a exclusão impede novos envios da fila e o início de novas perguntas.
+
+## Chamar no WhatsApp
+
+Na ficha de qualquer oportunidade disponível para sua conta, clique em **Chamar no WhatsApp**. O botão abre uma nova aba com o link oficial `wa.me`, já com o telefone do cliente e DDI. O sistema e o navegador permitem seguir para o aplicativo instalado ou WhatsApp Web. A conta usada é a que estiver conectada no aparelho da atendente; conecte o WhatsApp da Sais Blue para atender pelo número da empresa.
+
+Esse atalho abre a conversa e preserva a ficha do CRM na aba atual. O envio acontece no WhatsApp, sem registrar uma mensagem fictícia no CRM nem mudar o responsável. Se o roteiro automático ainda estiver ativo na ficha, use **Assumir atendimento** antes de continuar por fora do CRM.

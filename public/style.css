@@ -32,6 +32,11 @@
 .profile-tag.pending { background:#f3f0e7; color:#837043; }
 #profile-filter, #owner-filter { max-width:210px; }
 .danger { background:#fff0f0; border:1px solid #f1caca; color:#a33838; padding:10px 14px; border-radius:7px; }
+.contact-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:16px 0; }
+.whatsapp-button { display:inline-flex; align-items:center; justify-content:center; padding:11px 15px; border-radius:8px; background:#087b5b; color:#fff; font-size:12px; font-weight:600; text-decoration:none; }
+.whatsapp-button:hover { background:#066448; }
+.whatsapp-button:focus-visible { outline:3px solid #92d5bf; outline-offset:3px; }
+.contact-actions small { color:var(--muted); font-size:10px; }
 * {
   box-sizing: border-box;
 }

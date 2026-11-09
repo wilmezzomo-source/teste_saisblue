@@ -78,7 +78,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL("**/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.09.2"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.09.3"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   assert.equal(await admin.locator('.column[data-stage="Proposta enviada"]').count(),0);
   await admin.evaluate(() => document.fonts.load("400 14px Montserrat"));
@@ -130,6 +130,17 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .filter({ hasText: "Cliente de demonstração" })
     .click();
   assert.equal(await member.locator('#delete-contact').count(),0);
+  const whatsappLink=member.getByRole('link',{name:'Chamar no WhatsApp',exact:true});
+  assert.equal(await whatsappLink.getAttribute('href'),'https://wa.me/5511999991234');
+  assert.equal(await whatsappLink.getAttribute('target'),'_blank');
+  assert.match(await whatsappLink.getAttribute('rel'),/noopener/);
+  await b.route('https://wa.me/**',route=>route.fulfill({contentType:'text/html',body:'WhatsApp navigation fixture'}));
+  const whatsappPopup=b.waitForEvent('page');
+  await whatsappLink.click();
+  const chatPage=await whatsappPopup;
+  await chatPage.waitForURL('https://wa.me/5511999991234');
+  await chatPage.close();
+  await b.unroute('https://wa.me/**');
   await member.locator("[name=stage]").selectOption("Em atendimento");
   await member.locator("[name=value]").fill("2500");
   await member.getByRole("button", { name: "Salvar oportunidade" }).click();
@@ -354,6 +365,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(await member.locator('#detail .source').textContent(),'Manual');
   assert.equal(await member.locator('#detail-form [name=city_id]').inputValue(),cityOption);
   assert.equal(await member.locator('#detail-form [name=value]').inputValue(),'1250.5');
+  assert.equal(await member.getByRole('link',{name:'Chamar no WhatsApp',exact:true}).getAttribute('href'),'https://wa.me/5554999997666');
   await member.locator('#close-detail').click();
   await whatsapp('Mensagem recebida do cadastro manual',false,'5554999997666');
   const manualData=await member.evaluate(async()=> (await api('/api/contacts')).contacts.find(c=>c.phone==='5554999997666'));
@@ -469,7 +481,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: filtros combinados de responsável e perfil, etiquetas dos cards, exclusão e restauração, acesso restrito, mapa, anúncios, qualificação, distribuição, indicadores e mobile.",
+    "UI OK: abrir WhatsApp pelo número do contato, filtros combinados de responsável e perfil, etiquetas dos cards, exclusão e restauração, acesso restrito, mapa, anúncios, qualificação, distribuição, indicadores e mobile.",
   );
 })()
   .catch((e) => {

@@ -27,7 +27,7 @@ from qualification import PROFILES, is_ad_referral, settings as qualification_se
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.09.2'
+RELEASE = '2026.11.09.3'
 
 
 class Problem(Exception):
