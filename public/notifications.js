@@ -126,5 +126,15 @@ async function initNotifications() {
   document.addEventListener("keydown",unlock);
   renderAlertSound();
   await refreshNotifications(true);
+  await initPhonePush();
+  const notice=Number(new URLSearchParams(location.search).get("notice"));
+  if(Number.isSafeInteger(notice) && notice>0) {
+    const url=new URL(location.href);url.searchParams.delete("notice");history.replaceState(null,"",url.pathname+url.search);
+    try {
+      const result=await api("/api/notifications/"+notice);
+      if(!crmAlerts.items.some(n=>n.id===notice)) crmAlerts.items.push(result.notification);
+      await openLeadNotification(notice);
+    } catch(e) {toast(e.message);}
+  }
   setInterval(()=>refreshNotifications(),5000);
 }

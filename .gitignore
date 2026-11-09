@@ -21,3 +21,8 @@ VALIDACAO-INSTALACAO-RESULTADO.txt
 .ngrok*
 /.runtime/
 /.desktop-build/
+*.pem
+*.pem.*
+/tools/caddy.exe
+/SOLICITACAO-TELIUM.txt
+/DIAGNOSTICO-IPHONE.txt

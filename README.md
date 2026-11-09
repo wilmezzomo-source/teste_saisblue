@@ -1,20 +1,26 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.09.4
+## Aplicativo único para atualizar — 2026.11.09.5
 
 No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e confere o pacote, para somente os processos do CRM, faz backup, atualiza e reinicia em segundo plano. Cria um atalho com opções de abrir, iniciar/reconectar e parar. Veja [ATUALIZAR-COM-UM-APLICATIVO.md](ATUALIZAR-COM-UM-APLICATIVO.md). O aplicativo usa o Python e o banco já instalados, sem extrair ZIP manualmente. Inclui os ajustes de qualificação e tags da versão anterior.
 
-[Baixar o aplicativo para Windows](https://github.com/wilmezzomo-source/teste_saisblue/raw/refs/heads/crm-windows/desktop/SaisBlue-Atualizador.exe). O canal `windows-release.json` fixa a versão 2026.11.09.4, com commit imutável e integridade SHA-256 conferida. A compilação e os testes de parada/recuperação foram aprovados no workflow Windows; a aplicação no servidor da empresa é feita pelo próprio aplicativo, sob a conta Windows que opera o CRM.
+[Baixar o aplicativo para Windows](https://github.com/wilmezzomo-source/teste_saisblue/raw/refs/heads/crm-windows/desktop/SaisBlue-Atualizador.exe). O canal `windows-release.json` fixa a versão 2026.11.09.5, com commit imutável e integridade SHA-256 conferida. A execução dos testes nativos depende da disponibilidade do GitHub Actions; não confundir publicação do pacote com teste no servidor da empresa; a aplicação no servidor da empresa é feita pelo próprio aplicativo, sob a conta Windows que opera o CRM.
 
 Versão própria para funil comercial e atendimento. O administrador original vê todos os cards, inclusive os sem responsável. Atendentes veem e editam apenas os atribuídos às próprias contas e podem cadastrar oportunidades manuais para si. O administrador gerencia acessos e transferências. Dados centralizados em SQLite, com autenticação Flask e execução por Waitress em Windows ou Linux.
 
-**Estado real:** o usuário confirmou recebimento e resposta no WhatsApp oficial, além do primeiro atendimento automático de leads de anúncio no servidor. A versão **2026.11.09.4** acrescenta o cadastro manual descrito em [OPORTUNIDADES-MANUAIS.md](OPORTUNIDADES-MANUAIS.md); precisa ser aplicada pelo atualizador no Windows. O domínio próprio e a operação persistente ainda não foram configurados nesta sessão.
+**Estado real:** o usuário confirmou recebimento e resposta no WhatsApp oficial, além do primeiro atendimento automático de leads de anúncio no servidor. A versão **2026.11.09.5** acrescenta o cadastro manual descrito em [OPORTUNIDADES-MANUAIS.md](OPORTUNIDADES-MANUAIS.md); precisa ser aplicada pelo atualizador no Windows. O domínio próprio e a operação persistente ainda não foram configurados nesta sessão.
 
-## Nomes e avisos — 2026.11.09.4
+## iPhone e notificações na tela bloqueada — 2026.11.09.5
+
+App instalável pelo Safari, com ícone da Sais Blue. **Avisos → Ativar notificações do aparelho** permite Web Push, inclusive com o app fechado. Requer HTTPS público, iOS 16.4+, instalação na tela inicial e permissão concedida no próprio iPhone. Cada dispositivo é vinculado à conta autenticada; o envio e a abertura conferem a atribuição atual da oportunidade. O aviso bloqueado contém apenas texto genérico, sem nome ou telefone do cliente. Existe teste agendado para 10 segundos. O serviço de envio faz parte do processo iniciado por `launch.py`; iniciar apenas o Flask de desenvolvimento não executa esse serviço.
+
+No aplicativo Windows, **Configurar iPhone e acesso externo** abre o assistente: preparar chave local e solicitação à Telium/TI, ativar Caddy/HTTPS após DNS e roteador, e diagnosticar. O código não possui acesso administrativo à Telium ou ao roteador da empresa. O acesso externo só estará confirmado depois de abrir o domínio em 4G/5G e realizar o teste no aparelho. Consulte [IPHONE-E-ACESSO-EXTERNO.md](IPHONE-E-ACESSO-EXTERNO.md).
+
+## Nomes e avisos — 2026.11.09.5
 
 A ficha oferece **Editar nome**, inclusive antes de completar cidade/UF. A correção fica no histórico e não é substituída pelo nome de perfil nas mensagens seguintes do WhatsApp. Os avisos de novas oportunidades ficam em **Avisos**. O administrador recebe novas entradas; cada atendente recebe apenas contatos atribuídos à própria conta. **Ativar avisos com som** libera um toque neste navegador; o CRM precisa permanecer aberto. Consulte [NOMES-E-AVISOS.md](NOMES-E-AVISOS.md).
 
-## Atalho WhatsApp, filtros e cards — 2026.11.09.4
+## Atalho WhatsApp, filtros e cards — 2026.11.09.5
 
 A ficha oferece **Chamar no WhatsApp** para abrir a conversa pelo número cadastrado, no aplicativo ou Web conforme o aparelho. O administrador pode combinar **Responsável** e **Perfil** no topo do CRM. A seleção vale no funil, contatos, atendimento, mapa e indicadores. **Todos os responsáveis** remove apenas o filtro de responsável; **Sem responsável** mostra as oportunidades ainda sem conta atribuída. O filtro de perfil continua independente. Atendentes mantêm acesso apenas às próprias oportunidades. Os previews mostram somente as etiquetas de perfil e responsável, sem origem ou situação da qualificação. O administrador também pode excluir um card da ficha e recuperá-lo pela Lixeira.
 

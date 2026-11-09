@@ -1,3 +1,9 @@
+function loginDestination() {
+  const value=new URLSearchParams(location.search).get("next");
+  if(!value || !value.startsWith("/") || value.startsWith("//") || /[\\\x00-\x1f]/.test(value)) return "/";
+  const target=new URL(value,location.origin);
+  return target.origin===location.origin && target.pathname==="/" ? target.pathname+target.search : "/";
+}
 const form = document.querySelector("#auth-form");
 let token = null;
 function configureInvite() {
@@ -33,7 +39,7 @@ form.onsubmit = async (e) => {
     });
     const data = await response.json();
     if (!response.ok) throw Error(data.error || "Não foi possível entrar.");
-    location.replace("/");
+    location.replace(loginDestination());
   } catch (error) {
     document.querySelector("#auth-error").textContent = error.message;
   } finally {

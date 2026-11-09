@@ -16,19 +16,21 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import click
-from flask import Flask, g, jsonify, request, send_from_directory
+from flask import Flask, g, jsonify, request, send_from_directory, redirect
+from urllib.parse import urlsplit
 from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from locations import CITIES, CITY_BY_ID, STATES, location_fields, instagram_handle
 from sqlite_context import connection
 from notifications import notify_created, notify_assigned, notify_restored
+from web_push import public_key as push_public_key, validate_subscription
 from qualification import PROFILES, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
 
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.09.4'
+RELEASE = '2026.11.09.5'
 
 
 class Problem(Exception):
@@ -114,6 +116,9 @@ def init_db(app):
         CREATE TABLE IF NOT EXISTS crm_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS notifications(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL REFERENCES users(id), contact_id TEXT NOT NULL REFERENCES contacts(id), kind TEXT NOT NULL, event_key TEXT NOT NULL, created REAL NOT NULL, read_at REAL NOT NULL DEFAULT 0, UNIQUE(user_id,event_key));
         CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id,id);
+        CREATE TABLE IF NOT EXISTS push_subscriptions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),endpoint TEXT UNIQUE NOT NULL,p256dh TEXT NOT NULL,auth TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,created REAL NOT NULL,updated REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS push_deliveries(id INTEGER PRIMARY KEY AUTOINCREMENT,notification_id INTEGER REFERENCES notifications(id),subscription_id TEXT NOT NULL REFERENCES push_subscriptions(id),user_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'queued',attempts INTEGER NOT NULL DEFAULT 0,created REAL NOT NULL,updated REAL NOT NULL DEFAULT 0,next_try REAL NOT NULL,last_error TEXT NOT NULL DEFAULT '',UNIQUE(notification_id,subscription_id));
+        CREATE INDEX IF NOT EXISTS push_due ON push_deliveries(state,next_try);
         CREATE INDEX IF NOT EXISTS messages_contact ON messages(contact_id,created);
         CREATE INDEX IF NOT EXISTS audit_contact ON audit(contact_id,id);
         ''')
@@ -254,6 +259,12 @@ def create_app(config=None):
                       ALLOW_SIMULATION=os.environ.get('ALLOW_SIMULATION', '0') == '1')
     if config:
         app.config.update(config)
+    app.config.setdefault('PUBLIC_URL',os.environ.get('CRM_PUBLIC_URL','https://crm.saisblue.com.br').rstrip('/'))
+    app.config.setdefault('PUSH_KEY_FILE',os.environ.get('PUSH_KEY_FILE',str(Path(app.config['DATABASE']).resolve().parent/'webpush-private.pem')))
+    app.config.setdefault('PUSH_SUBJECT',os.environ.get('PUSH_SUBJECT','mailto:willian@saisblue.com.br'))
+    public = urlsplit(app.config['PUBLIC_URL'])
+    if public.scheme!='https' or not public.hostname or public.username or public.password or public.path or public.query or public.fragment or public.port not in (None,443):
+        raise RuntimeError('CRM_PUBLIC_URL precisa ser um endereço HTTPS, sem caminho, senha ou porta alternativa.')
     if production and not app.config['APP_URL'].startswith('https://'):
         raise RuntimeError('APP_URL HTTPS é obrigatório em produção.')
     if os.environ.get('TRUST_PROXY') == '1':
@@ -307,12 +318,16 @@ def create_app(config=None):
         db.execute('DELETE FROM sessions WHERE expires<?', (now(),))
         db.execute('INSERT INTO sessions VALUES(?,?,?,?)', (digest(token), user['id'], csrf, now() + SESSION_TTL))
         response = jsonify(user=user_public(user), csrf=csrf)
-        response.set_cookie('crm_session', token, max_age=SESSION_TTL, httponly=True, secure=app.config['SECURE_COOKIE'], samesite='Lax', path='/')
+        response.set_cookie('crm_session', token, max_age=SESSION_TTL, httponly=True, secure=app.config['SECURE_COOKIE'] or request.is_secure, samesite='Lax', path='/')
         return response
 
     @app.before_request
     def protect():
         g.user, g.csrf = None, None
+        if request.host.split(':')[0].lower()==urlsplit(app.config['PUBLIC_URL']).hostname and not request.is_secure:
+            if request.method=='GET':
+                return redirect(app.config['PUBLIC_URL']+request.full_path.rstrip('?'),code=308)
+            raise Problem('Use o endereço HTTPS do CRM.',403)
         if request.path in ('/api/login', '/api/accept-invite') and request.method == 'POST':
             key = 'public:' + digest(request.remote_addr or 'unknown')
             with database(app) as db:
@@ -326,7 +341,8 @@ def create_app(config=None):
         if request.method == 'POST' and request.path != '/webhooks/whatsapp':
             origin = request.headers.get('Origin')
             expected = app.config['APP_URL'] or request.host_url.rstrip('/')
-            if origin and origin != expected:
+            public = app.config['PUBLIC_URL']
+            if origin and (origin not in (expected,public) or (origin==public and (not request.is_secure or request.host_url.rstrip('/')!=public))):
                 raise Problem('Origem não permitida.', 403)
             if not request.is_json:
                 raise Problem('Envie JSON.', 415)
@@ -349,7 +365,7 @@ def create_app(config=None):
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://tile.openstreetmap.org; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
-        if app.config['SECURE_COOKIE']:
+        if app.config['SECURE_COOKIE'] or request.is_secure:
             response.headers['Strict-Transport-Security'] = 'max-age=31536000'
         return response
 
@@ -378,15 +394,29 @@ def create_app(config=None):
 
     @app.get('/<name>')
     def asset(name):
-        if name not in ('style.css', 'app.js', 'auth.js', 'notifications.js'):
+        if name not in ('style.css', 'app.js', 'auth.js', 'notifications.js', 'pwa.js'):
             raise Problem('Página não encontrada.', 404)
         return send_from_directory(ROOT / 'public', name)
 
     @app.get('/brand/<name>')
     def brand_asset(name):
-        if name not in ('sb-logo.png','montserrat-400.woff2','montserrat-500.woff2','montserrat-600.woff2','montserrat-700.woff2','instrument-serif-italic.woff2'):
+        if name not in ('sb-logo.png','app-icon.png','montserrat-400.woff2','montserrat-500.woff2','montserrat-600.woff2','montserrat-700.woff2','instrument-serif-italic.woff2'):
             raise Problem('Arquivo não encontrado.',404)
         return send_from_directory(ROOT / 'public/brand',name)
+
+    @app.get('/manifest.webmanifest')
+    def app_manifest():
+        return send_from_directory(ROOT/'public','manifest.webmanifest',mimetype='application/manifest+json')
+
+    @app.get('/service-worker.js')
+    def service_worker():
+        response = send_from_directory(ROOT/'public','service-worker.js',mimetype='application/javascript')
+        response.headers['Service-Worker-Allowed'] = '/'
+        return response
+
+    @app.get('/offline.html')
+    def offline():
+        return send_from_directory(ROOT/'public','offline.html')
 
     @app.get('/vendor/leaflet/<path:name>')
     def leaflet_asset(name):
@@ -567,6 +597,75 @@ def create_app(config=None):
                 placeholders = ','.join('?' for _ in ids)
                 db.execute(f'UPDATE notifications SET read_at=? WHERE user_id=? AND id IN ({placeholders}) AND read_at=0',(now(),g.user['id'],*ids))
         return jsonify(ok=True)
+
+    @app.get('/api/notifications/<int:nid>')
+    def notification_detail(nid):
+        with database(app) as db:
+            scope = '' if g.user['role']=='admin' else ' AND c.owner_id=?'
+            args = (nid,g.user['id']) if g.user['role']=='admin' else (nid,g.user['id'],g.user['id'])
+            row = db.execute('''SELECT n.id,n.contact_id,n.kind,n.created,n.read_at,c.name
+                FROM notifications n JOIN contacts c ON c.id=n.contact_id
+                WHERE n.id=? AND n.user_id=? AND c.deleted_at=0'''+scope,args).fetchone()
+            if not row:
+                raise Problem('Aviso não encontrado ou indisponível para sua conta.',404)
+        return jsonify(notification=dict(row))
+
+    @app.get('/api/push/config')
+    def push_config():
+        key = push_public_key(app)
+        return jsonify(public_key=key,configured=bool(key),public_url=app.config['PUBLIC_URL'],secure=request.is_secure)
+
+    @app.post('/api/push/prepare')
+    def prepare_push():
+        admin()
+        key = push_public_key(app,create=True)
+        with database(app) as db:
+            audit(db,'Notificações do aparelho preparadas')
+        return jsonify(ok=True,public_key=key)
+
+    @app.post('/api/push/subscribe')
+    def subscribe_push():
+        if not request.is_secure:
+            raise Problem('Abra o CRM pelo endereço HTTPS para ativar notificações do aparelho.',409)
+        if not push_public_key(app):
+            raise Problem('O administrador precisa preparar o app do iPhone no servidor.',409)
+        subscription = validate_subscription(data().get('subscription'))
+        with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            previous = db.execute('SELECT id,user_id FROM push_subscriptions WHERE endpoint=?',(subscription['endpoint'],)).fetchone()
+            sid = previous['id'] if previous else secrets.token_hex(16)
+            count = db.execute('SELECT COUNT(*) FROM push_subscriptions WHERE user_id=? AND enabled=1 AND id<>?',(g.user['id'],sid)).fetchone()[0]
+            if count>=10:
+                raise Problem('O limite de aparelhos ativos desta conta foi atingido.',409)
+            db.execute('''INSERT INTO push_subscriptions(id,user_id,endpoint,p256dh,auth,created,updated)
+                VALUES(?,?,?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,
+                p256dh=excluded.p256dh,auth=excluded.auth,enabled=1,updated=excluded.updated''',
+                (sid,g.user['id'],subscription['endpoint'],subscription['p256dh'],subscription['auth'],now(),now()))
+            db.execute("UPDATE push_deliveries SET state='cancelled' WHERE subscription_id=? AND user_id<>? AND state='queued'",(sid,g.user['id']))
+        return jsonify(ok=True)
+
+    @app.post('/api/push/unsubscribe')
+    def unsubscribe_push():
+        endpoint = text(data().get('endpoint',''),4096)
+        with database(app) as db:
+            db.execute('UPDATE push_subscriptions SET enabled=0 WHERE endpoint=? AND user_id=?',(endpoint,g.user['id']))
+            db.execute("UPDATE push_deliveries SET state='cancelled' WHERE user_id=? AND state='queued' AND subscription_id IN (SELECT id FROM push_subscriptions WHERE endpoint=? AND user_id=?)",(g.user['id'],endpoint,g.user['id']))
+        return jsonify(ok=True)
+
+    @app.post('/api/push/test')
+    def test_push():
+        if not request.is_secure:
+            raise Problem('O teste de notificação exige o endereço HTTPS do app.',409)
+        endpoint = text(data().get('endpoint',''),4096)
+        with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            sub = db.execute('SELECT id FROM push_subscriptions WHERE endpoint=? AND user_id=? AND enabled=1',(endpoint,g.user['id'])).fetchone()
+            if not sub:
+                raise Problem('Ative as notificações deste aparelho antes do teste.',409)
+            if db.execute("SELECT 1 FROM push_deliveries WHERE user_id=? AND kind='test' AND created>?",(g.user['id'],now()-60)).fetchone():
+                raise Problem('Aguarde um minuto antes de enviar outro teste.',429)
+            db.execute("INSERT INTO push_deliveries(subscription_id,user_id,kind,created,next_try) VALUES(?,?,'test',?,?)",(sub['id'],g.user['id'],now(),now()+10))
+        return jsonify(ok=True,delay=10)
 
     @app.post('/api/contacts/delete')
     def delete_contact():

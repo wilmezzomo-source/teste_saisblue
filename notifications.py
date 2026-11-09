@@ -1,5 +1,6 @@
 """Durable opportunity alerts, restricted to the recipient's current access."""
 import time
+from web_push import enqueue_notification
 
 
 def _push(db, cid, kind, recipients, event_key, actor_id=None):
@@ -8,8 +9,10 @@ def _push(db, cid, kind, recipients, event_key, actor_id=None):
         return
     for uid in set(recipients) - {None, '', actor_id}:
         if db.execute('SELECT 1 FROM users WHERE id=? AND active=1', (uid,)).fetchone():
-            db.execute('''INSERT OR IGNORE INTO notifications(user_id,contact_id,kind,event_key,created)
+            cursor = db.execute('''INSERT OR IGNORE INTO notifications(user_id,contact_id,kind,event_key,created)
                           VALUES(?,?,?,?,?)''', (uid,cid,kind,event_key,time.time()))
+            if cursor.rowcount:
+                enqueue_notification(db,cursor.lastrowid,uid)
 
 
 def notify_created(db, cid, actor_id=None):

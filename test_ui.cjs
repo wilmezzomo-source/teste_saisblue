@@ -83,10 +83,21 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     }
   });
   await member.goto(base + "/");
-  await member.waitForURL("**/login");
+  await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.09.4"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.09.5"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
+  const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
+  assert.equal(appManifest.display,'standalone');
+  assert.equal(appManifest.scope,'/');
+  await admin.evaluate(()=>navigator.serviceWorker.ready);
+  const publicCache=await admin.evaluate(async()=>{
+    const cache=await caches.open('saisblue-public-v1');
+    await fetch('/api/contacts');
+    return (await cache.keys()).map(r=>new URL(r.url).pathname).sort();
+  });
+  assert.deepEqual(publicCache,['/brand/app-icon.png','/offline.html']);
+
   assert.equal(await admin.locator('.column[data-stage="Proposta enviada"]').count(),0);
   await admin.evaluate(() => document.fonts.load("400 14px Montserrat"));
   assert.equal(await admin.locator(".brand-asset img").evaluate(img => img.complete && img.naturalWidth > 0), true);
@@ -144,6 +155,30 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await firstAlert.getByRole('button',{name:'Ver oportunidade',exact:true}).click();
   await member.locator('#detail h2').filter({hasText:'Cliente de demonstração'}).waitFor();
   await member.locator('#notification-count').waitFor({state:'hidden'});
+  const noticeId=await member.evaluate(async()=>(await api('/api/notifications')).notifications[0].id);
+  const deeplink=await b.newPage();
+  await deeplink.goto(base+'/?notice='+noticeId);
+  await deeplink.locator('#detail h2').filter({hasText:'Cliente de demonstração'}).waitFor();
+  await deeplink.close();
+  const freshContext=await browser.newContext();
+  const afterLogin=await freshContext.newPage();
+  await afterLogin.goto(base+'/?notice='+noticeId);
+  await afterLogin.waitForURL(url=>url.pathname==='/login');
+  assert.equal(new URL(afterLogin.url()).searchParams.get('next'),'/?notice='+noticeId);
+  await afterLogin.locator('[name=email]').fill('vendas@example.test');
+  await afterLogin.locator('[name=password]').fill(secret);
+  await afterLogin.getByRole('button',{name:'Entrar',exact:true}).click();
+  await afterLogin.locator('#detail h2').filter({hasText:'Cliente de demonstração'}).waitFor();
+  await afterLogin.locator('#close-detail').click();
+  await afterLogin.getByRole('button',{name:'Avisos de oportunidades',exact:true}).click();
+  await afterLogin.locator('#phone-push-status').filter({hasText:'endereço HTTPS'}).waitFor();
+  assert.equal(await afterLogin.locator('#enable-phone-push').isDisabled(),true);
+  await freshContext.setOffline(true);
+  await afterLogin.goto(base+'/');
+  await afterLogin.getByRole('heading',{name:'Vamos reconectar.'}).waitFor();
+  assert.equal(await afterLogin.locator('.card').count(),0);
+  await freshContext.close();
+
   const tonesAfterAlert=await member.evaluate(()=>window.__alertToneStarts);
   await member.evaluate(async()=>{await refreshNotifications();await refreshNotifications();});
   assert.equal(await member.evaluate(()=>window.__alertToneStarts),tonesAfterAlert);
@@ -524,7 +559,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     false,
   );
   await member.getByRole("button", { name: "Sair", exact: true }).click();
-  await member.waitForURL("**/login");
+  await member.waitForURL(url=>url.pathname==="/login");
   await member.screenshot({
     path: __dirname + "/preview-login.png",
     fullPage: true,

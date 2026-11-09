@@ -103,7 +103,7 @@ async function api(path, data) {
   const json = await r.json();
   if (!r.ok) {
     if (r.status === 401) {
-      location.replace("/login");
+      location.replace("/login?next="+encodeURIComponent(location.pathname+location.search));
       throw Error("Entre novamente.");
     }
     const error = Error(json.error || "Não foi possível carregar os dados.");
@@ -553,8 +553,9 @@ $("#create-form").onsubmit = async (e) => {
 };
 $("#logout").onclick = async () => {
   try {
+    try {await stopPhonePush();} catch {}
     await api("/api/logout", {});
-    location.replace("/login");
+    location.replace("/login?next="+encodeURIComponent(location.pathname+location.search));
   } catch (e) {
     toast(e.message);
   }

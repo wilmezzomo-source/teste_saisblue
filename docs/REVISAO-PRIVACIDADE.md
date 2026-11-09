@@ -86,3 +86,7 @@ Um pedido dirigido à Sais Blue cobre o tratamento sob sua responsabilidade no C
 
 Esta página contém instruções de solicitação de exclusão; ela não é um endpoint automatizado de exclusão da API da Meta.
 
+
+## Notificações opcionais do aplicativo
+
+Inscrições de aparelhos da equipe e chaves públicas são vinculadas à conta. Apple, Google ou Mozilla recebem a entrega Web Push criptografada. O aviso é genérico, sem nome ou telefone do cliente. Acesso à oportunidade exige autenticação e atribuição atual. O usuário pode desativar pelo CRM ou revogar no aparelho. A implantação externa ainda depende de DNS, rede e certificado validado.

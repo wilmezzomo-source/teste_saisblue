@@ -1,0 +1,11 @@
+{
+  "id": "/",
+  "name": "Sais Blue CRM",
+  "short_name": "Sais Blue",
+  "start_url": "/?source=iphone",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f8fc",
+  "theme_color": "#0b2438",
+  "icons": [{"src":"/brand/app-icon.png","sizes":"1254x1254","type":"image/png","purpose":"any maskable"}]
+}

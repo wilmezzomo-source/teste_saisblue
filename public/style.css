@@ -1279,3 +1279,5 @@ button:disabled {
 .state-label{background:transparent;border:0;box-shadow:none;color:#7b8da1;font-size:10px;font-weight:600}.state-label:before{display:none}
 
 .brand-asset{display:inline-flex;flex:none;align-items:center;justify-content:center;width:64px;height:56px;border-radius:9px;background:#071c30;overflow:hidden}.brand-asset img{display:block;width:64px;height:56px;object-fit:contain}.brand{letter-spacing:.7px;font-size:16px;font-weight:700;gap:10px}.brand small{letter-spacing:.65px;font-size:5px}.login-card h1{font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-weight:400;font-size:34px;letter-spacing:-.4px}.leaflet-container{font-family:Montserrat,Arial,sans-serif}.brand-source-note{font-size:10px;color:var(--muted)}@media(max-width:700px){.brand-asset,.brand-asset img{width:54px;height:47px}.brand{font-size:15px}}
+
+.phone-push-panel{margin:22px 0;padding:18px;border:1px solid var(--line,#e4e8ef);border-radius:16px;background:#f7f9fc}.phone-push-panel h3{margin-top:0}.phone-push-panel a{overflow-wrap:anywhere}.phone-push-panel p{font-size:14px;line-height:1.6}

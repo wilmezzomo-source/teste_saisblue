@@ -17,7 +17,7 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Sais Blue CRM — Atualizador")]
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("2026.11.09.4")]
+[assembly: AssemblyInformationalVersion("2026.11.09.5")]
 
 internal sealed class UserError : Exception { public UserError(string message) : base(message) {} }
 
@@ -184,10 +184,10 @@ internal sealed class UpdaterForm : Form {
     private readonly TextBox folder = new TextBox(), history = new TextBox();
     private readonly Label status = new Label();
     private readonly ProgressBar progress = new ProgressBar();
-    private readonly Button update = new Button(), start = new Button(), stop = new Button(), open = new Button(), browse = new Button();
+    private readonly Button update = new Button(), start = new Button(), stop = new Button(), open = new Button(), browse = new Button(), iphone = new Button();
     private bool busy;
     public UpdaterForm(string hint, string automatic) {
-        Text = "Sais Blue CRM"; ClientSize = new Size(680, 500); FormBorderStyle = FormBorderStyle.FixedDialog;
+        Text = "Sais Blue CRM"; ClientSize = new Size(680, 550); FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10);
         Controls.Add(new Label { Text = "SAIS BLUE CRM", Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = Color.FromArgb(18, 105, 239), AutoSize = true, Left = 24, Top = 20 });
         Controls.Add(new Label { Text = "Atualizações e acesso em um só aplicativo.", AutoSize = true, Left = 27, Top = 68 });
@@ -200,16 +200,26 @@ internal sealed class UpdaterForm : Form {
         start.Text = "Iniciar / reconectar"; start.SetBounds(27, 236, 295, 35);
         stop.Text = "Parar CRM"; stop.SetBounds(338, 236, 315, 35);
         update.Click += async delegate { await Run("update"); }; start.Click += async delegate { await Run("start"); }; stop.Click += async delegate { await Run("stop"); };
-        progress.SetBounds(27, 290, 626, 20);
-        status.SetBounds(27, 322, 626, 52); status.Text = "Confira a pasta e clique em Atualizar. O aplicativo para, faz backup e reinicia automaticamente.";
-        history.SetBounds(27, 380, 626, 92); history.Multiline = true; history.ReadOnly = true; history.ScrollBars = ScrollBars.Vertical; history.Font = new Font("Segoe UI", 9);
-        Controls.AddRange(new Control[] {folder,browse,update,open,start,stop,progress,status,history});
+        iphone.Text = "Configurar iPhone e acesso externo"; iphone.SetBounds(27, 283, 626, 35); iphone.Click += delegate { ConfigureIphone(); };
+        progress.SetBounds(27, 340, 626, 20);
+        status.SetBounds(27, 372, 626, 52); status.Text = "Confira a pasta e clique em Atualizar. O aplicativo para, faz backup e reinicia automaticamente.";
+        history.SetBounds(27, 430, 626, 92); history.Multiline = true; history.ReadOnly = true; history.ScrollBars = ScrollBars.Vertical; history.Font = new Font("Segoe UI", 9);
+        Controls.AddRange(new Control[] {folder,browse,update,open,start,stop,iphone,progress,status,history});
         FormClosing += delegate(object sender, FormClosingEventArgs e) { if (busy) { e.Cancel = true; status.Text = "Aguarde a atualização terminar. Você pode minimizar esta janela."; } };
         if (automatic != null) Shown += async delegate { await Run(automatic); };
     }
     private void Report(string message, int value) {
         Action action = delegate { status.Text = message; progress.Value = Math.Max(0, Math.Min(100, value)); history.AppendText(message + Environment.NewLine); };
         if (InvokeRequired) BeginInvoke(action); else action();
+    }
+    private void ConfigureIphone() {
+        string target = folder.Text.Trim();
+        if (!Program.IsInstallation(target)) { status.Text = "Selecione a pasta original do CRM."; return; }
+        string script = Path.Combine(target, "configurar_iphone.py");
+        if (!File.Exists(script)) { status.Text = "Clique primeiro em Atualizar e abrir CRM para instalar esta opção."; return; }
+        try {
+            Process.Start(new ProcessStartInfo(Path.Combine(target, ".venv", "Scripts", "python.exe"), Program.Quote(script)) { WorkingDirectory = target, UseShellExecute = true });
+        } catch { status.Text = "Não consegui abrir o assistente. Atualize o CRM e tente novamente."; }
     }
     private void OpenBrowser() {
         if (!Program.IsInstallation(folder.Text)) { status.Text = "Selecione a pasta original do CRM."; return; }
@@ -223,7 +233,7 @@ internal sealed class UpdaterForm : Form {
     private async Task Run(string action) {
         string target = folder.Text.Trim();
         if (!Program.IsInstallation(target)) { status.Text = "Clique em Procurar e selecione a pasta onde o CRM já funciona."; return; }
-        busy = true; update.Enabled = start.Enabled = stop.Enabled = browse.Enabled = folder.Enabled = false; history.Clear();
+        busy = true; update.Enabled = start.Enabled = stop.Enabled = browse.Enabled = iphone.Enabled = folder.Enabled = false; history.Clear();
         try {
             await Task.Run(delegate {
                 string source = target;
@@ -259,6 +269,6 @@ internal sealed class UpdaterForm : Form {
         } catch (UserError error) { Report(error.Message, 0); }
         catch (System.Net.WebException) { Report("Não consegui baixar a atualização. Confira a internet e tente novamente. O download é conferido antes de parar o CRM.", 0); }
         catch { Report("A operação não foi concluída. Confira a pasta, a conexão e a permissão da conta Windows.", 0); }
-        finally { busy = false; update.Enabled = start.Enabled = stop.Enabled = browse.Enabled = folder.Enabled = true; }
+        finally { busy = false; update.Enabled = start.Enabled = stop.Enabled = browse.Enabled = iphone.Enabled = folder.Enabled = true; }
     }
 }

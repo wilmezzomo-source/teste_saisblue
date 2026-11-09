@@ -3,6 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#0b2438" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Sais Blue CRM" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/brand/app-icon.png" />
     <title>Sais Blue | CRM</title>
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
     <link rel="stylesheet" href="/style.css" />
@@ -151,14 +156,16 @@
     <dialog id="detail-dialog"><div id="detail"></div></dialog>
     <dialog id="notifications-dialog" aria-labelledby="notifications-title">
       <div class="dialog-header"><h2 id="notifications-title">Seus avisos</h2><button type="button" class="close" id="close-notifications" aria-label="Fechar avisos">×</button></div>
-      <p>Novas oportunidades e atendimentos atribuídos à sua conta. Mantenha o CRM aberto para receber os avisos.</p>
+      <p>Novas oportunidades e atendimentos atribuídos à sua conta. O som do navegador exige o CRM aberto; as notificações do aparelho podem chegar com o app fechado.</p>
       <div class="notification-controls"><button type="button" id="enable-alert-sound" class="primary">Ativar avisos com som</button><button type="button" id="disable-alert-sound" class="secondary" hidden>Desativar som</button><button type="button" id="read-all-notifications" class="secondary">Marcar todas como lidas</button></div>
       <p id="notification-sound-status">Clique em Ativar avisos com som para liberar o áudio neste navegador.</p>
+      <section class="phone-push-panel"><h3>Notificações na tela bloqueada</h3><p id="phone-push-status"></p><p>App: <a id="phone-app-url" target="_blank" rel="noopener noreferrer"></a></p><div class="notification-controls"><button type="button" id="prepare-phone-push" class="secondary" hidden>Preparar notificações no servidor</button><button type="button" id="enable-phone-push" class="primary" disabled>Ativar notificações do aparelho</button><button type="button" id="disable-phone-push" class="secondary" hidden>Desativar neste aparelho</button><button type="button" id="test-phone-push" class="secondary" hidden>Testar em 10 segundos</button></div></section>
       <div id="notifications-list"></div>
     </dialog>
     <div id="lead-alerts" aria-live="polite" aria-label="Novas oportunidades"></div>
     <div id="toast" role="status"></div>
     <script src="/vendor/leaflet/leaflet.js"></script>
+    <script src="/pwa.js"></script>
     <script src="/notifications.js"></script>
     <script src="/app.js"></script>
   </body>

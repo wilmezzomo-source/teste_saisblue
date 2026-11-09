@@ -5,7 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 ALLOWED = {'APP_ENV','APP_URL','CRM_DB','ALLOW_SIMULATION','META_APP_SECRET','META_VERIFY_TOKEN',
-           'META_ACCESS_TOKEN','META_PHONE_NUMBER_ID','META_API_VERSION','CRM_DOMAIN','CRM_LISTEN_HOST','NGROK_AUTHTOKEN','META_WEBHOOK_URL'}
+           'META_ACCESS_TOKEN','META_PHONE_NUMBER_ID','META_API_VERSION','CRM_DOMAIN','CRM_LISTEN_HOST','NGROK_AUTHTOKEN','META_WEBHOOK_URL','CRM_PUBLIC_URL','PUSH_KEY_FILE','PUSH_SUBJECT'}
 
 
 def configure(path):
@@ -37,6 +37,8 @@ if __name__ == '__main__':
     if args.action == 'serve':
         from waitress import create_server
         from server import start_automation_worker
+        from server import database
+        from web_push import start_push_worker
         from runtime_control import Runtime
         host = os.environ.get('CRM_LISTEN_HOST', '127.0.0.1')
         if host != '127.0.0.1':
@@ -46,10 +48,11 @@ if __name__ == '__main__':
                 raise RuntimeError('Acesso LAN exige configuração coerente do assistente de rede.')
         server = create_server(app, host=host, port=3000, threads=8, connection_limit=100,
                                channel_timeout=30, max_request_body_size=1_000_000,
-                               trusted_proxy='127.0.0.1', trusted_proxy_count=1,
+                               trusted_proxy=host, trusted_proxy_count=1,
                                trusted_proxy_headers={'x-forwarded-for','x-forwarded-proto'})
         runtime = Runtime(ROOT, 'app')
         stop, worker = start_automation_worker(app)
+        push_worker = start_push_worker(app,database,stop)
         runtime.update('ready')
         runtime.watch(server.close, stop)
         try:
@@ -57,6 +60,7 @@ if __name__ == '__main__':
         finally:
             stop.set()
             worker.join(timeout=2)
+            push_worker.join(timeout=2)
             runtime.close()
     elif args.action == 'admin':
         if not args.email or not args.name:
