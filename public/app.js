@@ -154,8 +154,9 @@ async function bootstrap() {
     $("#simulate").hidden = !status.simulation;
     $("#new-contact").hidden = !status.manual_contacts_enabled;
     $("#trash-nav").hidden = currentUser.role!=="admin";
-    document.body.dataset.auth = "ready";
     await load();
+    await initNotifications();
+    document.body.dataset.auth = "ready";
   } catch (e) {
     toast(e.message);
   }
@@ -411,7 +412,8 @@ function detail(id) {
   if (!c) return;
   currentDetailId = id;
   const whatsappNumber=String(c.phone || "").replace(/\D/g,"");
-  const whatsappAction=/^\d{10,15}$/.test(whatsappNumber) ? `<div class="contact-actions"><a id="open-whatsapp" class="whatsapp-button" href="https://wa.me/${whatsappNumber}" target="_blank" rel="noopener noreferrer">Chamar no WhatsApp</a><small>Abre o WhatsApp conectado neste aparelho.</small></div>` : "";
+  const whatsappLink=/^\d{10,15}$/.test(whatsappNumber) ? `<a id="open-whatsapp" class="whatsapp-button" href="https://wa.me/${whatsappNumber}" target="_blank" rel="noopener noreferrer">Chamar no WhatsApp</a><small>Abre o WhatsApp conectado neste aparelho.</small>` : "";
+  const whatsappAction=`<div class="contact-actions"><button id="edit-contact-name" type="button" class="secondary">Editar nome</button>${whatsappLink}</div><form id="contact-name-form" class="contact-name-editor" hidden><label>Nome do cliente<input name="contact_name" value="${esc(c.name)}" required maxlength="120" autocomplete="off"></label><div class="dialog-actions"><button type="button" class="secondary" id="cancel-contact-name">Cancelar</button><button class="primary">Salvar nome</button></div></form>`;
   let ref = null;
   try {
     ref = JSON.parse(c.referral);
@@ -426,6 +428,26 @@ function detail(id) {
   bindLocationFields($("#detail-form"));
   bindSend(c);
   bindQualification(c);
+  const nameForm=$("#contact-name-form");
+  $("#edit-contact-name").onclick=()=>{
+    nameForm.hidden=false;nameForm.elements.contact_name.value=c.name;
+    nameForm.elements.contact_name.focus();nameForm.elements.contact_name.select();
+  };
+  $("#cancel-contact-name").onclick=()=>{nameForm.hidden=true;};
+  nameForm.onsubmit=async event=>{
+    event.preventDefault();
+    const button=nameForm.querySelector("button.primary");button.disabled=true;
+    try {
+      const result=await api("/api/update",{id:c.id,revision:c.revision,name:nameForm.elements.contact_name.value});
+      c.revision=result.revision;c.name=result.name;
+      contacts=contacts.map(row=>row.id===c.id?{...row,name:c.name,revision:c.revision}:row);
+      $("#detail h2").textContent=c.name;nameForm.hidden=true;
+      render();toast("Nome do cliente atualizado.");
+    } catch(err) {
+      toast(err.message);
+      if(err.status===409 || err.status===404) {await load();detail(id);}
+    } finally {button.disabled=false;}
+  };
   if(currentUser.role==="admin") {
     const button=document.createElement("button");
     button.type="button";
@@ -777,8 +799,7 @@ async function initMap() {
     4,
   );
   leadMap = instance;
-  mapSignature = "",
-  currentDetailId = null;
+  mapSignature = "";
   const localBase = L.layerGroup().addTo(instance);
   pinLayer = L.layerGroup().addTo(instance);
   const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {

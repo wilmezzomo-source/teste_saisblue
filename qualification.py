@@ -6,6 +6,7 @@ import time
 import unicodedata
 
 from locations import CITIES
+from notifications import notify_assigned
 
 PROFILES = ('Lojista', 'Revenda', 'Consumidor Final')
 PROFILE_QUESTION = ('Olá! Sou o assistente virtual da Sais Blue. Para direcionar seu atendimento, '
@@ -130,6 +131,7 @@ def process_answer(db, cid, incoming_id, body, created, audit):
             if person:
                 owner = person['name']
                 db.execute('UPDATE contacts SET owner=?,owner_id=? WHERE id=?', (owner, person['id'], cid))
+                notify_assigned(db,cid,c['owner_id'])
                 audit(db, 'Responsável atribuído', cid, {'responsável': owner, 'perfil':profile, 'uf':city['state']}, actor='Assistente Sais Blue')
             else:
                 audit(db, 'Atribuição pendente', cid, {'motivo':'Responsável do perfil indisponível; equipe deve assumir'}, actor='Assistente Sais Blue')

@@ -36,3 +36,5 @@ As melhorias de anúncios, roteiro de qualificação, tags, relatórios, distrib
 O código da interface está em `desktop/Updater.cs`; o fluxo de parada, backup e recuperação está em `desktop_worker.py` e `update_windows.py`. O executável usa os componentes .NET Framework do Windows e o Python já instalado; não é assinado com certificado comercial. `desktop/build.py` permite recompilar com o compilador oficial Roslyn e as referências oficiais .NET Framework v4.8.
 
 `windows-release.json` aponta para um commit imutável e o hash do ZIP conferido. Uma atualização do canal só deve acontecer após publicar o commit correspondente e conferir o pacote. O código baixa a versão indicada no canal; não executa instruções arbitrárias presentes no JSON. Testes Windows são executados em máquina isolada pelo workflow `Windows updater`, sem acesso ao servidor da empresa e sem credenciais reais.
+
+A versão do atualizador entregue com 2026.11.09.4 consulta o manifesto com um identificador de consulta e sem cache local, para reduzir a chance de carregar uma versão anterior logo após uma publicação. O ZIP continua fixado por commit e SHA-256 antes de parar a aplicação.

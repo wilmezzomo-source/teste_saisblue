@@ -17,7 +17,7 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Sais Blue CRM — Atualizador")]
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("2026.11.06.5")]
+[assembly: AssemblyInformationalVersion("2026.11.09.4")]
 
 internal sealed class UserError : Exception { public UserError(string message) : base(message) {} }
 
@@ -105,7 +105,7 @@ internal static class Program {
         string folder = Path.Combine(Home, "packages", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
         string manifestPath = Path.Combine(folder, "release.json");
-        Download(Channel, manifestPath, 16384);
+        Download(Channel + "?check=" + Guid.NewGuid().ToString("N"), manifestPath, 16384);
         var manifest = Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(manifestPath));
         if (!manifest.ContainsKey("schema") || Convert.ToInt32(manifest["schema"]) != 1) throw new UserError("O pacote de atualização não foi reconhecido. O CRM continua como estava.");
         string commit = Convert.ToString(manifest["commit"]), hash = Convert.ToString(manifest["sha256"]);
@@ -146,6 +146,7 @@ internal static class Program {
             if (uri.Scheme != "https" || !new[] { "github.com", "raw.githubusercontent.com", "codeload.github.com" }.Contains(uri.Host)) throw new UserError("Destino inesperado no download. A atualização foi cancelada.");
             System.Net.ServicePointManager.SecurityProtocol = System.Net.SecurityProtocolType.Tls12;
             var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(uri);
+            request.CachePolicy = new System.Net.Cache.RequestCachePolicy(System.Net.Cache.RequestCacheLevel.NoCacheNoStore);
             request.AllowAutoRedirect = false; request.Timeout = 30000; request.ReadWriteTimeout = 30000;
             request.UserAgent = "SaisBlueCRM-Updater/1.0";
             using (var response = (System.Net.HttpWebResponse)request.GetResponse()) {

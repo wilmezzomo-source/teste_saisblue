@@ -1,6 +1,6 @@
-# Oportunidades manuais — 2026.11.09.3
+# Oportunidades manuais — 2026.11.09.4
 
-No servidor Windows, abra o aplicativo **Sais Blue CRM**, clique em **Atualizar e abrir CRM** e atualize a página no navegador. Não é necessário reinstalar ou parar processos manualmente. O rodapé deve mostrar **2026.11.09.3**.
+No servidor Windows, abra o aplicativo **Sais Blue CRM**, clique em **Atualizar e abrir CRM** e atualize a página no navegador. Não é necessário reinstalar ou parar processos manualmente. O rodapé deve mostrar **2026.11.09.4**.
 
 ## Cadastrar uma oportunidade
 

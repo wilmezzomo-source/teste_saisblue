@@ -37,6 +37,19 @@
 .whatsapp-button:hover { background:#066448; }
 .whatsapp-button:focus-visible { outline:3px solid #92d5bf; outline-offset:3px; }
 .contact-actions small { color:var(--muted); font-size:10px; }
+.contact-name-editor { padding:16px; margin:14px 0; border:1px solid var(--line); border-radius:10px; background:#f6f8fc; }
+#notification-count { display:inline-block; min-width:19px; margin-left:4px; padding:2px 5px; background:#1269ef; color:white; border-radius:12px; font-size:10px; }
+.notification-controls { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+#notifications-dialog p, #notification-sound-status { font-size:12px; line-height:1.6; color:var(--muted); }
+.notification-item { display:flex; flex-direction:column; text-align:left; width:100%; gap:6px; margin:9px 0; padding:15px; border:1px solid var(--line); border-radius:10px; background:white; color:var(--navy); }
+.notification-item.unread { border-left:4px solid var(--blue); background:#f2f6ff; }
+.notification-item span { font-size:12px; }
+.notification-item small { font-size:10px; color:var(--muted); }
+#lead-alerts { position:fixed; right:18px; bottom:18px; width:min(330px,calc(100vw - 32px)); z-index:10000; pointer-events:none; }
+.lead-alert { position:relative; margin-top:10px; padding:18px; border:1px solid #c8d9f5; border-left:4px solid var(--blue); border-radius:12px; background:white; box-shadow:0 12px 35px #15243b24; pointer-events:auto; text-align:left; }
+.lead-alert strong { display:block; padding-right:22px; font-size:12px; }
+.lead-alert p { margin:8px 0 12px; font-size:13px; color:var(--navy); }
+.alert-dismiss { position:absolute; right:8px; top:8px; background:transparent; border:0; color:var(--muted); font-size:21px; padding:0 5px; }
 * {
   box-sizing: border-box;
 }
@@ -877,6 +890,12 @@ tbody tr:hover {
   }
   .header-right {
     gap: 12px;
+  }
+  .header-right .demo-pill, .header-right .avatar {
+    display: none;
+  }
+  header > div:first-child {
+    min-width: 0;
   }
   main {
     padding: 24px 16px 0;

@@ -55,6 +55,7 @@
           ><span id="breadcrumb-current">Funil de vendas</span>
         </div>
         <div class="header-right">
+          <button id="open-notifications" class="secondary" aria-label="Avisos de oportunidades">Avisos <span id="notification-count" hidden>0</span></button>
           <span class="demo-pill"><i></i> Espaço da equipe</span
           ><button id="logout" class="secondary">Sair</button
           ><span class="avatar small">SB</span>
@@ -148,8 +149,17 @@
       </form>
     </dialog>
     <dialog id="detail-dialog"><div id="detail"></div></dialog>
+    <dialog id="notifications-dialog" aria-labelledby="notifications-title">
+      <div class="dialog-header"><h2 id="notifications-title">Seus avisos</h2><button type="button" class="close" id="close-notifications" aria-label="Fechar avisos">×</button></div>
+      <p>Novas oportunidades e atendimentos atribuídos à sua conta. Mantenha o CRM aberto para receber os avisos.</p>
+      <div class="notification-controls"><button type="button" id="enable-alert-sound" class="primary">Ativar avisos com som</button><button type="button" id="disable-alert-sound" class="secondary" hidden>Desativar som</button><button type="button" id="read-all-notifications" class="secondary">Marcar todas como lidas</button></div>
+      <p id="notification-sound-status">Clique em Ativar avisos com som para liberar o áudio neste navegador.</p>
+      <div id="notifications-list"></div>
+    </dialog>
+    <div id="lead-alerts" aria-live="polite" aria-label="Novas oportunidades"></div>
     <div id="toast" role="status"></div>
     <script src="/vendor/leaflet/leaflet.js"></script>
+    <script src="/notifications.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

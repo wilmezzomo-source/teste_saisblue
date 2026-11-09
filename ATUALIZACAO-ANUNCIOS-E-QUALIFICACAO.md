@@ -2,7 +2,7 @@
 
 ## Aplicar no servidor Windows
 
-Abra o aplicativo **Sais Blue CRM** e clique em **Atualizar e abrir CRM**. O atualizador faz backup, preserva os dados e a configuração e reinicia a instalação. Atualize a página; o rodapé deve mostrar **2026.11.09.3**. Não é necessário reinstalar nem parar as janelas manualmente.
+Abra o aplicativo **Sais Blue CRM** e clique em **Atualizar e abrir CRM**. O atualizador faz backup, preserva os dados e a configuração e reinicia a instalação. Atualize a página; o rodapé deve mostrar **2026.11.09.4**. Não é necessário reinstalar nem parar as janelas manualmente.
 
 ## Acesso de Chai e Grasi
 

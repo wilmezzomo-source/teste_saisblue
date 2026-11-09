@@ -56,7 +56,7 @@ class CRMTest(unittest.TestCase):
 
     def test_login_csrf_logout_and_protected_data(self):
         anonymous = self.app.test_client()
-        for path in ['/api/contacts','/api/team','/api/status','/api/me']:
+        for path in ['/api/contacts','/api/team','/api/status','/api/me','/api/notifications']:
             self.assertEqual(anonymous.get(path).status_code, 401)
         self.assertEqual(anonymous.post('/api/messages',json={'body':'test'}).status_code,401)
         self.assertEqual(self.client.post('/api/contacts',json={'name':'A','phone':'5511999991111','city_id':'4302105'}).status_code,403)

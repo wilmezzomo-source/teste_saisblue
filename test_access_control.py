@@ -165,6 +165,65 @@ class AccessControlTest(unittest.TestCase):
         self.assertEqual(self.clients['chai'][0].get('/api/trash').status_code,403)
         self.assertEqual(self.clients['willian'][0].get('/api/trash').json['contacts'][0]['id'],c['id'])
 
+    def test_name_edit_is_validated_audited_and_restricted_to_the_owner(self):
+        c = self.create('grasi')
+        self.assertEqual(self.post('chai','/api/update',{'id':c['id'],'revision':c['revision'],'name':'Sem permissão'}).status_code,404)
+        self.assertEqual(self.post('grasi','/api/update',{'id':c['id'],'revision':c['revision'],'name':'   '}).status_code,400)
+        result = self.post('grasi','/api/update',{'id':c['id'],'revision':c['revision'],'name':'  Nome confirmado do cliente  '})
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.json['name'],'Nome confirmado do cliente')
+        current = self.rows('grasi')[0]
+        self.assertEqual(current['name'],'Nome confirmado do cliente')
+        self.assertIn('name',current['audit'][0]['details'])
+        self.assertEqual(self.post('grasi','/api/update',{'id':c['id'],'revision':c['revision'],'name':'Versão antiga'}).status_code,409)
+        create_app(dict(self.app.config))
+        self.assertEqual(self.rows('willian')[0]['name'],'Nome confirmado do cliente')
+
+    def test_notifications_are_private_persistent_and_only_the_recipient_can_mark_read(self):
+        c = self.create('grasi')
+        endpoint = '/api/notifications'
+        data = self.clients['grasi'][0].get(endpoint).json
+        self.assertEqual(data['unread'],1)
+        n = data['notifications'][0]
+        self.assertEqual((n['contact_id'],n['name'],n['kind']),(c['id'],c['name'],'new'))
+        self.assertEqual(self.clients['chai'][0].get(endpoint).json['notifications'],[])
+        self.assertEqual(self.clients['willian'][0].get(endpoint).json['notifications'],[])
+        self.assertEqual(self.post('chai',endpoint+'/read',{'ids':[n['id']]}).status_code,200)
+        self.assertEqual(self.clients['grasi'][0].get(endpoint).json['unread'],1)
+        create_app(dict(self.app.config))
+        self.assertEqual(self.clients['grasi'][0].get(endpoint).json['unread'],1)
+        self.assertEqual(self.post('grasi',endpoint+'/read',{'ids':[n['id']]}).status_code,200)
+        self.assertEqual(self.clients['grasi'][0].get(endpoint).json['unread'],0)
+        self.create('grasi')
+        self.assertEqual(self.clients['grasi'][0].get(endpoint).json['unread'],1)
+        self.assertEqual(self.post('grasi',endpoint+'/read',{'all':True}).status_code,200)
+        self.assertEqual(self.clients['grasi'][0].get(endpoint).json['unread'],0)
+
+    def test_transfers_deletion_and_restore_keep_alerts_with_current_responsible_only(self):
+        c = self.create('grasi')
+        endpoint = '/api/notifications'
+        self.post('willian','/api/update',{'id':c['id'],'revision':c['revision'],'owner_id':'chai'})
+        self.assertEqual(self.clients['grasi'][0].get(endpoint).json['notifications'],[])
+        self.assertEqual(self.clients['chai'][0].get(endpoint).json['notifications'][0]['kind'],'assigned')
+        current = self.rows('willian')[0]
+        self.post('willian','/api/contacts/delete',{'id':c['id'],'revision':current['revision']})
+        self.assertEqual(self.clients['chai'][0].get(endpoint).json['unread'],0)
+        deleted = self.clients['willian'][0].get('/api/trash').json['contacts'][0]
+        self.post('willian','/api/contacts/restore',{'id':c['id'],'revision':deleted['revision']})
+        data = self.clients['chai'][0].get(endpoint).json
+        self.assertEqual(data['unread'],1)
+        self.assertEqual(data['notifications'][0]['kind'],'restored')
+
+    def test_manual_self_creation_alerts_admin_but_does_not_alert_the_creator(self):
+        self.create('grasi',actor='grasi')
+        self.assertEqual(self.clients['grasi'][0].get('/api/notifications').json['notifications'],[])
+        self.assertEqual(self.clients['chai'][0].get('/api/notifications').json['notifications'],[])
+        self.assertEqual(self.clients['willian'][0].get('/api/notifications').json['unread'],1)
+        with database(self.app) as db:
+            db.execute('DELETE FROM notifications')
+        create_app(dict(self.app.config))
+        self.assertEqual(self.clients['willian'][0].get('/api/notifications').json['unread'],0)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -77,6 +77,7 @@ class QualificationTest(unittest.TestCase):
         with database(self.app) as db:
             self.assertEqual(db.execute('SELECT COUNT(*) FROM contacts').fetchone()[0],0)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM messages').fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM notifications').fetchone()[0],0)
         self.receive('Mensagem do anúncio',ad=True)
         self.receive('Resposta sem referral')
         c=self.contact()
@@ -170,6 +171,25 @@ class QualificationTest(unittest.TestCase):
             list(pool.map(lambda _:run_automation_once(self.app),range(3)))
         self.assertEqual(len(self.sent),1)
         self.assertEqual(len(self.contact()['messages']),2)
+        self.assertEqual(self.client.get('/api/notifications').json['unread'],1)
+
+    def test_alert_waits_for_qualification_before_reaching_the_attendant_and_keeps_corrected_name(self):
+        self.enable();self.receive('Oi',ad=True);self.drain()
+        c = self.contact()
+        self.assertTrue(c['location_pending'])
+        self.assertEqual(self.post('/api/update',{'id':c['id'],'revision':c['revision'],'name':'Nome real confirmado'}).status_code,200)
+        self.assertEqual(self.client.get('/api/notifications').json['notifications'][0]['name'],'Nome real confirmado')
+        with database(self.app) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM notifications WHERE user_id IN ('chai','grasi')").fetchone()[0],0)
+        self.receive('Revenda');self.drain()
+        self.receive('Guaporé/RS');self.drain()
+        self.assertEqual(self.contact()['name'],'Nome real confirmado')
+        chai = self.app.test_client()
+        chai.post('/api/login',json={'email':'chai@example.test','password':'fixture-password-123'})
+        data = chai.get('/api/notifications').json
+        self.assertEqual(data['unread'],1)
+        self.assertEqual(data['notifications'][0]['name'],'Nome real confirmado')
+        self.assertEqual(data['notifications'][0]['kind'],'assigned')
 
     def test_location_is_exact_and_ambiguous_or_wrong_state_is_not_guessed(self):
         for value in ('Guapore/RS','Guaporé - RS','Sou de Guaporé Rio Grande do Sul'):

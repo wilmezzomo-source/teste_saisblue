@@ -22,12 +22,13 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 from locations import CITIES, CITY_BY_ID, STATES, location_fields, instagram_handle
 from sqlite_context import connection
+from notifications import notify_created, notify_assigned, notify_restored
 from qualification import PROFILES, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
 
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.09.3'
+RELEASE = '2026.11.09.4'
 
 
 class Problem(Exception):
@@ -111,6 +112,8 @@ def init_db(app):
         CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY AUTOINCREMENT, contact_id TEXT, user_id TEXT, actor TEXT NOT NULL, action TEXT NOT NULL, details TEXT NOT NULL, created REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS attempts(key TEXT PRIMARY KEY, count INTEGER NOT NULL, until REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS crm_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS notifications(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL REFERENCES users(id), contact_id TEXT NOT NULL REFERENCES contacts(id), kind TEXT NOT NULL, event_key TEXT NOT NULL, created REAL NOT NULL, read_at REAL NOT NULL DEFAULT 0, UNIQUE(user_id,event_key));
+        CREATE INDEX IF NOT EXISTS notifications_user ON notifications(user_id,id);
         CREATE INDEX IF NOT EXISTS messages_contact ON messages(contact_id,created);
         CREATE INDEX IF NOT EXISTS audit_contact ON audit(contact_id,id);
         ''')
@@ -172,6 +175,8 @@ def ingest(db, number, name, body, message_id, referral=None, source='WhatsApp',
         db.execute('INSERT INTO contacts(id,name,phone,stage,source,referral,created,updated) VALUES(?,?,?,?,?,?,?,?)',
                    (cid, name or number, number, STAGES[0], source, json.dumps(referral, ensure_ascii=False) if referral else None, now(), now()))
         audit(db, 'Contato criado', cid, {'source': source})
+        user = getattr(g, 'user', None)
+        notify_created(db,cid,user['id'] if user else None)
     elif ad_origin:
         db.execute('UPDATE contacts SET referral=?,source=? WHERE id=?', (json.dumps(referral, ensure_ascii=False), source, cid))
     # Trust the signed event timestamp, never extend the 24-hour window on webhook replay.
@@ -373,7 +378,7 @@ def create_app(config=None):
 
     @app.get('/<name>')
     def asset(name):
-        if name not in ('style.css', 'app.js', 'auth.js'):
+        if name not in ('style.css', 'app.js', 'auth.js', 'notifications.js'):
             raise Problem('Página não encontrada.', 404)
         return send_from_directory(ROOT / 'public', name)
 
@@ -537,6 +542,32 @@ def create_app(config=None):
                 stage,value,deleted_at,revision FROM contacts WHERE deleted_at>0 ORDER BY deleted_at DESC''')]
         return jsonify(contacts=rows)
 
+    @app.get('/api/notifications')
+    def notifications():
+        with database(app) as db:
+            scope = '' if g.user['role'] == 'admin' else ' AND c.owner_id=?'
+            args = (g.user['id'],) if g.user['role'] == 'admin' else (g.user['id'],g.user['id'])
+            query = '''FROM notifications n JOIN contacts c ON c.id=n.contact_id
+                       WHERE n.user_id=? AND c.deleted_at=0''' + scope
+            rows = [dict(r) for r in db.execute('''SELECT n.id,n.contact_id,n.kind,n.created,n.read_at,c.name '''+query+' ORDER BY (n.read_at=0) DESC,n.id DESC LIMIT 50', args)]
+            unread = db.execute('SELECT COUNT(*) '+query+' AND n.read_at=0',args).fetchone()[0]
+            cursor = db.execute('SELECT COALESCE(MAX(id),0) FROM notifications WHERE user_id=?',(g.user['id'],)).fetchone()[0]
+        return jsonify(notifications=rows,unread=unread,cursor=cursor)
+
+    @app.post('/api/notifications/read')
+    def read_notifications():
+        d = data()
+        ids = d.get('ids', [])
+        if d.get('all') is not True and (not isinstance(ids,list) or not ids or len(ids)>100 or any(type(i) is not int or i<1 for i in ids)):
+            raise Problem('Selecione os avisos que deseja marcar como lidos.')
+        with database(app) as db:
+            if d.get('all') is True:
+                db.execute('UPDATE notifications SET read_at=? WHERE user_id=? AND read_at=0',(now(),g.user['id']))
+            else:
+                placeholders = ','.join('?' for _ in ids)
+                db.execute(f'UPDATE notifications SET read_at=? WHERE user_id=? AND id IN ({placeholders}) AND read_at=0',(now(),g.user['id'],*ids))
+        return jsonify(ok=True)
+
     @app.post('/api/contacts/delete')
     def delete_contact():
         admin()
@@ -548,6 +579,7 @@ def create_app(config=None):
                 raise Problem('Este card foi atualizado. Recarregue a ficha antes de excluir.', 409)
             handover(db, c['id'], audit, 'Card movido para a lixeira pelo administrador')
             db.execute('UPDATE contacts SET deleted_at=?,updated=? WHERE id=?', (now(),now(),c['id']))
+            db.execute('UPDATE notifications SET read_at=? WHERE contact_id=? AND read_at=0',(now(),c['id']))
             audit(db, 'Card movido para a lixeira', c['id'])
         return jsonify(ok=True)
 
@@ -564,6 +596,7 @@ def create_app(config=None):
                 raise Problem('Este card foi atualizado. Recarregue a lixeira antes de restaurar.', 409)
             db.execute("UPDATE contacts SET deleted_at=0,qualification_state='human',updated=?,revision=revision+1 WHERE id=?", (now(),c['id']))
             audit(db, 'Card restaurado da lixeira', c['id'])
+            notify_restored(db,c['id'],g.user['id'])
         return jsonify(ok=True)
 
     @app.post('/api/contacts')
@@ -598,6 +631,7 @@ def create_app(config=None):
                           VALUES(?,?,?,?,?,?,'Manual',?,?,?,?,?,?,?,1,?,'human',?)''',
                        (cid,name,number,stage,value,owner,note,now(),now(),place['city_id'],place['city'],place['state'],instagram,profile,owner_id))
             audit(db, 'Oportunidade criada manualmente', cid, {'origem':'Manual','perfil':profile,'responsável':owner})
+            notify_created(db,cid,g.user['id'])
         return jsonify(ok=True, id=cid), 201
 
     @app.post('/api/simulate')
@@ -621,7 +655,11 @@ def create_app(config=None):
     @app.post('/api/update')
     def update():
         d = data()
-        patch = {key: d[key] for key in ('stage', 'value', 'owner', 'owner_id', 'note', 'instagram', 'lead_profile') if key in d}
+        patch = {key: d[key] for key in ('name', 'stage', 'value', 'owner', 'owner_id', 'note', 'instagram', 'lead_profile') if key in d}
+        if 'name' in patch:
+            patch['name'] = text(patch['name'],120)
+            if not patch['name']:
+                raise Problem('Informe o nome do cliente.')
         if 'city_id' in d:
             patch.update(location_fields(d['city_id']))
         if 'instagram' in patch:
@@ -642,7 +680,7 @@ def create_app(config=None):
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
             row = accessible_contact(db, d.get('id'))
-            if not patch.get('city_id',row['city_id']):
+            if set(patch) != {'name'} and not patch.get('city_id',row['city_id']):
                 raise Problem('Preencha cidade e estado na ficha antes de alterar esta oportunidade.')
             if row['revision'] != d['revision']:
                 raise Problem('Este card foi atualizado por outra pessoa. Recarregue os dados e revise sua alteração.', 409)
@@ -650,13 +688,15 @@ def create_app(config=None):
                 patch['owner_id'], patch['owner'] = selected_owner(db, patch, row['owner_id'])
             assignments = ','.join(key + '=?' for key in patch)
             db.execute(f'UPDATE contacts SET {assignments},updated=?,revision=revision+1 WHERE id=?', (*patch.values(), now(), row['id']))
+            if 'owner_id' in patch:
+                notify_assigned(db,row['id'],row['owner_id'],g.user['id'])
             if patch.get('owner', 'Sem responsável') != 'Sem responsável' or patch.get('stage', STAGES[0]) != STAGES[0]:
                 if row['qualification_state'] in ('waiting_profile', 'waiting_city'):
                     handover(db, row['id'], audit, 'Atendimento assumido pela equipe')
             changes = {key: {'antes': row[key], 'depois': value} for key, value in patch.items() if row[key] != value}
             audit(db, 'Oportunidade atualizada', row['id'], changes)
             revision = db.execute('SELECT revision FROM contacts WHERE id=?', (row['id'],)).fetchone()[0]
-        return jsonify(ok=True, revision=revision)
+        return jsonify(ok=True, revision=revision, name=patch.get('name',row['name']))
 
     @app.post('/api/claim')
     def claim():
@@ -671,6 +711,7 @@ def create_app(config=None):
                 raise Problem('Selecione uma conta ativa da equipe.')
             handover(db, c['id'], audit, 'Transferência para atendimento humano')
             db.execute('UPDATE contacts SET owner=?,owner_id=?,stage=? WHERE id=?', (owner, owner_id, STAGES[1], c['id']))
+            notify_assigned(db,c['id'],c['owner_id'],g.user['id'])
             audit(db, 'Atendimento assumido', c['id'], {'responsável':owner})
         return jsonify(ok=True)
 
