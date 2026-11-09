@@ -59,6 +59,7 @@ class CRMTest(unittest.TestCase):
         for path in ['/api/contacts','/api/team','/api/status','/api/me','/api/notifications']:
             self.assertEqual(anonymous.get(path).status_code, 401)
         self.assertEqual(anonymous.post('/api/messages',json={'body':'test'}).status_code,401)
+        self.assertEqual(anonymous.post('/api/notifications/read',json={'all':True}).status_code,401)
         self.assertEqual(self.client.post('/api/contacts',json={'name':'A','phone':'5511999991111','city_id':'4302105'}).status_code,403)
         r = self.post('/api/contacts', {'name':'A','phone':'5511999991111','city_id':'4302105'})
         self.assertEqual(r.status_code,201)
