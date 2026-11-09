@@ -26,11 +26,12 @@ O assistente se apresenta, pergunta **1 — Lojista / 2 — Revenda / 3 — Cons
 
 | Perfil confirmado | UF confirmada | Responsável |
 | --- | --- | --- |
-| Lojista ou Revenda | RS ou SC | Chai |
-| Lojista ou Revenda | Demais estados | Grasi |
+| Lojista | Todos os estados | Chai |
+| Revenda | RS ou SC | Chai |
+| Revenda | Demais estados | Grasi |
 | Consumidor Final | Qualquer estado, inclusive RS e SC | Grasi |
 
-Respostas não identificadas recebem uma nova orientação. Após duas respostas inválidas na mesma pergunta, ou se o cliente pedir **ATENDENTE**, o card passa a atendimento humano. Dados não confirmados continuam pendentes; a localização não é adivinhada. Se a conta de destino for desativada, a atribuição fica pendente, com registro no histórico.
+O roteiro acumula respostas em mensagens separadas, incluindo cidade e UF, sem desistir após duas tentativas. Não oferece a opção ATENDENTE. Dados não confirmados continuam pendentes; a localização não é adivinhada. Se a conta de destino for desativada, a atribuição fica pendente, com registro no histórico. Os lembretes usam intervalos de 5, 10, 30 e 60 minutos, mais uma última tentativa 23h50 após a última mensagem do cliente, dentro da janela de 24 horas. Não é criado template na Meta. Uma resposta cancela os lembretes antigos e reinicia a sequência para o que faltar. Conclusão, intervenção da equipe, exclusão, desativação do roteiro e pedido para parar encerram as retomadas.
 
 ## Assumir ou transferir um atendimento
 

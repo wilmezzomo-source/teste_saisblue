@@ -28,7 +28,7 @@ Os avisos não funcionam com o navegador fechado. Esta versão usa popups dentro
 - Cadastros manuais feitos pela própria pessoa não geram aviso para ela mesma. Se outra pessoa cadastrar ou atribuir uma oportunidade para a atendente, ela recebe o aviso.
 - Conversas comuns que não tenham origem de anúncio ou admissão manual continuam fora do CRM e não geram avisos.
 
-A distribuição permanece: **Lojista/Revenda de RS ou SC → Chai; Lojista/Revenda dos demais estados e todo Consumidor Final → Grasi**.
+A distribuição permanece: **Todo Lojista e Revenda de RS/SC → Chai; Revenda dos demais estados e todo Consumidor Final → Grasi**.
 
 ## Consultar e abrir
 

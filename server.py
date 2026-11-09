@@ -30,7 +30,7 @@ from qualification import PROFILES, is_ad_referral, settings as qualification_se
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.09.5'
+RELEASE = '2026.11.09.6'
 
 
 class Problem(Exception):
@@ -119,6 +119,8 @@ def init_db(app):
         CREATE TABLE IF NOT EXISTS push_subscriptions(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),endpoint TEXT UNIQUE NOT NULL,p256dh TEXT NOT NULL,auth TEXT NOT NULL,enabled INTEGER NOT NULL DEFAULT 1,created REAL NOT NULL,updated REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS push_deliveries(id INTEGER PRIMARY KEY AUTOINCREMENT,notification_id INTEGER REFERENCES notifications(id),subscription_id TEXT NOT NULL REFERENCES push_subscriptions(id),user_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'queued',attempts INTEGER NOT NULL DEFAULT 0,created REAL NOT NULL,updated REAL NOT NULL DEFAULT 0,next_try REAL NOT NULL,last_error TEXT NOT NULL DEFAULT '',UNIQUE(notification_id,subscription_id));
         CREATE INDEX IF NOT EXISTS push_due ON push_deliveries(state,next_try);
+        CREATE TABLE IF NOT EXISTS qualification_progress(contact_id TEXT PRIMARY KEY REFERENCES contacts(id),city_text TEXT NOT NULL DEFAULT '',state_text TEXT NOT NULL DEFAULT '',cycle TEXT NOT NULL DEFAULT '',anchor REAL NOT NULL DEFAULT 0,reminders_sent INTEGER NOT NULL DEFAULT 0,next_due REAL NOT NULL DEFAULT 0,closed_reason TEXT NOT NULL DEFAULT '');
+        CREATE INDEX IF NOT EXISTS qualification_due ON qualification_progress(next_due);
         CREATE INDEX IF NOT EXISTS messages_contact ON messages(contact_id,created);
         CREATE INDEX IF NOT EXISTS audit_contact ON audit(contact_id,id);
         ''')
@@ -129,7 +131,7 @@ def init_db(app):
             db.execute('ALTER TABLE contacts ADD COLUMN deleted_at REAL NOT NULL DEFAULT 0')
         for table, additions in {
             'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''"), ('ad_origin', 'INTEGER NOT NULL DEFAULT 0'), ('manual_origin', 'INTEGER NOT NULL DEFAULT 0'), ('lead_profile', "TEXT NOT NULL DEFAULT ''"), ('qualification_state', "TEXT NOT NULL DEFAULT 'not_started'"), ('qualification_attempts', 'INTEGER NOT NULL DEFAULT 0'), ('qualification_last_at', 'REAL NOT NULL DEFAULT 0')],
-            'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''"), ('error_code','INTEGER'), ('error_detail', "TEXT NOT NULL DEFAULT ''"), ('automation', 'INTEGER NOT NULL DEFAULT 0'), ('automation_step', "TEXT NOT NULL DEFAULT ''"), ('send_started', 'REAL NOT NULL DEFAULT 0')],
+            'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''"), ('error_code','INTEGER'), ('error_detail', "TEXT NOT NULL DEFAULT ''"), ('automation', 'INTEGER NOT NULL DEFAULT 0'), ('automation_step', "TEXT NOT NULL DEFAULT ''"), ('send_started', 'REAL NOT NULL DEFAULT 0'), ('automation_kind',"TEXT NOT NULL DEFAULT 'question'"), ('automation_cycle',"TEXT NOT NULL DEFAULT ''")],
         }.items():
             existing = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
             for column, declaration in additions:
@@ -141,6 +143,7 @@ def init_db(app):
             db.execute('''UPDATE contacts SET owner_id=COALESCE(
                 (SELECT MIN(id) FROM users WHERE users.name=contacts.owner HAVING COUNT(*)=1),'')
                 WHERE owner<>'Sem responsável' ''')
+        db.execute("UPDATE messages SET body=REPLACE(body,' Se preferir, escreva ATENDENTE.','') WHERE automation=1 AND status='queued'")
         restrict_administration(db)
         db.execute('CREATE UNIQUE INDEX IF NOT EXISTS messages_external ON messages(external_id) WHERE external_id IS NOT NULL')
         db.execute('CREATE INDEX IF NOT EXISTS messages_automation ON messages(automation,status,created)')
@@ -560,6 +563,8 @@ def create_app(config=None):
                 row['location_pending'] = city is None
                 row['latitude'] = city['lat'] if city else None
                 row['longitude'] = city['lng'] if city else None
+                progress = db.execute('SELECT next_due,reminders_sent,closed_reason FROM qualification_progress WHERE contact_id=?',(row['id'],)).fetchone()
+                row['qualification_reminders'] = dict(progress) if progress else None
                 row['messages'] = [dict(m) for m in db.execute('SELECT * FROM messages WHERE contact_id=? ORDER BY created,id', (row['id'],))]
                 row['audit'] = [dict(a) for a in db.execute('SELECT actor,action,details,created FROM audit WHERE contact_id=? ORDER BY id DESC LIMIT 30', (row['id'],))]
         return jsonify(contacts=rows, stages=STAGES)
@@ -809,7 +814,7 @@ def create_app(config=None):
             if not owner_id:
                 raise Problem('Selecione uma conta ativa da equipe.')
             handover(db, c['id'], audit, 'Transferência para atendimento humano')
-            db.execute('UPDATE contacts SET owner=?,owner_id=?,stage=? WHERE id=?', (owner, owner_id, STAGES[1], c['id']))
+            db.execute('UPDATE contacts SET owner=?,owner_id=? WHERE id=?', (owner, owner_id, c['id']))
             notify_assigned(db,c['id'],c['owner_id'],g.user['id'])
             audit(db, 'Atendimento assumido', c['id'], {'responsável':owner})
         return jsonify(ok=True)
@@ -901,8 +906,9 @@ def create_app(config=None):
                             error_code=error_code if isinstance(error_code,int) else None
                             db.execute('UPDATE messages SET status=?,error_code=?,error_detail=? WHERE id=?', (s['status'],error_code,meta_failure(error_code) if error_code else '',row['id']))
                             if s['status'] == 'failed':
-                                message = db.execute('SELECT contact_id,automation FROM messages WHERE id=?', (row['id'],)).fetchone()
-                                if message['automation']:
+                                message = db.execute('SELECT contact_id,automation,automation_cycle FROM messages WHERE id=?', (row['id'],)).fetchone()
+                                active_cycle = not message['automation_cycle'] or db.execute('SELECT 1 FROM qualification_progress WHERE contact_id=? AND cycle=?',(message['contact_id'],message['automation_cycle'])).fetchone()
+                                if message['automation'] and active_cycle:
                                     handover(db, message['contact_id'], audit, 'A Meta informou falha de entrega da mensagem automática')
         return jsonify(ok=True)
 

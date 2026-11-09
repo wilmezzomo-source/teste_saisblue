@@ -1,26 +1,32 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.09.5
+## Aplicativo único para atualizar — 2026.11.09.6
 
 No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e confere o pacote, para somente os processos do CRM, faz backup, atualiza e reinicia em segundo plano. Cria um atalho com opções de abrir, iniciar/reconectar e parar. Veja [ATUALIZAR-COM-UM-APLICATIVO.md](ATUALIZAR-COM-UM-APLICATIVO.md). O aplicativo usa o Python e o banco já instalados, sem extrair ZIP manualmente. Inclui os ajustes de qualificação e tags da versão anterior.
 
-[Baixar o aplicativo para Windows](https://github.com/wilmezzomo-source/teste_saisblue/raw/refs/heads/crm-windows/desktop/SaisBlue-Atualizador.exe). O canal `windows-release.json` fixa a versão 2026.11.09.5, com commit imutável e integridade SHA-256 conferida. A execução dos testes nativos depende da disponibilidade do GitHub Actions; não confundir publicação do pacote com teste no servidor da empresa; a aplicação no servidor da empresa é feita pelo próprio aplicativo, sob a conta Windows que opera o CRM.
+[Baixar o aplicativo para Windows](https://github.com/wilmezzomo-source/teste_saisblue/raw/refs/heads/crm-windows/desktop/SaisBlue-Atualizador.exe). O canal `windows-release.json` fixa a versão 2026.11.09.6, com commit imutável e integridade SHA-256 conferida. A execução dos testes nativos depende da disponibilidade do GitHub Actions; não confundir publicação do pacote com teste no servidor da empresa; a aplicação no servidor da empresa é feita pelo próprio aplicativo, sob a conta Windows que opera o CRM.
 
 Versão própria para funil comercial e atendimento. O administrador original vê todos os cards, inclusive os sem responsável. Atendentes veem e editam apenas os atribuídos às próprias contas e podem cadastrar oportunidades manuais para si. O administrador gerencia acessos e transferências. Dados centralizados em SQLite, com autenticação Flask e execução por Waitress em Windows ou Linux.
 
-**Estado real:** o usuário confirmou recebimento e resposta no WhatsApp oficial, além do primeiro atendimento automático de leads de anúncio no servidor. A versão **2026.11.09.5** entrega o app instalável no iPhone, Web Push e o assistente de HTTPS; precisa ser aplicada pelo atualizador no Windows. O DNS, a rede da empresa e a entrega real na tela bloqueada ainda dependem de ativação e validação com Telium/TI. Veja [VALIDACAO-IPHONE.md](VALIDACAO-IPHONE.md) para os testes concluídos e os limites.
+**Estado real:** o usuário confirmou recebimento e resposta no WhatsApp oficial, além do primeiro atendimento automático de leads de anúncio no servidor. A versão **2026.11.09.6** entrega o app instalável no iPhone, Web Push e o assistente de HTTPS; precisa ser aplicada pelo atualizador no Windows. O DNS, a rede da empresa e a entrega real na tela bloqueada ainda dependem de ativação e validação com Telium/TI. Veja [VALIDACAO-IPHONE.md](VALIDACAO-IPHONE.md) para os testes concluídos e os limites.
 
-## iPhone e notificações na tela bloqueada — 2026.11.09.5
+## Qualificação e retomadas — 2026.11.09.6
+
+Sem opção ATENDENTE ou limite de duas respostas. Perfil, cidade e UF são acumulados entre mensagens, mantendo o card na coluna atual ao qualificar, atribuir ou assumir. Dados válidos do catálogo alimentam a localização e o perfil. Todo Lojista vai para Chai; Revenda de RS/SC também. Demais Revendas e todo Consumidor Final vão para Grasi.
+
+Lembretes: intervalos de 5, 10, 30 e 60 minutos após cada envio, e uma última tentativa 23h50 após a última mensagem do cliente. O prazo usa o horário assinado da mensagem recebida; sair/reiniciar o servidor não zera os registros. Sem template ou envio após 24h. Leia [QUALIFICACAO-E-RETOMADAS.md](QUALIFICACAO-E-RETOMADAS.md).
+
+## iPhone e notificações na tela bloqueada — 2026.11.09.6
 
 App instalável pelo Safari, com ícone da Sais Blue. **Avisos → Ativar notificações do aparelho** permite Web Push, inclusive com o app fechado. Requer HTTPS público, iOS 16.4+, instalação na tela inicial e permissão concedida no próprio iPhone. Cada dispositivo é vinculado à conta autenticada; o envio e a abertura conferem a atribuição atual da oportunidade. O aviso bloqueado contém apenas texto genérico, sem nome ou telefone do cliente. Existe teste agendado para 10 segundos. O serviço de envio faz parte do processo iniciado por `launch.py`; iniciar apenas o Flask de desenvolvimento não executa esse serviço.
 
 No aplicativo Windows, **Configurar iPhone e acesso externo** abre o assistente: preparar chave local e solicitação à Telium/TI, ativar Caddy/HTTPS após DNS e roteador, e diagnosticar. O código não possui acesso administrativo à Telium ou ao roteador da empresa. O acesso externo só estará confirmado depois de abrir o domínio em 4G/5G e realizar o teste no aparelho. Consulte [IPHONE-E-ACESSO-EXTERNO.md](IPHONE-E-ACESSO-EXTERNO.md).
 
-## Nomes e avisos — 2026.11.09.5
+## Nomes e avisos — 2026.11.09.6
 
 A ficha oferece **Editar nome**, inclusive antes de completar cidade/UF. A correção fica no histórico e não é substituída pelo nome de perfil nas mensagens seguintes do WhatsApp. Os avisos de novas oportunidades ficam em **Avisos**. O administrador recebe novas entradas; cada atendente recebe apenas contatos atribuídos à própria conta. **Ativar avisos com som** libera um toque neste navegador; o CRM precisa permanecer aberto. Consulte [NOMES-E-AVISOS.md](NOMES-E-AVISOS.md).
 
-## Atalho WhatsApp, filtros e cards — 2026.11.09.5
+## Atalho WhatsApp, filtros e cards — 2026.11.09.6
 
 A ficha oferece **Chamar no WhatsApp** para abrir a conversa pelo número cadastrado, no aplicativo ou Web conforme o aparelho. O administrador pode combinar **Responsável** e **Perfil** no topo do CRM. A seleção vale no funil, contatos, atendimento, mapa e indicadores. **Todos os responsáveis** remove apenas o filtro de responsável; **Sem responsável** mostra as oportunidades ainda sem conta atribuída. O filtro de perfil continua independente. Atendentes mantêm acesso apenas às próprias oportunidades. Os previews mostram somente as etiquetas de perfil e responsável, sem origem ou situação da qualificação. O administrador também pode excluir um card da ficha e recuperá-lo pela Lixeira.
 
@@ -30,7 +36,7 @@ Consulte [ATUALIZACAO-ANUNCIOS-E-QUALIFICACAO.md](ATUALIZACAO-ANUNCIOS-E-QUALIFI
 
 - Novos contatos somente com origem de anúncio identificada pela Meta; continuações dos leads admitidos permanecem no histórico. Cadastros anteriores são preservados. Nova oportunidade permite inclusão manual explícita, com origem Manual e sem iniciar o robô. Apenas as próximas mensagens desse telefone são admitidas, além dos leads de anúncios.
 - Roteiro fixo opcional no WhatsApp para Lojista/Revenda/Consumidor Final e cidade/UF, com respostas persistidas, fila durável e pausa para atendimento humano. Ativar em Integrações após escolher as contas ativas da equipe.
-- Lojista/Revenda de RS ou SC → Chai. Demais Lojista/Revenda e todo Consumidor Final → Grasi.
+- Todo Lojista e Revenda de RS/SC → Chai. Revenda dos demais estados e todo Consumidor Final → Grasi.
 - Tag de perfil, filtro compartilhado entre as visões e resultados separados por perfil. Assumir/encaminhar atendimento pausa o roteiro.
 - Etapa Proposta enviada removida; cards antigos nela migram para Negociação com auditoria.
 

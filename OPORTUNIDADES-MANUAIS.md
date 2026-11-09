@@ -46,7 +46,7 @@ O filtro de responsável aparece apenas para o administrador. Atendentes continu
 
 ## Cards no funil
 
-O preview mostra a tag do perfil e uma etiqueta colorida com o nome da responsável. A origem do contato e a situação da qualificação ficam dentro da ficha, sem ocupar o card. A distribuição permanece: Lojista/Revenda de RS e SC para Chai; Lojista/Revenda dos demais estados e todo Consumidor Final para Grasi.
+O preview mostra a tag do perfil e uma etiqueta colorida com o nome da responsável. A origem do contato e a situação da qualificação ficam dentro da ficha, sem ocupar o card. A distribuição permanece: Todo Lojista e Revenda de RS/SC para Chai; demais Revendas e todo Consumidor Final para Grasi.
 
 ## Excluir e restaurar cards
 

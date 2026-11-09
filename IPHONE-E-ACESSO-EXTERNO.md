@@ -25,7 +25,7 @@ O certificado só será emitido se DNS e acesso público 80/443 estiverem corret
 3. Safari → **Compartilhar → Adicionar à Tela de Início → Adicionar**. Abra pelo novo ícone **Sais Blue CRM**. Requer iOS 16.4 ou superior.
 4. Faça login no app instalado. Abra **Avisos → Ativar notificações do aparelho** e permita quando o iPhone solicitar.
 5. Toque em **Testar em 10 segundos**, bloqueie o telefone e confirme o aviso. Em Ajustes → Notificações → Sais Blue CRM, confira permissão de tela bloqueada e sons. Modos Foco, silencioso e preferências do iOS podem silenciar o aviso.
-6. Com um novo lead de anúncio, conclua perfil e cidade/UF. Confirme o aviso na conta atribuída e toque para abrir o card. Lojista/Revenda de RS/SC → Chai; demais e todo Consumidor Final → Grasi.
+6. Com um novo lead de anúncio, conclua perfil e cidade/UF. Confirme o aviso na conta atribuída e toque para abrir o card. Todo Lojista e Revenda de RS/SC → Chai; demais Revendas e todo Consumidor Final → Grasi.
 
 ## O que é preservado
 
