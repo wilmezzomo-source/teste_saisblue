@@ -452,8 +452,9 @@ class QualificationTest(unittest.TestCase):
         cid=self.contact()['id']
         with database(self.app) as db:
             db.execute("DELETE FROM crm_settings WHERE key='qualification_rules_20261109_6'")
+            db.execute("DELETE FROM crm_settings WHERE key='qualification_resume_unrecognized_v1'")
             db.execute('DELETE FROM qualification_progress WHERE contact_id=?',(cid,))
-            db.execute("UPDATE contacts SET qualification_state='human',qualification_attempts=2,city_id='',city='',state='',owner_id='',owner='Sem responsável' WHERE id=?",(cid,))
+            db.execute("UPDATE contacts SET qualification_state='human',qualification_attempts=1,city_id='',city='',state='',owner_id='',owner='Sem responsável' WHERE id=?",(cid,))
             db.execute("INSERT INTO audit(contact_id,actor,action,details,created) VALUES(?,'Assistente Sais Blue','Qualificação encaminhada à equipe',?,?)",(cid,json.dumps({'motivo':'Respostas não identificadas; conferir os campos pendentes'}),time.time()))
         self.drain()
         c=self.contact()

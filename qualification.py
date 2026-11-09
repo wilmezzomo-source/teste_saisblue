@@ -186,7 +186,14 @@ def migrate_rules(db, audit):
             db.execute('UPDATE contacts SET owner=?,owner_id=?,updated=?,revision=revision+1 WHERE id=?',(chai['name'],chai['id'],time.time(),c['id']))
             notify_assigned(db,c['id'],c['owner_id'])
             audit(db,'Regra de Lojista aplicada',c['id'],{'responsável':chai['name'],'motivo':'Todo Lojista direcionado à Chai'},actor='Assistente Sais Blue')
-    for c in db.execute("SELECT * FROM contacts WHERE ad_origin=1 AND manual_origin=0 AND deleted_at=0 AND stage='Novo contato' AND owner_id='' AND qualification_state='human' AND qualification_attempts>=2").fetchall():
+    db.execute('INSERT INTO crm_settings VALUES(?,?)',(key,'done'))
+
+
+def resume_legacy_questions(db, audit):
+    key='qualification_resume_unrecognized_v1'
+    if not settings(db)['enabled'] or db.execute('SELECT 1 FROM crm_settings WHERE key=?',(key,)).fetchone():
+        return
+    for c in db.execute("SELECT * FROM contacts WHERE ad_origin=1 AND manual_origin=0 AND deleted_at=0 AND stage='Novo contato' AND owner_id='' AND qualification_state='human' AND qualification_attempts>=1").fetchall():
         last=db.execute("SELECT details FROM audit WHERE contact_id=? AND action='Qualificação encaminhada à equipe' ORDER BY id DESC LIMIT 1",(c['id'],)).fetchone()
         if not last or json.loads(last['details']).get('motivo')!='Respostas não identificadas; conferir os campos pendentes':
             continue
@@ -257,6 +264,7 @@ def process_outbox(app, connect, transmit, audit):
             db.execute("UPDATE messages SET status='uncertain' WHERE id=?", (row['id'],))
             if not row['automation_cycle'] or db.execute('SELECT 1 FROM qualification_progress WHERE contact_id=? AND cycle=?',(row['contact_id'],row['automation_cycle'])).fetchone():
                 handover(db, row['contact_id'], audit, 'Envio interrompido; conferir histórico antes de reenviar')
+        resume_legacy_questions(db,audit)
         migrate_rules(db,audit)
         schedule_reminder(db,audit)
         row = db.execute("SELECT * FROM messages WHERE automation=1 AND status='queued' ORDER BY created,id LIMIT 1").fetchone()
