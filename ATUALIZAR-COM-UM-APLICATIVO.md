@@ -2,6 +2,8 @@
 
 No servidor Windows, baixe **SaisBlue-Atualizador.exe** e abra o arquivo. Ele usa o Python e o banco que já existem na instalação. Não é necessário reinstalar o CRM, extrair o pacote manualmente ou encerrar terminais.
 
+**Download:** [SaisBlue-Atualizador.exe](https://github.com/wilmezzomo-source/teste_saisblue/raw/refs/heads/crm-windows/desktop/SaisBlue-Atualizador.exe).
+
 1. O aplicativo tenta localizar a instalação que está rodando. Se o campo estiver vazio, clique em **Procurar** e selecione a pasta original do CRM, onde estão `.env` e `.venv`.
 2. Clique em **Atualizar e abrir CRM**.
 3. Aguarde a conferência do download, parada da aplicação, backup, atualização, validação e reinício. O navegador abre no endereço já configurado.
