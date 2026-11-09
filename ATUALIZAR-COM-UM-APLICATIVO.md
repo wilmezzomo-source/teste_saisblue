@@ -14,6 +14,7 @@ O atalho **Sais Blue CRM** é criado na área de trabalho do usuário do Windows
 - **Abrir CRM:** abre o navegador no endereço já configurado.
 - **Iniciar / reconectar:** inicia a aplicação ou tenta restabelecer a conexão HTTPS.
 - **Parar CRM:** encerra somente os processos identificados da instalação selecionada.
+- **Configurar iPhone e acesso externo:** prepara o app, gera a solicitação para Telium/TI e ativa HTTPS depois de DNS e rede configurados. Atualize e reabra pelo atalho para carregar o novo botão. Veja [IPHONE-E-ACESSO-EXTERNO.md](IPHONE-E-ACESSO-EXTERNO.md).
 
 Depois de concluir, você pode fechar a janela do aplicativo: o CRM e o conector continuam em segundo plano. O servidor Windows precisa permanecer ligado. Este aplicativo não instala um serviço novo nem configura início automático ao reiniciar o Windows; tarefas existentes da aplicação são respeitadas. A equipe continua acessando pelo navegador na rede da empresa, sem instalar esse aplicativo.
 
