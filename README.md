@@ -14,7 +14,7 @@ Versão própria para funil comercial e atendimento. O administrador original v�
 
 Sem opção ATENDENTE ou limite de duas respostas. Perfil, cidade e UF são acumulados entre mensagens, mantendo o card na coluna atual ao qualificar, atribuir ou assumir. Dados válidos do catálogo alimentam a localização e o perfil. Todo Lojista vai para Chai; Revenda de RS/SC também. Demais Revendas e todo Consumidor Final vão para Grasi.
 
-Lembretes: intervalos de 5, 10, 30 e 60 minutos após cada envio, e uma última tentativa 23h50 após a última mensagem do cliente. O prazo usa o horário assinado da mensagem recebida; sair/reiniciar o servidor não zera os registros. Sem template ou envio após 24h. Leia [QUALIFICACAO-E-RETOMADAS.md](QUALIFICACAO-E-RETOMADAS.md).
+Lembretes: intervalos de 5, 10, 30 e 60 minutos após cada envio, e uma última tentativa 23h50 após a última mensagem do cliente. O prazo usa o horário assinado da mensagem recebida; sair/reiniciar o servidor não zera os registros. Sem template ou envio após 24h. Leia [QUALIFICACAO-E-RETOMADAS.md](QUALIFICACAO-E-RETOMADAS.md) e [VALIDACAO-QUALIFICACAO.md](VALIDACAO-QUALIFICACAO.md).
 
 ## iPhone e notificações na tela bloqueada — 2026.11.09.6
 
