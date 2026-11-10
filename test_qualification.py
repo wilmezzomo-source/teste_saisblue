@@ -7,7 +7,7 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
-from qualification import parse_city, routing_group, REMINDER_DELAYS, FINAL_REMINDER_AFTER
+from qualification import parse_city, routing_group, REMINDER_OFFSETS, FINAL_REMINDER_AFTER
 from unittest.mock import patch
 from server import create_app, database, password, run_automation_once
 
@@ -193,9 +193,9 @@ class QualificationTest(unittest.TestCase):
         self.assertEqual(data['notifications'][0]['kind'],'assigned')
 
     def test_location_is_exact_and_ambiguous_or_wrong_state_is_not_guessed(self):
-        for value in ('Guapore/RS','Guaporé - RS','Sou de Guaporé Rio Grande do Sul'):
+        for value in ('Guaporé','Guapore/RS','Guaporé - RS','Sou de Guaporé Rio Grande do Sul'):
             self.assertEqual(parse_city(value)['name'],'Guaporé')
-        for value in ('Guaporé','Guaporé/SC','São Paulo/RS','RS','em algum lugar','Guaporé/XX'):
+        for value in ('Guaporé/SC','São Paulo/RS','RS','em algum lugar','Guaporé/XX','Bom Jesus'):
             self.assertIsNone(parse_city(value))
         self.enable(); self.receive('Oi',ad=True);self.drain()
         self.receive('1'); self.drain()
@@ -282,8 +282,8 @@ class QualificationTest(unittest.TestCase):
         self.receive('1',timestamp=t+5);self.drain()
         self.receive('São Paulo/SP',timestamp=t+1);self.drain()
         c=self.contact()
-        self.assertEqual(c['qualification_state'],'waiting_city')
-        self.assertTrue(c['location_pending'])
+        self.assertEqual(c['qualification_state'],'completed')
+        self.assertEqual((c['city'],c['state']),('São Paulo','SP'))
 
     def test_removed_stage_migrates_to_negotiation_once_preserving_card(self):
         self.receive('Olá',ad=True)
@@ -355,11 +355,11 @@ class QualificationTest(unittest.TestCase):
         with patch('qualification.time.time',return_value=anchor):
             self.receive('Oi',ad=True,timestamp=anchor);self.drain()
             due=self.progress()['next_due']
-            self.assertAlmostEqual(due,anchor+300,delta=2)
+            self.assertAlmostEqual(due,anchor+REMINDER_OFFSETS[0],delta=2)
         previous=anchor
-        for index,delay in enumerate(REMINDER_DELAYS):
+        for index,offset in enumerate(REMINDER_OFFSETS):
             with self.subTest(index=index):
-                self.assertAlmostEqual(due-previous,delay,delta=2)
+                self.assertAlmostEqual(due-anchor,offset,delta=2)
                 with patch('qualification.time.time',return_value=due-.01):self.assertFalse(run_automation_once(self.app))
                 restarted=create_app(dict(self.app.config))
                 with patch('qualification.time.time',return_value=due):
@@ -370,25 +370,25 @@ class QualificationTest(unittest.TestCase):
                     previous,due=due,progress['next_due']
         self.assertAlmostEqual(due,anchor+FINAL_REMINDER_AFTER,delta=2)
         with patch('qualification.time.time',return_value=due):self.drain();self.drain()
-        self.assertEqual(len(self.sent),6)
+        self.assertEqual(len(self.sent),5)
         self.assertEqual(self.progress()['closed_reason'],'finished')
         self.assertEqual(self.contact()['stage'],'Novo contato')
         with patch('qualification.time.time',return_value=anchor+90000):self.drain()
-        self.assertEqual(len(self.sent),6)
+        self.assertEqual(len(self.sent),5)
         self.assertTrue(all(m['type']=='text' for m in self.sent))
 
     def test_reply_cancels_queued_reminder_and_restarts_for_only_missing_fields(self):
         self.enable();anchor=time.time()+1
         with patch('qualification.time.time',return_value=anchor):
             self.receive('Oi',ad=True,timestamp=anchor);self.drain()
-        with patch('qualification.time.time',return_value=anchor+301):
+        with patch('qualification.time.time',return_value=anchor+REMINDER_OFFSETS[0]+1):
             from qualification import schedule_reminder
             from server import audit
             with self.app.app_context(),database(self.app) as db:schedule_reminder(db,audit)
-        with patch('qualification.time.time',return_value=anchor+302):
-            self.receive('Revenda',timestamp=anchor+302);self.drain()
+        with patch('qualification.time.time',return_value=anchor+REMINDER_OFFSETS[0]+2):
+            self.receive('Revenda',timestamp=anchor+REMINDER_OFFSETS[0]+2);self.drain()
             self.assertEqual(len(self.sent),2)
-            self.assertAlmostEqual(self.progress()['next_due'],anchor+602,delta=2)
+            self.assertAlmostEqual(self.progress()['next_due'],anchor+2*REMINDER_OFFSETS[0]+2,delta=2)
             self.assertEqual(self.progress()['reminders_sent'],0)
             self.assertIn('cidade',self.sent[-1]['text']['body'])
         with database(self.app) as db:
@@ -400,7 +400,7 @@ class QualificationTest(unittest.TestCase):
         with patch('qualification.time.time',return_value=anchor+5*3600):
             self.drain();self.drain()
             self.assertEqual(len(self.sent),2)
-            self.assertAlmostEqual(self.progress()['next_due'],anchor+5*3600+600,delta=2)
+            self.assertAlmostEqual(self.progress()['next_due'],anchor+6*3600,delta=2)
         with patch('qualification.time.time',return_value=anchor+86401):self.drain()
         self.assertEqual(len(self.sent),2)
         self.assertEqual(self.progress()['closed_reason'],'window_closed')
@@ -470,6 +470,162 @@ class QualificationTest(unittest.TestCase):
                 db.execute("INSERT INTO contacts(id,name,phone,stage,source,created,updated,owner,owner_id,lead_profile,ad_origin,manual_origin,qualification_state,city_id) VALUES(?,?,?,?,?,1,1,'Grasi','grasi',?,1,?,'completed','3550308')",(cid,cid,'555499999'+str(1000+i),stage,'fixture',profile,manual))
         self.drain()
         self.assertTrue(all(c['owner_id']=='grasi' for c in self.client.get('/api/contacts').json['contacts']))
+
+
+    def test_actual_city_ocidental_conversation_completes_without_repeated_questions(self):
+        self.enable();self.receive('Oi',ad=True);self.drain()
+        self.receive('2');self.drain()
+        self.receive('Cidade Ocidental Goiás');self.drain()
+        c=self.contact()
+        self.assertEqual((c['lead_profile'],c['city'],c['state'],c['owner_id'],c['stage']),('Revenda','Cidade Ocidental','GO','grasi','Novo contato'))
+        count=len(self.sent)
+        self.receive('Ocidental Goiás');self.drain()
+        self.assertEqual(len(self.sent),count)
+        self.assertEqual(self.progress()['next_due'],0)
+
+    def test_unique_names_infer_uf_and_ambiguous_names_only_ask_state(self):
+        self.enable();self.receive('Oi',ad=True);self.drain()
+        self.receive('3');self.drain();self.receive('Cidade Ocidental');self.drain()
+        self.assertEqual((self.contact()['city'],self.contact()['state']),('Cidade Ocidental','GO'))
+        number='5554999994444'
+        self.receive('Oi',ad=True,number=number);self.drain()
+        self.receive('2',number=number);self.drain()
+        self.receive('Bom Jesus',number=number);self.drain()
+        c=self.contact(number)
+        self.assertEqual(c['qualification_state'],'waiting_city')
+        self.assertEqual(c['city_id'],'')
+        reply=self.sent[-1]['text']['body']
+        self.assertIn('Bom Jesus',reply);self.assertTrue('UF' in reply or 'estado' in reply)
+        self.assertNotIn('Lojista',reply)
+        self.receive('RS',number=number);self.drain()
+        self.assertEqual((self.contact(number)['city'],self.contact(number)['state'],self.contact(number)['owner_id']),('Bom Jesus','RS','chai'))
+
+    def test_every_unique_official_city_name_is_recognized_including_names_ending_in_states(self):
+        from qualification_location import BY_NAME
+        for name,rows in BY_NAME.items():
+            if len(rows)==1:
+                with self.subTest(name=name):self.assertEqual(parse_city(rows[0]['name'])['id'],rows[0]['id'])
+        for text,uf in [('Cidade Ocidental Goiás','GO'),('Ocidental Goiás','GO'),('Cidade Gaúcha Paraná','PR'),('Santa Maria do Pará','PA'),('Sou lojista e moro em Cidade Ocidental Goiás','GO')]:
+            self.assertEqual(parse_city(text)['state'],uf)
+        for text in ['Cidade Ocidental/RS','Guaporé/SC','Ocidental/SC','Não sou de Guaporé','Eu não moro em Cidade Ocidental']:
+            self.assertIsNone(parse_city(text))
+
+    def test_interest_then_three_does_not_repeat_profile_menu(self):
+        self.enable();self.receive('Oi',ad=True);self.drain()
+        initial=len(self.sent)
+        self.receive('Tenho interesse');self.drain()
+        self.assertEqual(len(self.sent),initial)
+        self.receive('3');self.drain()
+        self.assertEqual(self.contact()['lead_profile'],'Consumidor Final')
+        self.assertIn('cidade',self.sent[-1]['text']['body'])
+        self.assertNotIn('assistente virtual',self.sent[-1]['text']['body'])
+        self.assertNotIn('Lojista',self.sent[-1]['text']['body'])
+        self.assertEqual(sum('assistente virtual' in m['text']['body'] for m in self.sent),1)
+
+    def test_revender_sentence_is_already_a_profile_and_combined_answers_work(self):
+        self.enable();self.receive('Tenho interesse em revender',ad=True);self.drain()
+        self.assertEqual(self.contact()['lead_profile'],'Revenda')
+        self.assertIn('cidade',self.sent[-1]['text']['body'])
+        self.assertNotIn('1 — Lojista',self.sent[-1]['text']['body'])
+        self.receive('Sou lojista e moro em Cidade Ocidental Goiás',ad=True,number='5554999994444');self.drain()
+        c=self.contact('5554999994444')
+        self.assertEqual((c['lead_profile'],c['city'],c['state'],c['owner_id']),('Lojista','Cidade Ocidental','GO','chai'))
+
+    def test_city_name_can_be_split_into_more_than_two_messages(self):
+        self.enable();self.receive('Oi',ad=True);self.drain();self.receive('3');self.drain()
+        for part in ['Rio','de','Janeiro']:
+            self.receive(part);self.drain()
+        self.assertEqual((self.contact()['city'],self.contact()['state'],self.contact()['owner_id']),('Rio de Janeiro','RJ','grasi'))
+
+    def test_four_reminders_are_distinct_short_and_never_repeat_intro(self):
+        self.enable();anchor=time.time()+1
+        with patch('qualification.time.time',return_value=anchor):self.receive('Oi',ad=True,timestamp=anchor);self.drain()
+        for offset in (*REMINDER_OFFSETS,FINAL_REMINDER_AFTER):
+            with patch('qualification.time.time',return_value=anchor+offset):self.drain()
+        texts=[m['text']['body'] for m in self.sent[1:]]
+        self.assertEqual(len(texts),4);self.assertEqual(len(set(texts)),4)
+        self.assertTrue(all('assistente virtual' not in t for t in texts))
+        self.assertTrue(all(len(t)<350 for t in texts))
+        self.assertIn('Quando quiser retomar',texts[-1])
+
+    def test_pending_location_is_recovered_from_history_without_sending_more_messages(self):
+        self.enable();self.receive('Oi',ad=True);self.drain();self.receive('2');self.drain()
+        cid=self.contact()['id']
+        # Reproduce the old parser's state after the complete city was already received.
+        with database(self.app) as db:
+            db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel,external_id) VALUES('old-city',?,'Cidade Ocidental Goiás','in',?,'meta','old-city')",(cid,time.time()))
+            db.execute("DELETE FROM crm_settings WHERE key='qualification_location_catalog_v2'")
+        count=len(self.sent)
+        self.drain()
+        c=self.contact()
+        self.assertEqual((c['qualification_state'],c['city'],c['state'],c['owner_id']),('completed','Cidade Ocidental','GO','grasi'))
+        self.assertEqual(c['stage'],'Novo contato')
+        self.assertEqual(len(self.sent),count)
+        self.assertEqual(self.progress()['next_due'],0)
+        self.drain();self.assertEqual(len(self.sent),count)
+
+    def test_fresh_reply_resumes_a_technical_pause_but_not_manual_or_optout(self):
+        self.enable();anchor=time.time()+1
+        original=self.app.config['META_SENDER']
+        def failed(req,timeout):raise TimeoutError()
+        with patch('qualification.time.time',return_value=anchor):
+            self.app.config['META_SENDER']=failed
+            self.receive('Tenho interesse em revender',ad=True,timestamp=anchor);self.drain()
+            self.assertEqual(self.contact()['qualification_state'],'human')
+            self.assertIn('sem confirmação',self.contact()['qualification_pause_reason'])
+        self.app.config['META_SENDER']=original
+        with patch('qualification.time.time',return_value=anchor+120):
+            self.receive('2',timestamp=anchor+120);self.drain()
+        self.assertEqual(self.contact()['qualification_state'],'waiting_city')
+        self.assertIn('cidade',self.sent[-1]['text']['body'])
+        self.assertNotIn('1 — Lojista',self.sent[-1]['text']['body'])
+        with patch('qualification.time.time',return_value=anchor+121):
+            self.receive('SAIR',timestamp=anchor+121);self.drain();count=len(self.sent)
+        with patch('qualification.time.time',return_value=anchor+122):
+            self.receive('2',timestamp=anchor+122);self.drain()
+        self.assertEqual(len(self.sent),count)
+        self.assertEqual(self.contact()['qualification_state'],'human')
+
+    def test_reply_ignored_by_old_paused_script_is_recovered_once(self):
+        self.enable();anchor=time.time()+1
+        with patch('qualification.time.time',return_value=anchor):
+            self.receive('Oi',ad=True);self.drain()
+        cid=self.contact()['id']
+        with database(self.app) as db:
+            db.execute("UPDATE contacts SET qualification_state='human' WHERE id=?",(cid,))
+            db.execute("INSERT INTO audit(contact_id,actor,action,details,created) VALUES(?,'Assistente Sais Blue','Qualificação encaminhada à equipe',?,?)",(cid,json.dumps({'motivo':'Envio automático falhou ou ficou sem confirmação'}),anchor+1))
+            db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel,external_id) VALUES('ignored-two',?,'2','in',?,'meta','ignored-two')",(cid,anchor+60))
+            db.execute("DELETE FROM crm_settings WHERE key='qualification_location_catalog_v2'")
+        count=len(self.sent)
+        with patch('qualification.time.time',return_value=anchor+70):self.drain()
+        self.assertEqual(len(self.sent),count+1)
+        self.assertEqual((self.contact()['lead_profile'],self.contact()['qualification_state']),('Revenda','waiting_city'))
+        self.assertNotIn('1 — Lojista',self.sent[-1]['text']['body'])
+        self.drain();self.assertEqual(len(self.sent),count+1)
+
+    def test_upgrade_does_not_restart_four_already_sent_reminders(self):
+        self.enable();self.receive('Oi',ad=True);self.drain()
+        cid=self.contact()['id']
+        with database(self.app) as db:
+            db.execute("UPDATE qualification_progress SET cadence_version=1,reminders_sent=4,next_due=?,closed_reason='' WHERE contact_id=?",(time.time()-1,cid))
+        count=len(self.sent)
+        self.drain()
+        self.assertEqual(len(self.sent),count)
+        self.assertEqual(self.progress()['closed_reason'],'finished')
+        self.assertEqual(self.progress()['next_due'],0)
+
+    def test_distinct_reply_in_same_meta_timestamp_second_can_resume_a_technical_failure(self):
+        self.enable();anchor=time.time()+1
+        original=self.app.config['META_SENDER']
+        def failed(req,timeout):raise TimeoutError()
+        with patch('qualification.time.time',return_value=anchor):
+            self.app.config['META_SENDER']=failed
+            self.receive('Oi',ad=True,timestamp=anchor);self.drain()
+            self.assertEqual(self.contact()['qualification_state'],'human')
+            self.app.config['META_SENDER']=original
+            self.receive('2',timestamp=anchor);self.drain()
+            self.assertEqual((self.contact()['lead_profile'],self.contact()['qualification_state']),('Revenda','waiting_city'))
+            self.assertIn('cidade',self.sent[-1]['text']['body'])
 
 
 

@@ -30,7 +30,7 @@ from qualification import PROFILES, is_ad_referral, settings as qualification_se
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.09.6'
+RELEASE = '2026.11.10.1'
 
 
 class Problem(Exception):
@@ -130,6 +130,7 @@ def init_db(app):
         if 'deleted_at' not in columns:
             db.execute('ALTER TABLE contacts ADD COLUMN deleted_at REAL NOT NULL DEFAULT 0')
         for table, additions in {
+            'qualification_progress': [('cadence_version','INTEGER NOT NULL DEFAULT 1')],
             'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''"), ('ad_origin', 'INTEGER NOT NULL DEFAULT 0'), ('manual_origin', 'INTEGER NOT NULL DEFAULT 0'), ('lead_profile', "TEXT NOT NULL DEFAULT ''"), ('qualification_state', "TEXT NOT NULL DEFAULT 'not_started'"), ('qualification_attempts', 'INTEGER NOT NULL DEFAULT 0'), ('qualification_last_at', 'REAL NOT NULL DEFAULT 0')],
             'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''"), ('error_code','INTEGER'), ('error_detail', "TEXT NOT NULL DEFAULT ''"), ('automation', 'INTEGER NOT NULL DEFAULT 0'), ('automation_step', "TEXT NOT NULL DEFAULT ''"), ('send_started', 'REAL NOT NULL DEFAULT 0'), ('automation_kind',"TEXT NOT NULL DEFAULT 'question'"), ('automation_cycle',"TEXT NOT NULL DEFAULT ''")],
         }.items():
@@ -558,6 +559,7 @@ def create_app(config=None):
         with database(app) as db:
             query, args = ('SELECT * FROM contacts WHERE deleted_at=0 ORDER BY updated DESC', ()) if g.user['role'] == 'admin' else ('SELECT * FROM contacts WHERE deleted_at=0 AND owner_id=? ORDER BY updated DESC', (g.user['id'],))
             rows = [dict(r) for r in db.execute(query, args)]
+            automation_enabled=qualification_settings(db)['enabled']
             for row in rows:
                 city = CITY_BY_ID.get(row['city_id'])
                 row['location_pending'] = city is None
@@ -565,7 +567,17 @@ def create_app(config=None):
                 row['longitude'] = city['lng'] if city else None
                 progress = db.execute('SELECT next_due,reminders_sent,closed_reason FROM qualification_progress WHERE contact_id=?',(row['id'],)).fetchone()
                 row['qualification_reminders'] = dict(progress) if progress else None
-                row['messages'] = [dict(m) for m in db.execute('SELECT * FROM messages WHERE contact_id=? ORDER BY created,id', (row['id'],))]
+                pause=db.execute("SELECT details FROM audit WHERE contact_id=? AND action='Qualificação encaminhada à equipe' ORDER BY id DESC LIMIT 1",(row['id'],)).fetchone() if row['qualification_state']=='human' else None
+                try:
+                    row['qualification_pause_reason']=json.loads(pause['details']).get('motivo','') if pause else ''
+                except (ValueError,TypeError):
+                    row['qualification_pause_reason']='Atendimento automático pausado; confira o histórico.'
+                if row['qualification_state'] in ('waiting_profile','waiting_city') and not automation_enabled:
+                    row['qualification_pause_reason']='Atendimento automático desativado em Integrações.'
+                last_bot=db.execute("SELECT status,error_code,error_detail FROM messages WHERE contact_id=? AND automation=1 ORDER BY created DESC,rowid DESC LIMIT 1",(row['id'],)).fetchone()
+                row['qualification_last_send']=dict(last_bot) if last_bot else None
+
+                row['messages'] = [dict(m) for m in db.execute('SELECT * FROM messages WHERE contact_id=? ORDER BY created,rowid', (row['id'],))]
                 row['audit'] = [dict(a) for a in db.execute('SELECT actor,action,details,created FROM audit WHERE contact_id=? ORDER BY id DESC LIMIT 30', (row['id'],))]
         return jsonify(contacts=rows, stages=STAGES)
 
