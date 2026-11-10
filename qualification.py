@@ -224,12 +224,21 @@ def repair_waiting_locations(db, audit):
         name,state='', ''
         profile=c['lead_profile']
         for message in reversed(history):
-            if not profile:
-                profile=parse_profile(message['body']) or ''
+            if not c['lead_profile']:
+                profile=parse_profile(message['body']) or profile
             name,state,_=accumulate_location(message['body'],name,state)
-        city=CITY_LOOKUP.get((name,state))
-        if not city or c['city_id']:
+        city=CITY_LOOKUP.get((normalize(c['city']),c['state'])) if c['city_id'] else CITY_LOOKUP.get((name,state))
+        if profile and not c['lead_profile'] and not city:
+            db.execute('UPDATE contacts SET lead_profile=?,updated=?,revision=revision+1 WHERE id=?',(profile,time.time(),c['id']))
+            audit(db,'Perfil aproveitado do histórico',c['id'],{'perfil':profile},actor='Assistente Sais Blue')
+            if time.time()-history[0]['created']<WINDOW:
+                process_answer(db,c['id'],'recovered-profile:'+history[0]['id'],'',history[0]['created'],audit)
+            else:
+                db.execute("UPDATE contacts SET qualification_state='waiting_city' WHERE id=?",(c['id'],))
             continue
+        if not city or (c['city_id'] and profile==c['lead_profile']):
+            continue
+        name,state=normalize(city['name']),city['state']
         cancel_pending(db,c['id'])
         step='completed' if profile else 'waiting_profile'
         db.execute('UPDATE contacts SET city_id=?,city=?,state=?,lead_profile=?,qualification_state=?,updated=?,revision=revision+1 WHERE id=?',

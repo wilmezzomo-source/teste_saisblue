@@ -628,6 +628,22 @@ class QualificationTest(unittest.TestCase):
             self.assertIn('cidade',self.sent[-1]['text']['body'])
 
 
+    def test_profile_already_in_history_advances_to_city_even_without_location(self):
+        self.enable();self.receive('Oi',ad=True);self.drain()
+        cid=self.contact()['id']
+        with database(self.app) as db:
+            db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel,external_id) VALUES('earlier-choice',?,'2','in',?,'meta','earlier-choice')",(cid,time.time()))
+            db.execute("DELETE FROM crm_settings WHERE key='qualification_location_catalog_v2'")
+        count=len(self.sent)
+        self.drain()
+        c=self.contact()
+        self.assertEqual((c['lead_profile'],c['qualification_state']),('Revenda','waiting_city'))
+        self.assertEqual(len(self.sent),count+1)
+        self.assertIn('cidade',self.sent[-1]['text']['body'])
+        self.assertNotIn('1 — Lojista',self.sent[-1]['text']['body'])
+        self.drain();self.assertEqual(len(self.sent),count+1)
+
+
 
 if __name__ == '__main__':
     unittest.main()
