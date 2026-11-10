@@ -14,7 +14,7 @@ Versão própria para funil comercial e atendimento. O administrador original v�
 
 Sem opção ATENDENTE ou limite de duas respostas. Perfil, cidade e UF são acumulados entre mensagens, mantendo o card na coluna atual ao qualificar, atribuir ou assumir. Cidade Ocidental/GO e nomes que começam com Cidade são preservados. A UF é preenchida quando o nome do município tem uma única correspondência no Brasil; homônimos exigem confirmação de estado. Dados válidos do catálogo alimentam a localização e o perfil. Todo Lojista vai para Chai; Revenda de RS/SC também. Demais Revendas e todo Consumidor Final vão para Grasi.
 
-Até quatro retomadas: 20 minutos, 3 horas, 8 horas e 23h50 após a última mensagem do cliente, com textos diferentes e apenas o dado pendente. A apresentação não é repetida em mensagens de continuação. O prazo usa o horário assinado da mensagem recebida; sair/reiniciar o servidor não zera os registros. Sem template ou envio após 24h. Leia [QUALIFICACAO-E-RETOMADAS.md](QUALIFICACAO-E-RETOMADAS.md) e [VALIDACAO-QUALIFICACAO.md](VALIDACAO-QUALIFICACAO.md).
+Até quatro retomadas: 20 minutos, 3 horas, 8 horas e 23h50 após a última mensagem do cliente, com textos diferentes e apenas o dado pendente. A apresentação não é repetida em mensagens de continuação. O prazo usa o horário assinado da mensagem recebida; sair/reiniciar o servidor não zera os registros. Sem template ou envio após 24h. Leia [QUALIFICACAO-E-RETOMADAS.md](QUALIFICACAO-E-RETOMADAS.md) e [VALIDACAO-ATENDIMENTO.md](VALIDACAO-ATENDIMENTO.md).
 
 ## iPhone e notificações na tela bloqueada — 2026.11.10.1
 
