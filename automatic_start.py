@@ -118,7 +118,7 @@ Start-ScheduledTask -TaskName $name
                 return
         except (OSError,ValueError):pass
         time.sleep(1)
-    raise ValueError('A tarefa foi registrada, mas o monitor não confirmou a inicialização. Use Ativar início automático novamente.')
+    raise ValueError('A tarefa foi registrada, mas o monitor não confirmou a inicialização. Use Iniciar / reconectar novamente.')
 
 
 def main():
@@ -134,7 +134,7 @@ def main():
         root,values=validate_target(root)
         install(WindowsOps(root,values),args.owner_sid)
     except Exception:
-        write_state(root,'automatic-install',{'ok':False,'message':'O Windows não confirmou o início automático. O CRM continua disponível pelo aplicativo; tente Ativar início automático ou solicite à TI a permissão de tarefa em segundo plano.'})
+        write_state(root,'automatic-install',{'ok':False,'message':'O Windows não confirmou o início automático. O CRM continua disponível pelo aplicativo; tente Iniciar / reconectar ou solicite à TI a permissão de tarefa em segundo plano.'})
         sys.exit(1)
 
 

@@ -173,7 +173,7 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
 
 
     def test_boot_task_recovers_app_and_orphan_tunnel_without_interactive_login(self):
-        from automatic_start import install, set_enabled, task_prelude
+        from automatic_start import ensure_automatic, set_enabled, task_prelude
         from desktop_worker import WindowsOps, process_roles, update_lock
         class FixtureOps(WindowsOps):
             def powershell(self,code,timeout=35):
@@ -253,8 +253,8 @@ finally:child.terminate();child.wait(timeout=5);stop.set();server.server_close()
             try:
                 # Start the monitor using Windows Task Scheduler, not this test's
                 # interactive process. No live Meta credentials or ngrok account.
-                sid=ops.powershell("@{sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}|ConvertTo-Json -Compress")['sid']
-                install(ops,sid)
+                with update_lock(root,timeout=30):
+                    self.assertTrue(ensure_automatic(ops),'Elevated startup registration was not confirmed')
                 details=ops.powershell(task_prelude(root)+"@{logon=[string]$task.Principal.LogonType;level=[string]$task.Principal.RunLevel;triggers=@($task.Triggers|ForEach-Object {$_.CimClass.CimClassName})}|ConvertTo-Json -Compress")
                 self.assertEqual(details['logon'],'S4U')
                 self.assertEqual(details['level'],'Limited')
