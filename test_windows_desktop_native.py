@@ -134,14 +134,20 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
                             record=json.loads(manifest.read_text())
                             print('::error title=Downloaded public release manifest::'+json.dumps({k:record.get(k) for k in ('version','commit','sha256')}),flush=True)
                     self.assertTrue(ops.health(release_version),'GUI update did not start the verified new version')
-                    if (root/'automatic_start.py').is_file():
-                        from automatic_start import task_status
-                        self.assertTrue(task_status(ops).get('enabled'),'GUI update did not enable automatic startup')
                     self.assertEqual((root/'.env').read_text(encoding='utf-8'),config)
                     with sqlite_connection(root/'data/crm.sqlite3') as db:
                         self.assertEqual(db.execute("SELECT name FROM contacts WHERE id='fixture'").fetchone()[0],'Preserved customer')
                     # Close the browser spawned by the GUI is unnecessary; stop this CRM via the same validated controller.
-                    ops.stop()
+                    from automatic_start import set_enabled, task_status
+                    from desktop_worker import update_lock
+                    # Health becomes ready before boot-task registration finishes.
+                    # Wait for the updater's complete operation, then assert and
+                    # stop under its same lock so the monitor cannot race cleanup.
+                    with update_lock(root,timeout=90):
+                        if (root/'automatic_start.py').is_file():
+                            self.assertTrue(task_status(ops).get('enabled'),'GUI update did not enable automatic startup')
+                        set_enabled(root,False)
+                        ops.stop()
                 else:
                     while time.monotonic()<deadline and ops.health():time.sleep(.5)
                     if ops.health():
