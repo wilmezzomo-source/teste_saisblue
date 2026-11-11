@@ -21,14 +21,39 @@ from runtime_control import Runtime
 ROOT=Path(__file__).resolve().parent
 
 
-def find_ngrok():
-    for path in (ROOT/'ngrok.exe',ROOT/'tools/ngrok.exe'):
+def find_ngrok(root=ROOT):
+    root=Path(root)
+    for path in (root/'tools/ngrok.exe',root/'ngrok.exe'):
         if path.is_file():return str(path)
     path=shutil.which('ngrok')
     if path:return path
     store=Path(os.environ.get('LOCALAPPDATA',''))/'Microsoft/WindowsApps/ngrok.exe'
     if store.is_file():return str(store)
     raise ValueError('Não encontrei ngrok.exe. Baixe o agente oficial para Windows e copie ngrok.exe para esta pasta do CRM.')
+
+
+def prepare_background_ngrok(root=ROOT):
+    """Keep the Store's real agent locally, independent of execution aliases."""
+    root=Path(root)
+    exe=Path(find_ngrok(root))
+    if 'windowsapps' in str(exe).lower() and 'program files' not in str(exe).lower():
+        from desktop_worker import WindowsOps
+        ops=WindowsOps(root,read_config(root/'.env'))
+        candidates=ops.powershell("[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $paths=@(Get-AppxPackage *ngrok* | ForEach-Object {Get-ChildItem -LiteralPath $_.InstallLocation -Filter ngrok.exe -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {$_.FullName}}); @{paths=$paths}|ConvertTo-Json -Compress")
+        paths=candidates.get('paths',[])
+        exe=next((Path(p) for p in paths if Path(p).is_file() and Path(p).stat().st_size>100_000),exe)
+        if 'microsoft/windowsapps' in str(exe).replace('\\','/').lower():
+            raise ValueError('O Windows não localizou o agente real instalado pela Store. O início automático ainda não foi ativado.')
+    result=subprocess.run([str(exe),'version'],capture_output=True,timeout=15,creationflags=subprocess.CREATE_NO_WINDOW if sys.platform=='win32' else 0)
+    if result.returncode or not result.stdout.lower().startswith(b'ngrok version '):
+        raise ValueError('O agente ngrok não passou na conferência para iniciar em segundo plano.')
+    target=root/'tools/ngrok.exe'
+    if exe.resolve()!=target.resolve():
+        target.parent.mkdir(exist_ok=True)
+        temporary=target.with_suffix('.download')
+        shutil.copyfile(exe,temporary)
+        os.replace(temporary,target)
+    return str(target)
 
 
 def tunnel_url(sender=urllib.request.urlopen):
@@ -59,7 +84,11 @@ def main():
     logs=deque(maxlen=5)
     try:
         env={**os.environ,'NGROK_AUTHTOKEN':values['NGROK_AUTHTOKEN']}
-        arguments=[exe,'http','http://127.0.0.1:3002','--inspect=false','--log=stdout','--log-format=json']
+        # Explicit agent configuration works in noninteractive Windows sessions.
+        # Authentication stays in the child environment, never in argv or logs.
+        agent_config=ROOT/'.runtime/ngrok.yml'
+        agent_config.write_text('version: "2"\nweb_addr: 127.0.0.1:4040\nupdate_check: false\n',encoding='utf-8')
+        arguments=[exe,'http','http://127.0.0.1:3002','--config='+str(agent_config),'--inspect=false','--log=stdout','--log-format=json']
         previous=values.get('META_WEBHOOK_URL','')
         parsed=urllib.parse.urlsplit(previous)
         # Reuse the already subscribed free ngrok domain when restarting for updates.
@@ -98,7 +127,21 @@ def main():
         print('Mantenha esta janela e a janela do CRM abertas durante o teste. Fechar esta janela encerra o túnel.')
         print('Isso ainda não comprova entrega real de mensagens nem publicação do app na Meta.\n',flush=True)
         runtime.update('ready',callback=callback)
-        while process.poll() is None and not runtime.stop_requested():time.sleep(.5)
+        next_probe=time.monotonic()+30
+        missing=0
+        while process.poll() is None and not runtime.stop_requested():
+            if time.monotonic()>=next_probe:
+                next_probe=time.monotonic()+30
+                try:current=tunnel_url()
+                except (OSError,ValueError):current=None
+                if current and current.rstrip('/')+'/webhooks/whatsapp'==callback:
+                    missing=0
+                    runtime.update('ready',callback=callback)
+                else:
+                    missing+=1
+                    runtime.update('reconnecting',callback=callback)
+                    if missing>=3:break
+            time.sleep(.5)
         print('O túnel foi encerrado pelo agente. Reinicie a conexão antes de testar mensagens.')
     finally:
         if process and process.poll() is None:

@@ -158,11 +158,133 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
                 # WM_CLOSE waits until the update has finished; use exact GUI PID only.
                 ops.powershell('$p=Get-Process -Id '+str(result['pid'])+' -ErrorAction SilentlyContinue; if($p){$p.CloseMainWindow()|Out-Null}')
             finally:
+                from automatic_start import set_enabled, task_prelude
+                set_enabled(root,False)
+                try:ops.powershell(task_prelude(root)+"if($match){Stop-ScheduledTask -TaskName $name; Unregister-ScheduledTask -TaskName $name -Confirm:$false}")
+                except Exception:pass
                 try:ops.stop()
                 except Exception:pass
                 if crm.poll() is None:crm.terminate()
                 crm.wait(timeout=10)
                 other.terminate();other.wait(timeout=10)
+
+
+    def test_boot_task_recovers_app_and_orphan_tunnel_without_interactive_login(self):
+        from automatic_start import install, set_enabled, task_prelude
+        from desktop_worker import WindowsOps, process_roles, update_lock
+        class FixtureOps(WindowsOps):
+            def powershell(self,code,timeout=35):
+                encoded=base64.b64encode(code.encode('utf-16le')).decode('ascii')
+                exe=Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
+                result=subprocess.run([str(exe),'-NoProfile','-NonInteractive','-EncodedCommand',encoded],capture_output=True,timeout=timeout,creationflags=subprocess.CREATE_NO_WINDOW)
+                if result.returncode:
+                    # Only this isolated fixture: no company credentials exist.
+                    raise AssertionError(result.stderr.decode('utf-8',errors='replace')[:4000])
+                value=result.stdout.decode('utf-8-sig').strip()
+                return json.loads(value) if value else None
+        source=Path(__file__).resolve().parent
+        with tempfile.TemporaryDirectory(prefix='SaisBlue boot test ') as folder:
+            root=Path(folder).resolve()
+            subprocess.run([sys.executable,'-m','venv','--without-pip','--system-site-packages',root/'.venv'],check=True,capture_output=True)
+            for script in source.glob('*.py'):
+                if not script.name.startswith('test_'):shutil.copyfile(script,root/script.name)
+            # Exercise the production monitor in a real S4U batch session. Only
+            # shorten the polling wait for this isolated CI fixture.
+            monitor=root/'supervise_crm.py'
+            monitor.write_text(monitor.read_text(encoding='utf-8').replace('sys.exit(run())','sys.exit(run(poll_interval=2))'),encoding='utf-8')
+            (root/'server.py').write_text("RELEASE = 'fixture'\n",encoding='utf-8')
+            (root/'data').mkdir()
+            with sqlite_connection(root/'data/crm.sqlite3') as db:db.execute('CREATE TABLE preserved(name TEXT)')
+            config='CRM_DB=data/crm.sqlite3\nCRM_LISTEN_HOST=127.0.0.1\n'
+            (root/'.env').write_text(config,encoding='utf-8')
+            app='''import json,os,threading
+from http.server import BaseHTTPRequestHandler,HTTPServer
+from pathlib import Path
+from runtime_control import Runtime
+root=Path(__file__).resolve().parent
+class Handler(BaseHTTPRequestHandler):
+ def do_GET(self):
+  self.send_response(200);self.end_headers();self.wfile.write(json.dumps({'ok':True,'application':'sais-blue-crm','version':'fixture'}).encode())
+ def log_message(self,*args):pass
+server=HTTPServer(('127.0.0.1',3000),Handler)
+runtime=Runtime(root,'app');stop=threading.Event()
+runtime.watch(lambda:threading.Thread(target=server.shutdown,daemon=True).start(),stop)
+runtime.update('ready')
+try:server.serve_forever()
+finally:stop.set();server.server_close();runtime.close()
+'''
+            (root/'launch.py').write_text(app,encoding='utf-8')
+            (root/'tools').mkdir()
+            agent=root/'tools/Agent.cs'
+            agent.write_text('using System; using System.Threading; class Agent { static void Main(string[] args) { if(args.Length>0 && args[0]=="version") {Console.WriteLine("ngrok version fixture");return;} while(true) Thread.Sleep(1000); } }')
+            compiler=Path(os.environ['SystemRoot'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+            subprocess.run([str(compiler),'/nologo','/out:'+str(root/'tools/ngrok.exe'),str(agent)],check=True,capture_output=True)
+            controller='''import subprocess,sys,threading
+from pathlib import Path
+from http.server import BaseHTTPRequestHandler,HTTPServer
+from runtime_control import Runtime
+root=Path(__file__).resolve().parent
+class Handler(BaseHTTPRequestHandler):
+ def do_GET(self):self.send_response(404);self.end_headers()
+ def log_message(self,*args):pass
+server=HTTPServer(('127.0.0.1',3002),Handler)
+runtime=Runtime(root,'https');stop=threading.Event()
+runtime.watch(lambda:threading.Thread(target=server.shutdown,daemon=True).start(),stop)
+child=subprocess.Popen([str(root/'tools/ngrok.exe'),'http','http://127.0.0.1:3002','--config='+str(root/'.runtime/ngrok.yml')])
+runtime.update('ready',callback='https://fixture.ngrok-free.dev/webhooks/whatsapp')
+try:server.serve_forever()
+finally:child.terminate();child.wait(timeout=5);stop.set();server.server_close();runtime.close()
+'''
+            (root/'iniciar_https.py').write_text(controller,encoding='utf-8')
+            ops=FixtureOps(root,{})
+            def wait_for(predicate):
+                deadline=time.monotonic()+65
+                while time.monotonic()<deadline:
+                    if predicate():return
+                    time.sleep(1)
+                marker=root/'.runtime/supervisor.json'
+                self.fail('Native recovery not confirmed. Safe monitor state: '+(marker.read_text() if marker.exists() else 'no heartbeat'))
+            def inventory():return process_roles(ops.snapshot(),str(root))
+            def controllers():return {pid for pid,(_,role) in inventory().items() if role=='https'}
+            unrelated=subprocess.Popen([sys.executable,'-c','import time;time.sleep(600)'])
+            try:
+                # Start the monitor using Windows Task Scheduler, not this test's
+                # interactive process. No live Meta credentials or ngrok account.
+                sid=ops.powershell("@{sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}|ConvertTo-Json -Compress")['sid']
+                install(ops,sid)
+                details=ops.powershell(task_prelude(root)+"@{logon=[string]$task.Principal.LogonType;level=[string]$task.Principal.RunLevel;triggers=@($task.Triggers|ForEach-Object {$_.CimClass.CimClassName})}|ConvertTo-Json -Compress")
+                self.assertEqual(details['logon'],'S4U')
+                self.assertEqual(details['level'],'Limited')
+                self.assertIn('MSFT_TaskBootTrigger',details['triggers'])
+                wait_for(ops.health)
+                (root/'.env').write_text(config+'NGROK_AUTHTOKEN=fixture-not-real\n',encoding='utf-8')
+                wait_for(lambda:bool(controllers()))
+                # Kill only the exact port-owning app and observe its recovery.
+                snapshot=ops.snapshot()
+                pid=next(p['pid'] for p in snapshot['ports'] if p['port']==3000)
+                ops.kill(process_roles(snapshot,str(root))[pid][0])
+                wait_for(ops.health)
+                # Kill a gateway; leave its child alive to test orphan cleanup.
+                original=controllers()
+                snapshot=inventory()
+                for pid in original:ops.kill(snapshot[pid][0])
+                wait_for(lambda:bool(controllers()-original))
+                self.assertEqual(sum(role=='ngrok' for _,role in inventory().values()),1)
+                self.assertIsNone(unrelated.poll())
+                with update_lock(root):
+                    set_enabled(root,False)
+                    ops.stop()
+                time.sleep(6)
+                self.assertFalse(ops.health(),'Intentional stop was ignored')
+                set_enabled(root,True)
+                wait_for(ops.health)
+            finally:
+                set_enabled(root,False)
+                try:ops.powershell(task_prelude(root)+"if($match){Stop-ScheduledTask -TaskName $name; Unregister-ScheduledTask -TaskName $name -Confirm:$false}")
+                except Exception:pass
+                try:ops.stop()
+                except Exception:pass
+                unrelated.terminate();unrelated.wait(timeout=10)
 
 
 if __name__=='__main__':unittest.main()

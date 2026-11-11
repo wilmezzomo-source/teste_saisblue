@@ -90,7 +90,7 @@ Abrir https://crm.saisblue.com.br no iPhone com Wi-Fi desligado. Deve aparecer o
 No Safari: Compartilhar → Adicionar à Tela de Início → Adicionar. Abrir pelo ícone Sais Blue CRM. Em Avisos, ativar as notificações deste aparelho e aceitar a permissão do iOS. Requer iOS 16.4 ou superior.
 Tocar em Testar em 10 segundos e bloquear o iPhone. Validar a chegada do aviso. Ajustes de Foco/Notificações do iPhone podem silenciar o som.
 
-O servidor e o CRM precisam permanecer ligados e com internet. A tarefa de HTTPS inicia com o Windows; o CRM continua sendo iniciado pelo aplicativo Sais Blue CRM.
+O servidor precisa permanecer ligado e com internet. A tarefa de HTTPS inicia com o Windows. Na versão 2026.11.11.1 ou superior, Sais Blue CRM → Atualizar e abrir CRM também oferece início automático do CRM e recuperação da conexão; autorize o pedido local do Windows e confira a confirmação na janela.
 A conexão Meta/ngrok de mensagens atual é preservada. Não trocar o callback existente nesta etapa.
 Este arquivo não contém senhas, tokens ou chave privada.
 '''

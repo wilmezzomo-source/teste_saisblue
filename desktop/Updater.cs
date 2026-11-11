@@ -17,7 +17,7 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Sais Blue CRM — Atualizador")]
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("2026.11.10.1")]
+[assembly: AssemblyInformationalVersion("2026.11.11.1")]
 
 internal sealed class UserError : Exception { public UserError(string message) : base(message) {} }
 
@@ -190,7 +190,7 @@ internal sealed class UpdaterForm : Form {
         Text = "Sais Blue CRM"; ClientSize = new Size(680, 550); FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen; Font = new Font("Segoe UI", 10);
         Controls.Add(new Label { Text = "SAIS BLUE CRM", Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = Color.FromArgb(18, 105, 239), AutoSize = true, Left = 24, Top = 20 });
-        Controls.Add(new Label { Text = "Atualizações e acesso em um só aplicativo.", AutoSize = true, Left = 27, Top = 68 });
+        Controls.Add(new Label { Text = "Atualizações, início automático e recuperação da conexão.", AutoSize = true, Left = 27, Top = 68 });
         Controls.Add(new Label { Text = "Pasta original do CRM no servidor", AutoSize = true, Left = 27, Top = 108 });
         folder.SetBounds(27, 133, 500, 30); folder.Text = Program.Discover(hint);
         browse.Text = "Procurar…"; browse.SetBounds(538, 131, 115, 32);
@@ -245,7 +245,7 @@ internal sealed class UpdaterForm : Form {
                     WorkingDirectory = source, UseShellExecute = false, CreateNoWindow = true,
                     RedirectStandardOutput = true, RedirectStandardError = true, StandardOutputEncoding = Encoding.UTF8
                 };
-                string error = null; bool done = false, connectionReady = true;
+                string error = null; bool done = false, connectionReady = true; bool? automaticReady = null;
                 using (var process = Process.Start(info)) {
                     process.ErrorDataReceived += delegate {}; process.BeginErrorReadLine();
                     string line;
@@ -258,12 +258,13 @@ internal sealed class UpdaterForm : Form {
                             if (record.ContainsKey("event") && Convert.ToString(record["event"]) == "error") error = message;
                             if (record.ContainsKey("event") && Convert.ToString(record["event"]) == "done") done = true;
                             if (record.ContainsKey("connection_ready")) connectionReady = Convert.ToBoolean(record["connection_ready"]);
+                            if (record.ContainsKey("automatic_ready")) automaticReady = Convert.ToBoolean(record["automatic_ready"]);
                         } catch {}
                     }
                     process.WaitForExit();
                     if (process.ExitCode != 0 || !done) throw new UserError(error ?? "A operação não foi concluída. Confira a pasta e a permissão da conta Windows.");
                 }
-                if (Program.Shortcut(target)) Report(action == "stop" ? "CRM parado. O atalho Sais Blue CRM permite iniciar novamente." : (connectionReady ? "Pronto. Atalho Sais Blue CRM criado na área de trabalho. Você pode fechar esta janela; o CRM continua funcionando." : "CRM iniciado. A conexão WhatsApp precisa ser reconectada: clique em Iniciar / reconectar. O atalho Sais Blue CRM está na área de trabalho."), 100);
+                if (Program.Shortcut(target)) Report(action == "stop" ? "CRM parado. O início automático respeitará esta parada. Use Iniciar / reconectar para retomar." : (!connectionReady ? "CRM iniciado. A conexão WhatsApp ainda não foi confirmada. O monitor tentará reconectar; confira internet e credenciais se persistir." : automaticReady == true ? "Pronto. Início automático e recuperação ativados. Você pode fechar esta janela; o CRM continuará funcionando e iniciará com o Windows." : "CRM iniciado. Início automático não confirmado: clique em Iniciar / reconectar e autorize o Windows para ativar."), 100);
             });
             if (action != "stop") OpenBrowser();
         } catch (UserError error) { Report(error.Message, 0); }

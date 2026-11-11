@@ -6,17 +6,22 @@ No servidor Windows, baixe **SaisBlue-Atualizador.exe** e abra o arquivo. Ele us
 
 1. O aplicativo tenta localizar a instalação que está rodando. Se o campo estiver vazio, clique em **Procurar** e selecione a pasta original do CRM, onde estão `.env` e `.venv`.
 2. Clique em **Atualizar e abrir CRM**.
-3. Aguarde a conferência do download, parada da aplicação, backup, atualização, validação e reinício. O navegador abre no endereço já configurado.
+3. Aguarde a conferência do download, parada da aplicação, backup, atualização, validação e reinício. Na primeira ativação do início automático, o Windows pedirá autorização de administrador: clique em **Sim**. Essa permissão é exigida pelo Agendador de Tarefas do Windows. Nenhuma senha será gravada pelo CRM.
+4. Confira a mensagem **Início automático e recuperação de falhas ativados**. O navegador abre no endereço já configurado. Se o Windows não autorizar, o CRM inicia normalmente, mas a proteção automática fica pendente; use **Iniciar / reconectar** para tentar ativá-la novamente.
 
 O atalho **Sais Blue CRM** é criado na área de trabalho do usuário do Windows. Nas próximas vezes, abra esse mesmo atalho:
 
 - **Atualizar e abrir CRM:** consulta a versão indicada no repositório autorizado e aplica o pacote automaticamente.
 - **Abrir CRM:** abre o navegador no endereço já configurado.
 - **Iniciar / reconectar:** inicia a aplicação ou tenta restabelecer a conexão HTTPS.
-- **Parar CRM:** encerra somente os processos identificados da instalação selecionada.
+- **Parar CRM:** encerra somente os processos identificados da instalação selecionada. Essa escolha é mantida após reiniciar o Windows, até você usar **Iniciar / reconectar** ou atualizar novamente.
 - **Configurar iPhone e acesso externo:** prepara o app, gera a solicitação para Telium/TI e ativa HTTPS depois de DNS e rede configurados. Atualize e reabra pelo atalho para carregar o novo botão. Veja [IPHONE-E-ACESSO-EXTERNO.md](IPHONE-E-ACESSO-EXTERNO.md).
 
-Depois de concluir, você pode fechar a janela do aplicativo: o CRM e o conector continuam em segundo plano. O servidor Windows precisa permanecer ligado. Este aplicativo não instala um serviço novo nem configura início automático ao reiniciar o Windows; tarefas existentes da aplicação são respeitadas. A equipe continua acessando pelo navegador na rede da empresa, sem instalar esse aplicativo.
+Depois de concluir, você pode fechar a janela do aplicativo. A partir da versão **2026.11.11.1**, uma tarefa própria desta instalação inicia um monitor com o Windows, sem precisar deixar uma conta conectada. Ele recupera o CRM e o túnel de mensagens após falhas. A tarefa usa a conta Windows que aplicou a atualização, com direitos limitados e sem guardar a senha; a confirmação de administrador é necessária apenas para registrá-la. O servidor precisa permanecer ligado e com internet. A equipe continua acessando pelo navegador na rede da empresa, sem instalar esse aplicativo.
+
+O monitor verifica a aplicação e o agente a cada 30 segundos. Falhas recebem novas tentativas espaçadas de 15, 30, 60, 120, 240 e até 300 segundos, respeitando o ciclo de verificação. Ele não cria processos duplicados, aguarda a atualização e preserva a parada manual. Um processo sem resposta recebe um período de tolerância antes de ser reiniciado. Se o próprio monitor falhar, o Agendador do Windows tenta iniciá-lo novamente após um minuto.
+
+A recuperação não resolve servidor desligado, perda de internet, IP da rede alterado, limite/suspensão da conta ngrok ou credencial Meta expirada. O monitor não altera a URL cadastrada na Meta nem envia mensagens de teste para clientes. O diagnóstico local fica em `.runtime/supervisor.json`, sem tokens ou dados dos leads.
 
 ## O que é preservado
 

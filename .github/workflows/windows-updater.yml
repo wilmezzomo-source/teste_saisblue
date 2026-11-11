@@ -2,7 +2,7 @@ name: Windows updater
 on:
   push:
     branches: [crm-windows]
-    paths: ['desktop/**', 'desktop_worker.py', '*update*.py', 'test_*.py', 'test_*.cjs', 'server.py', 'notifications.py', 'web_push.py', 'configurar_iphone.py', 'requirements.txt', 'qualification*.py', 'locations.py', 'public/**', 'runtime_control.py', 'launch.py', 'iniciar_https.py', 'windows-release.json', '.github/workflows/windows-updater.yml', '.github/run_windows_tests.py']
+    paths: ['desktop/**', 'desktop_worker.py', 'automatic_start.py', 'supervise_crm.py', '*update*.py', 'test_*.py', 'test_*.cjs', 'server.py', 'notifications.py', 'web_push.py', 'configurar_iphone.py', 'requirements.txt', 'qualification*.py', 'locations.py', 'public/**', 'runtime_control.py', 'launch.py', 'iniciar_https.py', 'windows-release.json', '.github/workflows/windows-updater.yml', '.github/run_windows_tests.py']
   workflow_dispatch:
 permissions:
   contents: read

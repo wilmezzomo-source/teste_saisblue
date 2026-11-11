@@ -56,6 +56,13 @@ def process_roles(snapshot, target):
             command = (p.get('command') or '').lower()
             if 'http://127.0.0.1:3002' in command:
                 roles[pid] = 'ngrok'
+        # A crashed controller may leave its child alive. Its exact local binary
+        # and explicit config identify the orphan without relying on a reused PID.
+        if canonical(p.get('exe') or '') in (ntpath.join(root,'tools','ngrok.exe'),ntpath.join(root,'ngrok.exe')):
+            tokens=[a or b for a,b in re.findall(r'"([^"]*)"|([^\s]+)',p.get('command') or '')]
+            configs=[canonical(t.split('=',1)[1]) for t in tokens if t.lower().startswith('--config=')]
+            if 'http://127.0.0.1:3002' in tokens and ntpath.join(root,'.runtime','ngrok.yml') in configs:
+                roles[pid]='ngrok'
     for listener in snapshot.get('ports', []):
         allowed = ('app',) if int(listener['port']) == 3000 else ('https',)
         if roles.get(int(listener['pid'])) not in allowed:
@@ -80,10 +87,12 @@ def validate_target(target):
 
 
 @contextmanager
-def update_lock(target):
+def update_lock(target, name='update'):
     runtime = Path(target) / '.runtime'
     runtime.mkdir(exist_ok=True)
-    with (runtime / 'update.lock').open('a+b') as handle:
+    if name not in ('update','supervisor'):
+        raise UpdateError('Controle local inválido.')
+    with (runtime / (name+'.lock')).open('a+b') as handle:
         try:
             handle.seek(0)
             if not handle.read(1): handle.write(b'0'); handle.flush()
@@ -126,11 +135,11 @@ class WindowsOps:
     def encoded_roots(self):
         return base64.b64encode(json.dumps(self.root_aliases).encode()).decode()
 
-    def powershell(self, code):
+    def powershell(self, code, timeout=35):
         encoded = base64.b64encode(code.encode('utf-16le')).decode('ascii')
         exe = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
         r = subprocess.run([str(exe),'-NoProfile','-NonInteractive','-EncodedCommand',encoded],
-                           capture_output=True,timeout=35,creationflags=subprocess.CREATE_NO_WINDOW)
+                           capture_output=True,timeout=timeout,creationflags=subprocess.CREATE_NO_WINDOW)
         if r.returncode:
             raise UpdateError('O Windows não permitiu controlar o processo do CRM. Abra o atualizador na mesma conta que iniciou o CRM ou use Executar como administrador.')
         output = r.stdout.decode('utf-8-sig').strip()
@@ -148,7 +157,12 @@ $own=@($all | Where-Object {
  $_.Name -in @('python.exe','pythonw.exe') -and $match
 })
 $ids=@($own | ForEach-Object {$_.ProcessId})
-$children=@($all | Where-Object { $_.Name -eq 'ngrok.exe' -and $_.ParentProcessId -in $ids })
+$children=@($all | Where-Object {
+ if($_.Name -ne 'ngrok.exe'){return $false}
+ $match=$_.ParentProcessId -in $ids
+ foreach($root in $roots){if($_.ExecutablePath -ieq (Join-Path $root 'tools\ngrok.exe') -or $_.ExecutablePath -ieq (Join-Path $root 'ngrok.exe')){$match=$true}}
+ $match
+})
 $rows=@(@($own)+@($children) | ForEach-Object { @{pid=[int]$_.ProcessId;parent=[int]$_.ParentProcessId;name=$_.Name;exe=$_.ExecutablePath;command=$_.CommandLine;started=$_.CreationDate.ToUniversalTime().ToString('o')} })
 $ports=@(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object {$_.LocalPort -in @(3000,3002)} | ForEach-Object {@{pid=[int]$_.OwningProcess;port=[int]$_.LocalPort}})
 @{processes=$rows;ports=$ports}|ConvertTo-Json -Depth 5 -Compress'''.replace('ROOT_B64',self.encoded_roots())
@@ -227,17 +241,24 @@ if($p) {
 
     def spawn(self, script, args, role):
         folder=self.root/'.runtime';folder.mkdir(exist_ok=True)
-        with (folder/(role+'.log')).open('ab') as log:
+        logfile=folder/(role+'.log')
+        if logfile.exists() and logfile.stat().st_size>2_000_000:
+            os.replace(logfile,logfile.with_suffix('.previous.log'))
+        with logfile.open('ab') as log:
             return subprocess.Popen([str(self.python),str(self.root/script),*map(str,args)],cwd=self.root,
                                     stdin=subprocess.DEVNULL,stdout=log,stderr=log,
                                     creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP)
 
     def start(self, version=None):
         if not self.health(version):
+            # A reconnect can encounter an app that is still opening its database.
+            # Wait for that exact instance instead of spawning another copy.
+            owned=process_roles(self.snapshot(),str(self.root))
+            existing=any(role=='app' for _,role in owned.values())
             if self.task_paused:
                 self.task("Enable-ScheduledTask -TaskName 'SaisBlueCRM'|Out-Null; Start-ScheduledTask -TaskName 'SaisBlueCRM'")
                 self.task_paused=False
-            else:
+            elif not existing:
                 self.spawn('launch.py',['--config',self.root/'.env','serve'],'app')
             deadline=time.monotonic()+25
             while time.monotonic()<deadline:
@@ -253,6 +274,9 @@ if($p) {
         state=self.root/'.runtime/https.json'
         owned=process_roles(self.snapshot(),str(self.root))
         existing=any(role=='https' for _,role in owned.values())
+        if not existing:
+            for record,role in owned.values():
+                if role=='ngrok':self.kill(record)
         try:
             marker=json.loads(state.read_text(encoding='utf-8'))
             if marker.get('status')=='ready' and marker.get('pid') in owned and owned[marker['pid']][1]=='https':
@@ -339,15 +363,30 @@ def main():
     target,values=validate_target(args.target)
     ops=WindowsOps(target,values)
     with update_lock(target):
+        from automatic_start import set_enabled, ensure_automatic
         if args.action=='update':
             if not args.source:raise UpdateError('Pacote da atualização ausente.')
+            set_enabled(target,True)
             update_installation(args.source,target,ops)
         elif args.action=='stop':
+            # Persist the intentional stop across logoff, reboot and supervisor cycles.
+            set_enabled(target,False)
             ops.stop();emit('CRM e conexão HTTPS encerrados.',event='done',progress=100)
         else:
+            set_enabled(target,True)
             emit('Iniciando o CRM e a conexão HTTPS.',progress=50)
             connected=ops.start()
             emit('CRM iniciado. Conexão HTTPS pronta.' if connected else 'CRM iniciado. A conexão HTTPS precisa ser reconectada.',event='done',connection_ready=connected,progress=100)
+        if args.action!='stop':
+            if ops.values.get('NGROK_AUTHTOKEN'):
+                try:
+                    from iniciar_https import prepare_background_ngrok
+                    prepare_background_ngrok(target)
+                except Exception:
+                    emit('O agente ngrok precisa ser conferido para o início automático. A conexão atual foi preservada.',progress=100)
+            emit('Ativando início automático. Se o Windows pedir autorização de administrador, clique em Sim; a tarefa usará sua conta sem guardar senha.',progress=98)
+            automatic=ensure_automatic(ops)
+            emit('Início automático e recuperação de falhas ativados.' if automatic else 'CRM iniciado, mas o Windows não confirmou o início automático. Clique em Iniciar / reconectar e autorize o Windows; se persistir, peça à TI permissão para tarefas em segundo plano.',automatic_ready=automatic,progress=100)
 
 
 if __name__=='__main__':
