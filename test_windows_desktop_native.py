@@ -174,7 +174,7 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
 
     def test_boot_task_recovers_app_and_orphan_tunnel_without_interactive_login(self):
         from automatic_start import ensure_automatic, set_enabled, task_prelude
-        from desktop_worker import WindowsOps, process_roles, update_lock
+        from desktop_worker import WindowsOps, UpdateError, process_roles, update_lock
         class FixtureOps(WindowsOps):
             def powershell(self,code,timeout=35):
                 encoded=base64.b64encode(code.encode('utf-16le')).decode('ascii')
@@ -243,7 +243,13 @@ finally:child.terminate();child.wait(timeout=5);stop.set();server.server_close()
             def wait_for(predicate):
                 deadline=time.monotonic()+65
                 while time.monotonic()<deadline:
-                    if predicate():return
+                    try:
+                        if predicate():return
+                    except UpdateError:
+                        # CIM process inventory and TCP listeners are separate OS
+                        # snapshots. During a restart a newly bound PID can appear
+                        # between them. Never relax identity checks; query again.
+                        pass
                     time.sleep(1)
                 marker=root/'.runtime/supervisor.json'
                 self.fail('Native recovery not confirmed. Safe monitor state: '+(marker.read_text() if marker.exists() else 'no heartbeat'))
