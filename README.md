@@ -6,6 +6,8 @@ No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e co
 
 **Novo:** início automático com o Windows e monitor de recuperação do CRM/ngrok. Ao aplicar, autorize o pedido local de administrador do Windows; a tarefa executa com a conta original e direitos limitados, sem gravar senha. Não exige manter uma sessão aberta. Respeita a parada manual e aguarda o backup/atualização. O túnel continua publicando apenas o webhook. A causa da indisponibilidade relatada na empresa ainda não foi confirmada; publicar esta correção não comprova recuperação daquele servidor.
 
+Código e aplicativo entregue aprovados em **120 testes no Windows**, incluindo tarefa automática, recuperação e atualização pelo canal público. Evidências e limites em [VALIDACAO-INICIO-AUTOMATICO.md](VALIDACAO-INICIO-AUTOMATICO.md).
+
 [Baixar o aplicativo para Windows](https://github.com/wilmezzomo-source/teste_saisblue/raw/refs/heads/crm-windows/desktop/SaisBlue-Atualizador.exe). O canal `windows-release.json` fixa um commit imutável e a integridade SHA-256 conferida. Não confundir publicação do pacote com teste no servidor da empresa; a aplicação no servidor da empresa é feita pelo próprio aplicativo, sob a conta Windows que opera o CRM.
 
 Versão própria para funil comercial e atendimento. O administrador original vê todos os cards, inclusive os sem responsável. Atendentes veem e editam apenas os atribuídos às próprias contas e podem cadastrar oportunidades manuais para si. O administrador gerencia acessos e transferências. Dados centralizados em SQLite, com autenticação Flask e execução por Waitress em Windows ou Linux.
