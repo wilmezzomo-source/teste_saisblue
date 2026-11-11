@@ -6,7 +6,8 @@ import unittest
 from unittest.mock import patch
 
 from automatic_start import is_enabled, set_enabled, task_identity, task_prelude, task_status
-from desktop_worker import UpdateError, process_roles, update_lock
+from desktop_worker import UpdateError, WindowsOps, process_roles, update_lock
+from update_windows import settings
 from supervise_crm import Supervisor
 
 
@@ -22,6 +23,8 @@ class RecoveryTest(unittest.TestCase):
         self.ops.health=lambda:self.ops.healthy
         self.ops.spawn=lambda script,args,role:self.ops.spawned.append(role)
         self.ops.kill=lambda record:self.ops.killed.append(record)
+        def reload():self.ops.values=settings(self.root/'.env')
+        self.ops.reload=reload
         def stop():self.ops.stopped+=1
         self.ops.stop=stop
         self.roles=patch('supervise_crm.process_roles',side_effect=lambda *args:self.owned).start()
@@ -110,6 +113,18 @@ class RecoveryTest(unittest.TestCase):
 
 
 class StartupScopeTest(unittest.TestCase):
+    def test_monitor_reloads_local_address_without_querying_public_targets(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            config=root/'.env'
+            ops=WindowsOps(root,{'CRM_LISTEN_HOST':'127.0.0.1'})
+            config.write_text('CRM_LISTEN_HOST=192.168.0.219\n')
+            ops.reload()
+            self.assertEqual(ops.base,'http://192.168.0.219:3000')
+            config.write_text('CRM_LISTEN_HOST=8.8.8.8\n')
+            with self.assertRaises(UpdateError):ops.reload()
+            self.assertEqual(ops.base,'http://192.168.0.219:3000')
+
     def test_task_scoped_to_installation_and_requires_limited_noninteractive_identity(self):
         first=task_identity(Path('/tmp/CRM one'))
         second=task_identity(Path('/tmp/CRM two'))

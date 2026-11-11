@@ -8,7 +8,6 @@ import time
 
 from automatic_start import is_enabled, write_state
 from desktop_worker import WindowsOps, UpdateError, process_roles, update_lock, validate_target
-from update_windows import settings
 
 ROOT=Path(__file__).resolve().parent
 
@@ -41,7 +40,7 @@ class Supervisor:
             if not is_enabled(self.ops.root):
                 self.state('paused',message='Parado pelo aplicativo. Use Iniciar / reconectar para retomar.')
                 return
-            self.ops.values=settings(self.ops.root/'.env')
+            self.ops.reload()
             snapshot=self.ops.snapshot()
             owned=process_roles(snapshot,str(self.ops.root))
             roles={role for _,role in owned.values()}

@@ -134,6 +134,9 @@ if(!$found -or $button -eq [IntPtr]::Zero) {
                             record=json.loads(manifest.read_text())
                             print('::error title=Downloaded public release manifest::'+json.dumps({k:record.get(k) for k in ('version','commit','sha256')}),flush=True)
                     self.assertTrue(ops.health(release_version),'GUI update did not start the verified new version')
+                    if (root/'automatic_start.py').is_file():
+                        from automatic_start import task_status
+                        self.assertTrue(task_status(ops).get('enabled'),'GUI update did not enable automatic startup')
                     self.assertEqual((root/'.env').read_text(encoding='utf-8'),config)
                     with sqlite_connection(root/'data/crm.sqlite3') as db:
                         self.assertEqual(db.execute("SELECT name FROM contacts WHERE id='fixture'").fetchone()[0],'Preserved customer')
@@ -271,7 +274,7 @@ finally:child.terminate();child.wait(timeout=5);stop.set();server.server_close()
                 wait_for(lambda:bool(controllers()-original))
                 self.assertEqual(sum(role=='ngrok' for _,role in inventory().values()),1)
                 self.assertIsNone(unrelated.poll())
-                with update_lock(root):
+                with update_lock(root,timeout=30):
                     set_enabled(root,False)
                     ops.stop()
                 time.sleep(6)

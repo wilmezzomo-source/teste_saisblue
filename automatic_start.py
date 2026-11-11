@@ -45,7 +45,7 @@ def task_prelude(root):
     return f'''$ErrorActionPreference='Stop'
 [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 $name={ps_literal(name)}; $python={ps_literal(python)}; $crmArgs={ps_literal(args)}
-$task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+$task=Get-ScheduledTask -TaskPath '\\' -TaskName $name -ErrorAction SilentlyContinue
 $match=$task -and @($task.Actions).Count -eq 1 -and $task.Actions[0].Execute -ieq $python -and $task.Actions[0].Arguments -ceq $crmArgs
 '''
 
@@ -65,7 +65,14 @@ def ensure_automatic(ops):
             try:
                 ops.powershell(task_prelude(ops.root)+"if($match){Start-ScheduledTask -TaskName $name}")
             except Exception:return False
-        return True
+        deadline=time.monotonic()+20
+        while time.monotonic()<deadline:
+            try:
+                state=json.loads((ops.root/'.runtime/supervisor.json').read_text(encoding='utf-8'))
+                if time.time()-state.get('updated',0)<90 and task_status(ops).get('running',False):return True
+            except (OSError,ValueError):pass
+            time.sleep(1)
+        return False
     try:
         identity=ops.powershell("@{sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value}|ConvertTo-Json -Compress")
         args=subprocess.list2cmdline([str(ops.root/'automatic_start.py'),'--target',str(ops.root),'--owner-sid',identity['sid']])

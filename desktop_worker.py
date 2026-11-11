@@ -87,24 +87,29 @@ def validate_target(target):
 
 
 @contextmanager
-def update_lock(target, name='update'):
+def update_lock(target, name='update', timeout=0):
     runtime = Path(target) / '.runtime'
     runtime.mkdir(exist_ok=True)
     if name not in ('update','supervisor'):
         raise UpdateError('Controle local inválido.')
     with (runtime / (name+'.lock')).open('a+b') as handle:
-        try:
-            handle.seek(0)
-            if not handle.read(1): handle.write(b'0'); handle.flush()
-            handle.seek(0)
-            if sys.platform == 'win32':
-                import msvcrt
-                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-            else:
-                import fcntl
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            raise UpdateError('Já existe uma atualização em andamento nesta instalação.') from None
+        deadline=time.monotonic()+timeout
+        while True:
+            try:
+                handle.seek(0)
+                if not handle.read(1): handle.write(b'0'); handle.flush()
+                handle.seek(0)
+                if sys.platform == 'win32':
+                    import msvcrt
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic()>=deadline:
+                    raise UpdateError('Já existe uma atualização ou verificação em andamento nesta instalação. Aguarde alguns segundos e tente novamente.') from None
+                time.sleep(.2)
         try:
             yield
         finally:
@@ -117,11 +122,7 @@ class WindowsOps:
     def __init__(self, target, values):
         self.root, self.values = Path(target), values
         self.python = self.root / '.venv/Scripts/python.exe'
-        host = values.get('CRM_LISTEN_HOST', '127.0.0.1')
-        address = ipaddress.ip_address(host)
-        if not (address.is_private or address.is_loopback):
-            raise UpdateError('Endereço local do CRM inválido. A configuração foi preservada.')
-        self.base = 'http://' + host + ':3000'
+        self.base = self.local_base(values)
         self.transport = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         self.task_paused = False
         self.last_task_enabled = False
@@ -131,6 +132,19 @@ class WindowsOps:
             buffer=ctypes.create_unicode_buffer(32768)
             if ctypes.windll.kernel32.GetShortPathNameW(str(self.root),buffer,len(buffer)):
                 self.root_aliases.append(buffer.value)
+
+    @staticmethod
+    def local_base(values):
+        host = values.get('CRM_LISTEN_HOST', '127.0.0.1')
+        address = ipaddress.ip_address(host)
+        if not (address.is_private or address.is_loopback):
+            raise UpdateError('Endereço local do CRM inválido. A configuração foi preservada.')
+        return 'http://' + host + ':3000'
+
+    def reload(self):
+        values=settings(self.root/'.env')
+        self.base=self.local_base(values)
+        self.values=values
 
     def encoded_roots(self):
         return base64.b64encode(json.dumps(self.root_aliases).encode()).decode()
@@ -362,7 +376,8 @@ def main():
     args=parser.parse_args()
     target,values=validate_target(args.target)
     ops=WindowsOps(target,values)
-    with update_lock(target):
+    emit('Aguardando a conferência local antes de alterar a instalação.',progress=30)
+    with update_lock(target,timeout=45):
         from automatic_start import set_enabled, ensure_automatic
         if args.action=='update':
             if not args.source:raise UpdateError('Pacote da atualização ausente.')
