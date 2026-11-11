@@ -253,6 +253,10 @@ finally:child.terminate();child.wait(timeout=5);stop.set();server.server_close()
             try:
                 # Start the monitor using Windows Task Scheduler, not this test's
                 # interactive process. No live Meta credentials or ngrok account.
+                # Reproduce a C:\ installation created by an administrator:
+                # limited tasks cannot depend on an Administrators-only grant.
+                from configure_connections import ps_literal
+                ops.powershell("& icacls "+ps_literal(root)+" /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' | Out-Null; if($LASTEXITCODE -ne 0){throw 'Fixture ACL failed'}")
                 with update_lock(root,timeout=30):
                     self.assertTrue(ensure_automatic(ops),'Elevated startup registration was not confirmed')
                 details=ops.powershell(task_prelude(root)+"@{logon=[string]$task.Principal.LogonType;level=[string]$task.Principal.RunLevel;triggers=@($task.Triggers|ForEach-Object {$_.CimClass.CimClassName})}|ConvertTo-Json -Compress")
@@ -271,7 +275,7 @@ finally:child.terminate();child.wait(timeout=5);stop.set();server.server_close()
                 original=controllers()
                 snapshot=inventory()
                 for pid in original:ops.kill(snapshot[pid][0])
-                wait_for(lambda:bool(controllers()-original))
+                wait_for(lambda:bool(controllers()-original) and sum(role=='ngrok' for _,role in inventory().values())==1)
                 self.assertEqual(sum(role=='ngrok' for _,role in inventory().values()),1)
                 self.assertIsNone(unrelated.poll())
                 with update_lock(root,timeout=30):

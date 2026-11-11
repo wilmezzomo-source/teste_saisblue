@@ -100,6 +100,11 @@ def install(ops, owner_sid):
 if($task -and !$match) {{throw 'Já existe uma tarefa diferente com este nome.'}}
 $sid=[Security.Principal.SecurityIdentifier]::new({ps_literal(owner_sid)})
 $account=$sid.Translate([Security.Principal.NTAccount]).Value
+# Files created in an elevated C:\ installation can otherwise be writable only
+# through the Administrators group, which a LIMITED task cannot use. Grant only
+# the original operator access to this installation; do not change other ACLs.
+& icacls {ps_literal(ops.root)} /grant ('*'+$sid.Value+':(OI)(CI)M') | Out-Null
+if($LASTEXITCODE -ne 0) {{throw 'Não foi possível permitir o acesso da conta à instalação.'}}
 $action=New-ScheduledTaskAction -Execute $python -Argument $crmArgs -WorkingDirectory {ps_literal(ops.root)}
 $principal=New-ScheduledTaskPrincipal -UserId $account -LogonType S4U -RunLevel Limited
 $triggers=@((New-ScheduledTaskTrigger -AtStartup),(New-ScheduledTaskTrigger -AtLogOn -User $account))
