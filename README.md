@@ -6,6 +6,8 @@
 
 **Atendimento:** “comprar para mim”, “pra mim” e variações de uso próprio identificam Consumidor Final. A finalidade explícita da compra prevalece sobre a profissão declarada; finalidades conflitantes exigem esclarecimento. A confirmação final apenas informa que o atendimento foi registrado e uma consultora entrará em contato, sem nome. A responsável continua registrada internamente no CRM.
 
+Versão 2026.11.12.1 validada em **124 testes no Windows** e no Chromium, incluindo a atualização pelo executável entregue. Evidências em [VALIDACAO-EDICAO-E-ATENDIMENTO.md](VALIDACAO-EDICAO-E-ATENDIMENTO.md). Depois de atualizar o servidor, recarregue a página do CRM nos computadores da equipe.
+
 No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e confere o pacote, para somente os processos do CRM, faz backup, atualiza e reinicia em segundo plano. Cria um atalho com opções de abrir, iniciar/reconectar e parar. Veja [ATUALIZAR-COM-UM-APLICATIVO.md](ATUALIZAR-COM-UM-APLICATIVO.md). O aplicativo usa o Python e o banco já instalados, sem extrair ZIP manualmente. Inclui os ajustes de qualificação e tags da versão anterior.
 
 **Novo:** início automático com o Windows e monitor de recuperação do CRM/ngrok. Ao aplicar, autorize o pedido local de administrador do Windows; a tarefa executa com a conta original e direitos limitados, sem gravar senha. Não exige manter uma sessão aberta. Respeita a parada manual e aguarda o backup/atualização. O túnel continua publicando apenas o webhook. A causa da indisponibilidade relatada na empresa ainda não foi confirmada; publicar esta correção não comprova recuperação daquele servidor.
