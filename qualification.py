@@ -10,6 +10,7 @@ from notifications import notify_assigned
 
 PROFILES = ('Lojista', 'Revenda', 'Consumidor Final')
 WELCOME = 'Oi! Sou o assistente virtual da Sais Blue. '
+COMPLETION = 'Seu atendimento foi registrado. Em breve, uma consultora entrará em contato com você por aqui.'
 REMINDER_OFFSETS = (20*60, 3*3600, 8*3600)
 MIN_REMINDER_GAP = 60*60
 FINAL_REMINDER_AFTER = 23*3600+50*60
@@ -30,15 +31,31 @@ def parse_profile(body):
     aliases = {
         'Lojista': ('lojista', 'tenho loja', 'tenho uma loja', 'possuo loja', 'possuo uma loja'),
         'Revenda': ('revenda','revendedor','revendedora','quero revender','revendo','revender'),
-        'Consumidor Final': ('consumidor final','consumidora final','consumidor','consumidora','cliente final','uso proprio','para mim'),
+        'Consumidor Final': ('consumidor final','consumidora final','consumidor','consumidora','cliente final',
+                             'uso proprio','uso pessoal','uso individual','para mim','pra mim','p mim',
+                             'para min','pra min','para eu usar','pra eu usar','para meu uso','pra meu uso'),
     }
-    matches = set()
+    scores = {}
+    def affirmative(match):
+        return not {'nao','nem'}.intersection(value[:match.start()].split()[-3:])
     for profile, phrases in aliases.items():
         for phrase in phrases:
             for match in re.finditer(r'\b'+re.escape(phrase)+r'\b', value):
-                if not {'nao','nem'}.intersection(value[:match.start()].split()[-3:]):
-                    matches.add(profile)
-    return next(iter(matches)) if len(matches)==1 else None
+                if affirmative(match):scores[profile]=1
+    # The purpose of this purchase is stronger evidence than occupation alone:
+    # "tenho loja, mas quero comprar para mim" is personal use. Conflicting
+    # explicit purchase purposes still require clarification instead of a guess.
+    purposes=(
+        ('Consumidor Final',r'\b(?:comprar|compro|compra|comprando|quero)\s+(?:\w+\s+){0,4}(?:para|pra|p)\s+(?:mim|min)\b'),
+        ('Consumidor Final',r'\b(?:uso (?:proprio|pessoal|individual)|(?:para|pra) (?:eu (?:usar|vestir)|meu (?:uso|consumo)))\b'),
+        ('Revenda',r'\b(?:quero|vou|pretendo|interesse em|comprar para|comprar pra)\s+(?:revender|revenda)\b'),
+        ('Lojista',r'\b(?:comprar|compra|compro)\s+(?:para|pra)\s+(?:(?:a|minha|uma)\s+)?loja\b'),
+    )
+    for profile,pattern in purposes:
+        if any(affirmative(match) for match in re.finditer(pattern,value)):
+            scores[profile]=2
+    matches=[profile for profile,score in scores.items() if score==max(scores.values())] if scores else []
+    return matches[0] if len(matches)==1 else None
 
 
 def next_question(profile, pending_city='', pending_state='', variant=0):
@@ -167,7 +184,7 @@ def process_answer(db, cid, incoming_id, body, created, audit):
     asked=db.execute("SELECT created FROM messages WHERE contact_id=? AND automation=1 AND automation_kind='question' AND automation_step=? AND status IN ('accepted','sent','delivered','read','sending','uncertain') ORDER BY created DESC LIMIT 1",(cid,step)).fetchone()
     suppress=unchanged and asked and time.time()-asked['created']<120
     attempt=c['qualification_attempts']+1 if step==c['qualification_state'] else 0
-    reply=next_question(profile,pending_city,pending_state,attempt) if step!='completed' else f"Perfeito! Anotei {city['name']}/{city['state']}. Seus dados ficaram salvos para continuarmos por aqui."
+    reply=next_question(profile,pending_city,pending_state,attempt) if step!='completed' else COMPLETION
     cancel_pending(db, cid)
     db.execute('UPDATE contacts SET lead_profile=?,qualification_state=?,qualification_attempts=?,qualification_last_at=?,updated=?,revision=revision+1 WHERE id=?',
                (profile,step,attempt,created,time.time(),cid))
@@ -178,15 +195,13 @@ def process_answer(db, cid, incoming_id, body, created, audit):
         db.execute('UPDATE contacts SET city_id=?,city=?,state=? WHERE id=?',(city['id'],city['name'],city['state'],cid))
     if step=='completed':
         audit(db, 'Perfil e localização qualificados', cid, {'perfil':profile,'cidade':city['name'],'uf':city['state']}, actor='Assistente Sais Blue')
-        person=assign_qualified(db,cid,c['owner_id'],config,profile,city,audit)
-        if person:
-            reply=f"Perfeito! Anotei {city['name']}/{city['state']}. Sua conversa foi direcionada para {person['name']}."
+        assign_qualified(db,cid,c['owner_id'],config,profile,city,audit)
     if suppress:
         due=next_reminder_due(created,0,time.time())
         db.execute('UPDATE qualification_progress SET next_due=? WHERE contact_id=?',(due,cid))
         return
     introduced=db.execute("SELECT 1 FROM messages WHERE contact_id=? AND automation=1 AND status IN ('accepted','sent','delivered','read','sending','uncertain') LIMIT 1",(cid,)).fetchone()
-    if not introduced:
+    if not introduced and step!='completed':
         reply=WELCOME+reply
     enqueue(db,cid,incoming_id,reply,step,cycle=incoming_id)
 
@@ -401,6 +416,11 @@ def process_outbox(app, connect, transmit, audit):
             if last and time.time()-last>=WINDOW and current_cycle:
                 db.execute("UPDATE qualification_progress SET next_due=0,closed_reason='window_closed' WHERE contact_id=?",(c['id'],))
             return True
+        # Upgrade only unsent automatic confirmations, including older queued
+        # messages containing the responsible person's name. Preserve history.
+        if row['automation_step']=='completed' and row['body']!=COMPLETION:
+            db.execute('UPDATE messages SET body=? WHERE id=?',(COMPLETION,row['id']))
+            row=db.execute('SELECT * FROM messages WHERE id=?',(row['id'],)).fetchone()
         if not app.config['META_ACCESS_TOKEN'] or not app.config['META_PHONE_NUMBER_ID']:
             db.execute("UPDATE messages SET status='failed' WHERE id=?", (row['id'],))
             handover(db, c['id'], audit, 'Credenciais de envio indisponíveis')

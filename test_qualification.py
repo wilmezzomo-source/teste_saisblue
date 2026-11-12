@@ -7,7 +7,7 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
-from qualification import parse_city, routing_group, REMINDER_OFFSETS, FINAL_REMINDER_AFTER
+from qualification import parse_city, parse_profile, routing_group, COMPLETION, REMINDER_OFFSETS, FINAL_REMINDER_AFTER
 from unittest.mock import patch
 from server import create_app, database, password, run_automation_once
 
@@ -159,9 +159,39 @@ class QualificationTest(unittest.TestCase):
                 self.assertEqual(c['owner_id'],expected.lower())
                 self.assertFalse(c['location_pending'])
                 self.assertEqual(c['qualification_state'],'completed')
+                self.assertEqual(self.sent[-1]['text']['body'],COMPLETION)
                 self.assertEqual(len([m for m in c['messages'] if m['automation']]),3)
                 self.receive('Obrigado',number=number); self.drain()
                 self.assertEqual(len([m for m in self.contact(number)['messages'] if m['automation']]),3)
+
+    def test_personal_purchase_phrases_mean_consumer_and_respect_negations(self):
+        for body in ('comprar para mim','quero comprar para mim','comprar pra mim','comprar pra min',
+                     'quero peças para eu usar','pra meu uso','uso próprio','uso pessoal',
+                     'tenho loja, mas quero comprar para mim','sou revendedora, mas hoje vou comprar pra mim',
+                     'não quero revender, só comprar para mim'):
+            with self.subTest(body=body):self.assertEqual(parse_profile(body),'Consumidor Final')
+        for body,expected in (('Não é para mim, quero revender','Revenda'),('Não é uso próprio, quero comprar para minha loja','Lojista'),
+                              ('quero comprar para mim e quero revender',None),('comprar para minha loja e para mim',None)):
+            with self.subTest(body=body):self.assertEqual(parse_profile(body),expected)
+        self.enable()
+        self.receive('Olá, quero comprar pra mim',ad=True);self.drain()
+        self.assertEqual((self.contact()['lead_profile'],self.contact()['qualification_state']),('Consumidor Final','waiting_city'))
+        self.assertNotIn('1 — Lojista',self.sent[-1]['text']['body'])
+        self.receive('Guaporé RS');self.drain()
+        self.assertEqual((self.contact()['owner_id'],self.contact()['stage']),('grasi','Novo contato'))
+        self.assertEqual(self.sent[-1]['text']['body'],COMPLETION)
+
+    def test_queued_confirmation_uses_neutral_text_and_keeps_assignee_internal(self):
+        self.enable()
+        self.receive('Quero comprar para mim',ad=True);self.drain()
+        self.receive('São Paulo SP')
+        with database(self.app) as db:
+            db.execute("UPDATE messages SET body='Sua conversa foi direcionada para Grasi.' WHERE automation=1 AND status='queued' AND automation_step='completed'")
+        self.drain()
+        c=self.contact()
+        self.assertEqual(c['owner_id'],'grasi')
+        self.assertEqual(self.sent[-1]['text']['body'],COMPLETION)
+        self.assertEqual(c['messages'][-1]['body'],COMPLETION)
 
     def test_duplicate_webhooks_and_competing_workers_send_one_question(self):
         self.enable()

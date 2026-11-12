@@ -30,6 +30,10 @@ Os testes automatizados usam transporte Meta simulado e relógio controlado para
 
 ## Contexto e pausas
 
+“Comprar para mim”, “comprar pra mim”, “para eu usar” e “uso pessoal” identificam Consumidor Final. A finalidade explícita da compra pode prevalecer sobre a profissão informada, como “tenho loja, mas quero comprar para mim”. Negações são respeitadas; duas finalidades explícitas conflitantes pedem esclarecimento.
+
+Ao concluir, a mensagem é: **Seu atendimento foi registrado. Em breve, uma consultora entrará em contato com você por aqui.** O nome da responsável não é enviado ao cliente. A distribuição continua aparecendo apenas na ficha, nos avisos e no histórico interno. Confirmações automáticas antigas ainda na fila são atualizadas antes do envio; mensagens já enviadas são preservadas.
+
 “Tenho interesse em revender” já identifica Revenda. “Tenho interesse” seguido de “3” identifica Consumidor Final; uma mensagem de continuação não repete a pergunta feita há menos de dois minutos. Partes de uma cidade enviadas em sequência podem ser combinadas. A apresentação ocorre uma vez por conversa.
 
 Ao atualizar, conversas pendentes com localização suficiente no histórico são corrigidas e encaminhadas, sem enviar uma nova mensagem de WhatsApp. Retomadas antigas já esgotadas não são reiniciadas. O horário e o total já enviados são preservados ao migrar a cadência.
