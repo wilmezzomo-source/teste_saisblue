@@ -9,10 +9,15 @@ CITY_BY_ID = {city['id']: city for city in CITIES}
 STATES = sorted({city['state'] for city in CITIES})
 
 
-def location_fields(city_id):
+def location_fields(city_id, *, required=True, state=''):
+    if not city_id and not required:
+        state=str(state or '').strip().upper()
+        if state and state not in STATES:
+            raise ValueError('Selecione um estado válido.')
+        return {'city_id':'', 'city':'', 'state':state}
     city = CITY_BY_ID.get(str(city_id or ''))
     if city is None:
-        raise ValueError('Selecione uma cidade e estado válidos. A localização é obrigatória.')
+        raise ValueError('Selecione uma cidade e estado válidos.'+(' A localização é obrigatória.' if required else ''))
     return {'city_id':city['id'], 'city':city['name'], 'state':city['state']}
 
 

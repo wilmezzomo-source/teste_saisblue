@@ -30,7 +30,7 @@ from qualification import PROFILES, is_ad_referral, settings as qualification_se
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.11.1'
+RELEASE = '2026.11.12.1'
 
 
 class Problem(Exception):
@@ -777,7 +777,7 @@ def create_app(config=None):
             if not patch['name']:
                 raise Problem('Informe o nome do cliente.')
         if 'city_id' in d:
-            patch.update(location_fields(d['city_id']))
+            patch.update(location_fields(d['city_id'], required=False, state=d.get('state_picker',d.get('state',''))))
         if 'instagram' in patch:
             patch['instagram'] = instagram_handle(patch['instagram'])
         if not patch or not isinstance(d.get('revision'), int):
@@ -796,8 +796,6 @@ def create_app(config=None):
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
             row = accessible_contact(db, d.get('id'))
-            if set(patch) != {'name'} and not patch.get('city_id',row['city_id']):
-                raise Problem('Preencha cidade e estado na ficha antes de alterar esta oportunidade.')
             if row['revision'] != d['revision']:
                 raise Problem('Este card foi atualizado por outra pessoa. Recarregue os dados e revise sua alteração.', 409)
             if 'owner' in patch or 'owner_id' in patch:

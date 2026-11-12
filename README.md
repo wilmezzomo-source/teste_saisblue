@@ -1,12 +1,14 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.11.1
+## Aplicativo único para atualizar — 2026.11.12.1
+
+**Edição sem bloqueio de localização:** perfil, responsável, valor, observação, Instagram e etapa do funil podem ser alterados mesmo sem cidade/UF. A ficha aceita salvar só a UF e completar a cidade depois. Cards pendentes continuam visíveis; o pin no mapa depende de um município válido. Permissões por responsável e proteção contra alterações simultâneas são preservadas.
 
 No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e confere o pacote, para somente os processos do CRM, faz backup, atualiza e reinicia em segundo plano. Cria um atalho com opções de abrir, iniciar/reconectar e parar. Veja [ATUALIZAR-COM-UM-APLICATIVO.md](ATUALIZAR-COM-UM-APLICATIVO.md). O aplicativo usa o Python e o banco já instalados, sem extrair ZIP manualmente. Inclui os ajustes de qualificação e tags da versão anterior.
 
 **Novo:** início automático com o Windows e monitor de recuperação do CRM/ngrok. Ao aplicar, autorize o pedido local de administrador do Windows; a tarefa executa com a conta original e direitos limitados, sem gravar senha. Não exige manter uma sessão aberta. Respeita a parada manual e aguarda o backup/atualização. O túnel continua publicando apenas o webhook. A causa da indisponibilidade relatada na empresa ainda não foi confirmada; publicar esta correção não comprova recuperação daquele servidor.
 
-Código e aplicativo entregue aprovados em **120 testes no Windows**, incluindo tarefa automática, recuperação e atualização pelo canal público. Evidências e limites em [VALIDACAO-INICIO-AUTOMATICO.md](VALIDACAO-INICIO-AUTOMATICO.md).
+O início automático da versão 2026.11.11.1 foi aprovado em **120 testes no Windows**, incluindo tarefa automática, recuperação e atualização pelo canal público. Evidências e limites em [VALIDACAO-INICIO-AUTOMATICO.md](VALIDACAO-INICIO-AUTOMATICO.md).
 
 [Baixar o aplicativo para Windows](https://github.com/wilmezzomo-source/teste_saisblue/raw/refs/heads/crm-windows/desktop/SaisBlue-Atualizador.exe). O canal `windows-release.json` fixa um commit imutável e a integridade SHA-256 conferida. Não confundir publicação do pacote com teste no servidor da empresa; a aplicação no servidor da empresa é feita pelo próprio aplicativo, sob a conta Windows que opera o CRM.
 

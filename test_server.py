@@ -219,7 +219,7 @@ class CRMTest(unittest.TestCase):
             self.assertEqual(db.execute('SELECT COUNT(*) FROM contacts').fetchone()[0],1)
             self.assertEqual(db.execute('SELECT COUNT(*) FROM users').fetchone()[0],2)
 
-    def test_required_location_and_instagram_normalization(self):
+    def test_optional_location_edit_keeps_catalog_and_instagram_validation(self):
         self.signed(self.meta_payload())
         row=self.client.get('/api/contacts').json['contacts'][0]
         fields={'id':row['id'],'revision':row['revision']}
@@ -231,7 +231,12 @@ class CRMTest(unittest.TestCase):
         self.assertFalse(row['location_pending'])
         self.assertAlmostEqual(row['latitude'],-29.1662,places=3)
         fields={'id':row['id'],'revision':row['revision']}
-        self.assertEqual(self.post('/api/update',{**fields,'city_id':''}).status_code,400)
+        self.assertEqual(self.post('/api/update',{**fields,'city_id':''}).status_code,200)
+        row=self.client.get('/api/contacts').json['contacts'][0]
+        self.assertTrue(row['location_pending'])
+        self.assertEqual((row['city_id'],row['city'],row['state']),('','',''))
+        self.assertIsNone(row['latitude'])
+        fields={'id':row['id'],'revision':row['revision']}
         self.assertEqual(self.post('/api/update',{**fields,'instagram':'https://evil.test/saisblue'}).status_code,400)
         self.assertEqual(self.post('/api/update',{**fields,'instagram':'javascript:alert(1)'}).status_code,400)
         self.assertEqual(self.post('/api/update',{**fields,'city_id':'3550308','instagram':'@outro.perfil'}).status_code,200)
@@ -239,19 +244,51 @@ class CRMTest(unittest.TestCase):
         self.assertEqual((row['city'],row['state'],row['instagram']),('São Paulo','SP','outro.perfil'))
         self.assertEqual(row['audit'][0]['actor'],'admin')
 
-    def test_whatsapp_without_location_is_preserved_and_must_be_completed(self):
+    def test_whatsapp_without_location_can_edit_every_field_and_funnel_stage(self):
         self.assertEqual(self.signed(self.meta_payload()).status_code,200)
         row=self.client.get('/api/contacts').json['contacts'][0]
         self.assertTrue(row['location_pending'])
         self.assertIsNone(row['latitude'])
         self.assertEqual(len(row['messages']),1)
-        self.assertEqual(self.post('/api/update',{'id':row['id'],'revision':row['revision'],'stage':'Em atendimento'}).status_code,400)
-        self.assertEqual(self.post('/api/update',{'id':row['id'],'revision':row['revision'],'city_id':'4302105','stage':'Em atendimento'}).status_code,200)
+        from server import STAGES
+        for stage in STAGES:
+            result=self.post('/api/update',{'id':row['id'],'revision':row['revision'],'stage':stage})
+            self.assertEqual(result.status_code,200,result.json)
+            row=self.client.get('/api/contacts').json['contacts'][0]
+            self.assertEqual(row['stage'],stage)
+            self.assertTrue(row['location_pending'])
+        result=self.post('/api/update',{'id':row['id'],'revision':row['revision'],'name':'Nome confirmado',
+                                       'lead_profile':'Revenda','instagram':'@saisblue','value':1500,'note':'Localização depois',
+                                       'city_id':'','owner_id':'member-id'})
+        self.assertEqual(result.status_code,200,result.json)
+        row=self.member.get('/api/contacts').json['contacts'][0]
+        self.assertEqual((row['lead_profile'],row['name'],row['value'],row['note'],row['instagram']),
+                         ('Revenda','Nome confirmado',1500,'Localização depois','saisblue'))
+        self.assertTrue(row['location_pending'])
+        result=self.post('/api/update',{'id':row['id'],'revision':row['revision'],'city_id':'4302105','stage':'Em atendimento'})
+        self.assertEqual(result.status_code,200,result.json)
         self.signed(self.meta_payload())
         row=self.client.get('/api/contacts').json['contacts'][0]
         self.assertFalse(row['location_pending'])
         self.assertEqual(len(row['messages']),1)
         self.assertEqual(row['city'],'Bento Gonçalves')
+
+    def test_state_can_be_saved_without_city_and_other_edits_keep_partial_location(self):
+        self.signed(self.meta_payload())
+        row=self.client.get('/api/contacts').json['contacts'][0]
+        def update(fields):
+            nonlocal row
+            result=self.post('/api/update',{'id':row['id'],'revision':row['revision'],**fields})
+            self.assertEqual(result.status_code,200,result.json)
+            row=self.client.get('/api/contacts').json['contacts'][0]
+        update({'city_id':'','state_picker':'SC','lead_profile':'Lojista'})
+        self.assertEqual((row['city_id'],row['city'],row['state']),('','','SC'))
+        self.assertTrue(row['location_pending'])
+        update({'note':'Cidade ainda não informada','stage':'Negociação'})
+        self.assertEqual(row['state'],'SC')
+        self.assertEqual(self.post('/api/update',{'id':row['id'],'revision':row['revision'],'city_id':'','state_picker':'XX'}).status_code,400)
+        update({'city_id':'','state_picker':''})
+        self.assertEqual(row['state'],'')
 
     def test_existing_prototype_migrates_without_data_loss(self):
         legacy=Path(self.temp.name)/'legacy.db'

@@ -17,7 +17,7 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Sais Blue CRM — Atualizador")]
 [assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("2026.11.11.1")]
+[assembly: AssemblyInformationalVersion("2026.11.12.1")]
 
 internal sealed class UserError : Exception { public UserError(string message) : base(message) {} }
 

@@ -75,6 +75,23 @@ class AccessControlTest(unittest.TestCase):
             self.assertEqual(c['messages'],[])
             self.assertEqual(c['note'],'')
 
+    def test_missing_location_does_not_block_own_edits_or_bypass_assignment_and_revision(self):
+        own,foreign,unassigned=self.create('grasi'),self.create('chai'),self.create('')
+        with database(self.app) as db:
+            db.execute("UPDATE contacts SET city_id='',city='',state=''")
+        for row in (foreign,unassigned):
+            result=self.post('grasi','/api/update',{'id':row['id'],'revision':row['revision'],'lead_profile':'Lojista','stage':'Ganho','city_id':''})
+            self.assertEqual(result.status_code,404)
+        for owner_id in ('chai',''):
+            self.assertEqual(self.post('grasi','/api/update',{'id':own['id'],'revision':own['revision'],'owner_id':owner_id}).status_code,403)
+        result=self.post('grasi','/api/update',{'id':own['id'],'revision':own['revision'],'lead_profile':'Consumidor Final',
+                                             'stage':'Negociação','value':350,'note':'Aguardando endereço','city_id':''})
+        self.assertEqual(result.status_code,200,result.json)
+        self.assertEqual(self.post('grasi','/api/update',{'id':own['id'],'revision':own['revision'],'stage':'Perdido'}).status_code,409)
+        row=self.rows('grasi')[0]
+        self.assertEqual((row['stage'],row['lead_profile'],row['owner_id']),('Negociação','Consumidor Final','grasi'))
+        self.assertTrue(row['location_pending'])
+
     def test_member_can_create_edit_own_but_cannot_transfer_unassign_or_elevate(self):
         c = self.create('grasi',actor='grasi')
         self.assertEqual(c['owner_id'],'grasi')

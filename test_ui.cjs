@@ -85,7 +85,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.11.1"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.12.1"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
   assert.equal(appManifest.display,'standalone');
@@ -546,6 +546,57 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.locator('#notification-count').waitFor({state:'hidden'});
   await member.screenshot({path:__dirname+'/preview-notifications.png',fullPage:true});
   await member.getByRole('button',{name:'Fechar avisos',exact:true}).click();
+  // A lead with no city/UF must remain editable through the form and Kanban.
+  const pendingId=await admin.evaluate(async owner_id=>{
+    await api('/api/simulate',{name:'Lead sem localização',phone:'5554999997881',body:'Olá pelo anúncio'});
+    const row=(await api('/api/contacts')).contacts.find(c=>c.phone==='5554999997881');
+    await api('/api/update',{id:row.id,revision:row.revision,owner_id});
+    return row.id;
+  },seller.id);
+  const editing=await b.newPage();
+  await editing.goto(base+'/');
+  await editing.locator('body[data-auth=ready]').waitFor();
+  const pendingCard=()=>editing.locator(`.card[data-contact="${pendingId}"]`);
+  await pendingCard().click();
+  assert.equal(await editing.locator('#detail-form [name=state_picker]').getAttribute('required'),null);
+  assert.equal(await editing.locator('#detail-form [name=city_id]').getAttribute('required'),null);
+  await editing.locator('#detail-form [name=lead_profile]').selectOption('Revenda');
+  await editing.locator('#detail-form [name=stage]').selectOption('Ganho');
+  await editing.locator('#detail-form [name=value]').fill('180');
+  await editing.locator('#detail-form [name=note]').fill('Cidade será informada depois');
+  await editing.locator('#detail-form [name=instagram]').fill('@saisblue');
+  const savePending=async()=>{
+    const response=editing.waitForResponse(r=>r.url().endsWith('/api/update') && r.request().method()==='POST');
+    await editing.getByRole('button',{name:'Salvar oportunidade',exact:true}).click();
+    assert.equal((await response).status(),200);
+    await editing.getByRole('status').filter({hasText:'Oportunidade atualizada.'}).waitFor();
+  };
+  const pendingRow=()=>editing.evaluate(async id=>(await api('/api/contacts')).contacts.find(c=>c.id===id),pendingId);
+  await savePending();
+  let saved=await pendingRow();
+  assert.equal(saved.lead_profile,'Revenda');assert.equal(saved.stage,'Ganho');assert.equal(saved.location_pending,true);
+  assert.equal(saved.value,180);assert.equal(saved.instagram,'saisblue');assert.equal(saved.owner_id,seller.id);
+  await editing.locator('#close-detail').click();
+  const dragData=await editing.evaluateHandle(()=>new DataTransfer());
+  await pendingCard().dispatchEvent('dragstart',{dataTransfer:dragData});
+  await editing.locator('.column[data-stage="Negociação"]').dispatchEvent('dragover',{dataTransfer:dragData});
+  await editing.locator('.column[data-stage="Negociação"]').dispatchEvent('drop',{dataTransfer:dragData});
+  await editing.getByRole('status').filter({hasText:'Etapa atualizada.'}).waitFor();
+  assert.equal((await pendingRow()).stage,'Negociação');
+  await pendingCard().click();
+  await editing.locator('#detail-form [name=state_picker]').selectOption('SC');
+  await savePending();
+  saved=await pendingRow();assert.equal(saved.state,'SC');assert.equal(saved.city_id,'');assert.equal(saved.location_pending,true);
+  await editing.locator('#detail-form [name=value]').fill('210');
+  await savePending();assert.equal((await pendingRow()).state,'SC');
+  await editing.locator('#detail-form [name=state_picker]').selectOption('');
+  await savePending();assert.equal((await pendingRow()).state,'');
+  await editing.locator('#detail-form [name=state_picker]').selectOption('RS');
+  await editing.locator('#detail-form [name=city_id]').selectOption('4302105');
+  await savePending();
+  saved=await pendingRow();assert.equal(saved.location_pending,false);assert.equal(saved.city,'Bento Gonçalves');
+  assert.equal(saved.note,'Cidade será informada depois');
+  await editing.close();
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({
@@ -566,7 +617,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: editar nome, avisos privados com som e sem perder rascunhos, abrir WhatsApp pelo número do contato, filtros combinados de responsável e perfil, etiquetas dos cards, exclusão e restauração, acesso restrito, mapa, anúncios, qualificação, distribuição, indicadores e mobile.",
+    "UI OK: edição e movimento de cards sem cidade/UF, localização parcial e mapa, editar nome, avisos privados com som e sem perder rascunhos, WhatsApp, filtros combinados, exclusão e restauração, acesso restrito, anúncios, qualificação, distribuição, indicadores e mobile.",
   );
 })()
   .catch((e) => {

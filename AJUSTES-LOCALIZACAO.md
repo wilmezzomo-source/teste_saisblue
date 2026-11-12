@@ -10,7 +10,7 @@
 
 ## Contatos existentes e WhatsApp
 
-A atualização adiciona colunas ao banco existente sem apagar contatos, conversas, usuários ou senhas. Contatos anteriores sem localização ficam sinalizados como pendentes. É necessário preencher cidade/UF antes de salvar alterações da oportunidade ou mover seu card.
+A atualização adiciona colunas ao banco existente sem apagar contatos, conversas, usuários ou senhas. Contatos anteriores sem localização ficam sinalizados como pendentes. A partir de **2026.11.12.1**, a localização não bloqueia a edição de campos ou a mudança da etapa do funil, tanto pela ficha quanto ao arrastar o card. A UF pode ser salva antes da cidade, e a localização pode ser completada ou removida depois. O mapa só apresenta um pin quando há um município válido.
 
 Mensagens reais do WhatsApp são preservadas mesmo quando o cliente ainda não informou sua cidade: criar um cadastro pendente é necessário para não descartar o atendimento. A equipe deve completar a localização na ficha. A API do WhatsApp não informa automaticamente a cidade/UF no evento comum de mensagem. Notas e atendimento continuam disponíveis enquanto a localização é completada.
 

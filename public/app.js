@@ -423,7 +423,7 @@ function detail(id) {
     ref = JSON.parse(c.referral);
   } catch {}
   $("#detail").innerHTML =
-    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div>${whatsappAction}<span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Preencha cidade e estado para mapear este cliente. O WhatsApp não informa a cidade automaticamente.</div>' : ""}${qualificationTools(c)}<form id="detail-form"><div class="detail-grid">${profileInput(c)}${locationInputs(c)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label>${ownerInput(c)}<label>Observação<input name="note" value="${esc(c.note)}" maxlength="5000"></label></div><div class="dialog-actions"><button type="button" class="secondary" id="refresh-detail">Recarregar card</button><button class="primary">Salvar oportunidade</button></div></form>${ref ? `<div class="referral">↓ Origem do anúncio: ${esc(ref.headline || ref.source_id || "Anúncio Meta")}${ref.ctwa_clid ? "<br>Identificador de clique recebido da Meta." : ""}</div>` : ""}<h3>Histórico do contato</h3><div class="conversation">${c.messages.length ? c.messages.map((m) => `<div class="message ${m.direction === "note" ? "note" : ""}">${esc(m.body)}<small>${esc(m.author || "")}${m.author ? " · " : ""}${m.direction === "note" ? "Nota interna" : m.direction === "out" ? "WhatsApp enviado" : "Mensagem recebida"}${m.channel === "simulation" ? " · Simulação" : ""}${m.direction === "out" ? " · " + esc(statusLabel(m.status)) : ""}${m.error_code ? " · Código " + esc(m.error_code) + ": " + esc(m.error_detail) : ""} · ${date(m.created)}</small></div>`).join("") : "<p>Nenhuma mensagem ou nota registrada.</p>"}</div><form id="note-form"><label>Nova nota interna<textarea name="body" required maxlength="5000" placeholder="Registre o próximo passo ou detalhes do atendimento."></textarea></label><p>Notas ficam no CRM. Não são enviadas pelo WhatsApp.</p><div class="dialog-actions"><button class="secondary">Adicionar nota</button></div></form>${sendView(c)}${auditView(c)}`;
+    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div>${whatsappAction}<span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Cidade/UF pendentes para o mapa. Você pode editar esta oportunidade e mudar a etapa do funil enquanto completa a localização.</div>' : ""}${qualificationTools(c)}<form id="detail-form"><div class="detail-grid">${profileInput(c)}${locationInputs(c, false)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label>${ownerInput(c)}<label>Observação<input name="note" value="${esc(c.note)}" maxlength="5000"></label></div><div class="dialog-actions"><button type="button" class="secondary" id="refresh-detail">Recarregar card</button><button class="primary">Salvar oportunidade</button></div></form>${ref ? `<div class="referral">↓ Origem do anúncio: ${esc(ref.headline || ref.source_id || "Anúncio Meta")}${ref.ctwa_clid ? "<br>Identificador de clique recebido da Meta." : ""}</div>` : ""}<h3>Histórico do contato</h3><div class="conversation">${c.messages.length ? c.messages.map((m) => `<div class="message ${m.direction === "note" ? "note" : ""}">${esc(m.body)}<small>${esc(m.author || "")}${m.author ? " · " : ""}${m.direction === "note" ? "Nota interna" : m.direction === "out" ? "WhatsApp enviado" : "Mensagem recebida"}${m.channel === "simulation" ? " · Simulação" : ""}${m.direction === "out" ? " · " + esc(statusLabel(m.status)) : ""}${m.error_code ? " · Código " + esc(m.error_code) + ": " + esc(m.error_detail) : ""} · ${date(m.created)}</small></div>`).join("") : "<p>Nenhuma mensagem ou nota registrada.</p>"}</div><form id="note-form"><label>Nova nota interna<textarea name="body" required maxlength="5000" placeholder="Registre o próximo passo ou detalhes do atendimento."></textarea></label><p>Notas ficam no CRM. Não são enviadas pelo WhatsApp.</p><div class="dialog-actions"><button class="secondary">Adicionar nota</button></div></form>${sendView(c)}${auditView(c)}`;
   $("#close-detail").onclick = () => $("#detail-dialog").close();
   $("#refresh-detail").onclick = async () => {
     await load();
@@ -472,9 +472,16 @@ function detail(id) {
       } finally {button.disabled=false;}
     };
   }
-  $("#detail-form").onsubmit = async (e) => {
+  const detailForm=$("#detail-form"), initialLocation={city:detailForm.elements.city_id.value,state:detailForm.elements.state_picker.value};
+  detailForm.onsubmit = async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(e.target));
+    // Location is independent of other edits. Disabled city selects are omitted
+    // by FormData, so send an explicit empty value when the operator clears UF.
+    const selectedCity=e.target.elements.city_id.value;
+    if(selectedCity===initialLocation.city && data.state_picker===initialLocation.state) {
+      delete data.city_id;delete data.state_picker;
+    } else data.city_id=selectedCity;
     try {
       const result = await api("/api/update", {
         id,
@@ -768,8 +775,9 @@ function requestKey() {
   ).join("");
 }
 
-function locationInputs(c = {}) {
-  return `<label>Estado / UF <span class="required">*</span><select name="state_picker" data-location-state required><option value="">Selecione o estado</option>${states.map((s) => `<option value="${s}" ${s === c.state ? "selected" : ""}>${s}</option>`).join("")}</select></label><label>Cidade <span class="required">*</span><select name="city_id" data-location-city required ${!c.state ? "disabled" : ""}><option value="">Selecione a cidade</option>${cities
+function locationInputs(c = {}, required = true) {
+  const marker=required?'<span class="required">*</span>':'(opcional)', attribute=required?'required':'';
+  return `<label>Estado / UF ${marker}<select name="state_picker" data-location-state ${attribute}><option value="">Selecione o estado</option>${states.map((s) => `<option value="${s}" ${s === c.state ? "selected" : ""}>${s}</option>`).join("")}</select></label><label>Cidade ${marker}<select name="city_id" data-location-city ${attribute} ${!c.state ? "disabled" : ""}><option value="">Selecione a cidade</option>${cities
     .filter((city) => city.state === c.state)
     .map(
       (city) =>
