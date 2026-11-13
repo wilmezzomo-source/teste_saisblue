@@ -85,7 +85,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.12.1"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.13.1"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
   assert.equal(appManifest.display,'standalone');
@@ -377,7 +377,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await whatsapp('Guaporé/RS');
   await admin.waitForFunction(async()=>{
     const data=await fetch('/api/contacts').then(r=>r.json());
-    return data.contacts.find(c=>c.phone==='5554999997444')?.messages.some(m=>m.automation && m.status==='accepted' && m.body.includes('Anotei'));
+    return data.contacts.find(c=>c.phone==='5554999997444')?.messages.some(m=>m.automation && m.status==='accepted' && m.body.includes('Seu atendimento foi registrado'));
   });
   await admin.locator('[data-view=pipeline]').click();
   await admin.locator('.card').filter({hasText:'Lead qualificado UI'}).waitFor({timeout:15000});
@@ -398,7 +398,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.getByRole('heading',{name:'Resultados por perfil'}).waitFor();
   assert.equal(await admin.locator('[data-profile-summary]').count(),1);
   await admin.locator('#profile-filter').selectOption('');
-  assert.equal(await admin.locator('[data-profile-summary]').count(),4);
+  assert.equal(await admin.locator('[data-profile-summary]').count(),5);
   await admin.screenshot({path:__dirname+'/preview-profiles.png',fullPage:true});
   await admin.locator('#profile-filter').selectOption('Lojista');
   await admin.locator('[data-view=map]').click();
@@ -597,6 +597,37 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   saved=await pendingRow();assert.equal(saved.location_pending,false);assert.equal(saved.city,'Bento Gonçalves');
   assert.equal(saved.note,'Cidade será informada depois');
   await editing.close();
+  // White/Private Label is an additional profile, private to its responsible
+  // account, with structured observations that survive a normal form save.
+  await whatsapp('Quero White Label, sou de Curitiba PR',true,'5554999997998');
+  await admin.waitForFunction(async()=>{
+    const rows=(await fetch('/api/contacts').then(r=>r.json())).contacts;
+    const c=rows.find(c=>c.phone==='5554999997998');
+    return c?.qualification_state==='waiting_label' && c.messages.some(m=>m.automation && m.status==='accepted' && m.body.includes('marca'));
+  });
+  await whatsapp('Minha marca é Urban.Fit, giro 800 peças por mês',false,'5554999997998');
+  await admin.waitForFunction(async()=>{
+    const c=(await fetch('/api/contacts').then(r=>r.json())).contacts.find(c=>c.phone==='5554999997998');
+    return c?.owner_id==='admin-test' && c.qualification_state==='completed';
+  });
+  await admin.locator('[data-view=pipeline]').click();
+  await admin.locator('#profile-filter').selectOption('Marca própria (PL/WL)');
+  await admin.evaluate(async()=>load());
+  assert.equal(await admin.locator('.card').count(),1);
+  await admin.locator('.profile-tag.label').waitFor();
+  await admin.locator('.card').click();
+  const labelObservations=await admin.locator('#detail-form [name=note]').inputValue();
+  assert.match(labelObservations,/Marca: Urban\.Fit/);assert.match(labelObservations,/Volume mensal: 800/);
+  assert.ok(labelObservations.includes('\n'));
+  await admin.locator('#detail-form [name=value]').fill('1500');
+  await admin.getByRole('button',{name:'Salvar oportunidade',exact:true}).click();
+  await admin.getByRole('status').filter({hasText:'Oportunidade atualizada.'}).waitFor();
+  assert.equal(await admin.locator('#detail-form [name=note]').inputValue(),labelObservations);
+  const labelPrivate=await member.evaluate(async()=>(await api('/api/contacts')).contacts.some(c=>c.phone==='5554999997998'));
+  assert.equal(labelPrivate,false);
+  await admin.locator('#close-detail').click();
+  await admin.locator('[data-view=reports]').click();
+  await admin.locator('[data-profile-summary="Marca própria (PL/WL)"]').waitFor();
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({

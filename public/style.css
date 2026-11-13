@@ -29,6 +29,7 @@
 .profile-tag.lojista { background:#e9f1ff; color:#1e61c3; }
 .profile-tag.revenda { background:#f1eafb; color:#774ca6; }
 .profile-tag.consumidor { background:#e4f6ed; color:#237458; }
+.profile-tag.label { background:#e1f3f4; color:#14666e; }
 .profile-tag.pending { background:#f3f0e7; color:#837043; }
 #profile-filter, #owner-filter { max-width:210px; }
 .danger { background:#fff0f0; border:1px solid #f1caca; color:#a33838; padding:10px 14px; border-radius:7px; }

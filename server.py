@@ -25,12 +25,12 @@ from locations import CITIES, CITY_BY_ID, STATES, location_fields, instagram_han
 from sqlite_context import connection
 from notifications import notify_created, notify_assigned, notify_restored
 from web_push import public_key as push_public_key, validate_subscription
-from qualification import PROFILES, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
+from qualification import PROFILES, ACTIVE_STEPS, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
 
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.12.1'
+RELEASE = '2026.11.13.1'
 
 
 class Problem(Exception):
@@ -130,7 +130,12 @@ def init_db(app):
         if 'deleted_at' not in columns:
             db.execute('ALTER TABLE contacts ADD COLUMN deleted_at REAL NOT NULL DEFAULT 0')
         for table, additions in {
-            'qualification_progress': [('cadence_version','INTEGER NOT NULL DEFAULT 1')],
+            'qualification_progress': [('cadence_version','INTEGER NOT NULL DEFAULT 1'),
+                ('label_data',"TEXT NOT NULL DEFAULT '{}'"),('label_asked_at','REAL NOT NULL DEFAULT 0'),
+                ('label_due','REAL NOT NULL DEFAULT 0'),('label_note',"TEXT NOT NULL DEFAULT ''"),
+                ('auto_lost_at','REAL NOT NULL DEFAULT 0'),('auto_lost_revision','INTEGER NOT NULL DEFAULT -1'),
+                ('auto_lost_note',"TEXT NOT NULL DEFAULT ''"),
+                ('last_intent',"TEXT NOT NULL DEFAULT ''"),('last_intent_at','REAL NOT NULL DEFAULT 0')],
             'contacts': [('revision', 'INTEGER NOT NULL DEFAULT 0'), ('city_id', "TEXT NOT NULL DEFAULT ''"), ('city', "TEXT NOT NULL DEFAULT ''"), ('state', "TEXT NOT NULL DEFAULT ''"), ('instagram', "TEXT NOT NULL DEFAULT ''"), ('ad_origin', 'INTEGER NOT NULL DEFAULT 0'), ('manual_origin', 'INTEGER NOT NULL DEFAULT 0'), ('lead_profile', "TEXT NOT NULL DEFAULT ''"), ('qualification_state', "TEXT NOT NULL DEFAULT 'not_started'"), ('qualification_attempts', 'INTEGER NOT NULL DEFAULT 0'), ('qualification_last_at', 'REAL NOT NULL DEFAULT 0')],
             'messages': [('channel', "TEXT NOT NULL DEFAULT 'local'"), ('status', "TEXT NOT NULL DEFAULT ''"), ('external_id', 'TEXT'), ('author', "TEXT NOT NULL DEFAULT ''"), ('error_code','INTEGER'), ('error_detail', "TEXT NOT NULL DEFAULT ''"), ('automation', 'INTEGER NOT NULL DEFAULT 0'), ('automation_step', "TEXT NOT NULL DEFAULT ''"), ('send_started', 'REAL NOT NULL DEFAULT 0'), ('automation_kind',"TEXT NOT NULL DEFAULT 'question'"), ('automation_cycle',"TEXT NOT NULL DEFAULT ''")],
         }.items():
@@ -565,14 +570,14 @@ def create_app(config=None):
                 row['location_pending'] = city is None
                 row['latitude'] = city['lat'] if city else None
                 row['longitude'] = city['lng'] if city else None
-                progress = db.execute('SELECT next_due,reminders_sent,closed_reason FROM qualification_progress WHERE contact_id=?',(row['id'],)).fetchone()
+                progress = db.execute('SELECT next_due,reminders_sent,closed_reason,label_due FROM qualification_progress WHERE contact_id=?',(row['id'],)).fetchone()
                 row['qualification_reminders'] = dict(progress) if progress else None
                 pause=db.execute("SELECT details FROM audit WHERE contact_id=? AND action='Qualificação encaminhada à equipe' ORDER BY id DESC LIMIT 1",(row['id'],)).fetchone() if row['qualification_state']=='human' else None
                 try:
                     row['qualification_pause_reason']=json.loads(pause['details']).get('motivo','') if pause else ''
                 except (ValueError,TypeError):
                     row['qualification_pause_reason']='Atendimento automático pausado; confira o histórico.'
-                if row['qualification_state'] in ('waiting_profile','waiting_city') and not automation_enabled:
+                if row['qualification_state'] in ACTIVE_STEPS and not automation_enabled:
                     row['qualification_pause_reason']='Atendimento automático desativado em Integrações.'
                 last_bot=db.execute("SELECT status,error_code,error_detail FROM messages WHERE contact_id=? AND automation=1 ORDER BY created DESC,rowid DESC LIMIT 1",(row['id'],)).fetchone()
                 row['qualification_last_send']=dict(last_bot) if last_bot else None
@@ -725,9 +730,9 @@ def create_app(config=None):
         instagram = instagram_handle(d.get('instagram', ''))
         profile = d.get('lead_profile', '')
         stage = d.get('stage', STAGES[0])
-        note = text(d.get('note', ''))
+        note = text(d.get('note', ''),20000)
         if profile not in ('', *PROFILES):
-            raise Problem('Selecione Lojista, Revenda ou Consumidor Final.')
+            raise Problem('Selecione um perfil válido do cliente.')
         if stage not in STAGES:
             raise Problem('Etapa inválida.')
         value = float(d.get('value', 0))
@@ -785,14 +790,14 @@ def create_app(config=None):
         if 'stage' in patch and patch['stage'] not in STAGES:
             raise Problem('Etapa inválida.')
         if 'lead_profile' in patch and patch['lead_profile'] not in ('', *PROFILES):
-            raise Problem('Selecione Lojista, Revenda ou Consumidor Final.')
+            raise Problem('Selecione um perfil válido do cliente.')
         if 'value' in patch:
             patch['value'] = float(patch['value'])
             if not math.isfinite(patch['value']) or not 0 <= patch['value'] <= 1e12:
                 raise Problem('Valor inválido.')
         for key in ('owner', 'note'):
             if key in patch:
-                patch[key] = text(patch[key], 120 if key == 'owner' else 5000)
+                patch[key] = text(patch[key], 120 if key == 'owner' else 20000)
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
             row = accessible_contact(db, d.get('id'))
@@ -804,8 +809,9 @@ def create_app(config=None):
             db.execute(f'UPDATE contacts SET {assignments},updated=?,revision=revision+1 WHERE id=?', (*patch.values(), now(), row['id']))
             if 'owner_id' in patch:
                 notify_assigned(db,row['id'],row['owner_id'],g.user['id'])
-            if patch.get('owner', 'Sem responsável') != 'Sem responsável' or patch.get('stage', STAGES[0]) != STAGES[0]:
-                if row['qualification_state'] in ('waiting_profile', 'waiting_city'):
+            manual_change=any(key!='name' and row[key]!=value for key,value in patch.items())
+            if (row['qualification_state']=='waiting_label' and manual_change) or patch.get('owner', 'Sem responsável') != 'Sem responsável' or patch.get('stage', STAGES[0]) != STAGES[0]:
+                if row['qualification_state'] in ACTIVE_STEPS:
                     handover(db, row['id'], audit, 'Atendimento assumido pela equipe')
             changes = {key: {'antes': row[key], 'depois': value} for key, value in patch.items() if row[key] != value}
             audit(db, 'Oportunidade atualizada', row['id'], changes)
@@ -870,7 +876,7 @@ def create_app(config=None):
             config = {'enabled':enabled,'assignment_mode':mode,'regional_owners':{p:owners.get(p,'') for p in ('chai','grasi')}}
             db.execute("INSERT INTO crm_settings VALUES('qualification',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(config),))
             if not enabled:
-                for c in db.execute("SELECT id FROM contacts WHERE qualification_state IN ('waiting_profile','waiting_city')").fetchall():
+                for c in db.execute("SELECT id FROM contacts WHERE qualification_state IN ('waiting_profile','waiting_city','waiting_label')").fetchall():
                     handover(db, c['id'], audit, 'Atendimento automático desativado')
                 db.execute("UPDATE messages SET status='cancelled' WHERE automation=1 AND status='queued'")
             audit(db, 'Configuração do primeiro atendimento alterada', details=config)
@@ -943,7 +949,7 @@ def create_app(config=None):
             last = db.execute("SELECT MAX(created) FROM messages WHERE contact_id=? AND direction='in' AND channel='meta'", (contact['id'],)).fetchone()[0]
             if not last or now() - last >= 24 * 3600:
                 raise Problem('Janela de atendimento de 24 horas encerrada. Aguarde uma nova mensagem do cliente; envio por template ainda não disponível.', 409)
-            if contact['qualification_state'] in ('waiting_profile', 'waiting_city'):
+            if contact['qualification_state'] in ACTIVE_STEPS:
                 handover(db, contact['id'], audit, 'Resposta enviada pela equipe no CRM')
             db.execute('INSERT INTO messages(id,contact_id,body,direction,created,channel,status,author) VALUES(?,?,?,?,?,?,?,?)', (mid, contact['id'], body, 'out', now(), 'meta', 'pending', g.user['name']))
             audit(db, 'Envio solicitado', contact['id'])

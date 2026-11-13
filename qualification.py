@@ -7,8 +7,11 @@ import time
 from qualification_location import (normalize, parse_city, accumulate_location, display_city,
                                     CITY_LOOKUP, CITY_NAMES, STATE_NAMES, STATE_ALIASES)
 from notifications import notify_assigned
+from qualification_dialogue import (LABEL_PROFILE, LABEL_WAIT, is_label_interest, conversation_location,
+    conversational_reply, answer_intent, label_details, label_complete, label_question, label_note, merge_managed_note)
 
-PROFILES = ('Lojista', 'Revenda', 'Consumidor Final')
+PROFILES = ('Lojista', 'Revenda', 'Consumidor Final', LABEL_PROFILE)
+ACTIVE_STEPS = ('waiting_profile','waiting_city','waiting_label')
 WELCOME = 'Oi! Sou o assistente virtual da Sais Blue. '
 COMPLETION = 'Seu atendimento foi registrado. Em breve, uma consultora entrará em contato com você por aqui.'
 REMINDER_OFFSETS = (20*60, 3*3600, 8*3600)
@@ -25,6 +28,7 @@ def is_ad_referral(referral):
 
 def parse_profile(body):
     value = normalize(body)
+    if is_label_interest(body):return LABEL_PROFILE
     numbered = re.fullmatch(r'(?:opcao )?([123])', value)
     if numbered:
         return PROFILES[int(numbered[1])-1]
@@ -33,7 +37,9 @@ def parse_profile(body):
         'Revenda': ('revenda','revendedor','revendedora','quero revender','revendo','revender'),
         'Consumidor Final': ('consumidor final','consumidora final','consumidor','consumidora','cliente final',
                              'uso proprio','uso pessoal','uso individual','para mim','pra mim','p mim',
-                             'para min','pra min','para eu usar','pra eu usar','para meu uso','pra meu uso'),
+                             'para min','pra min','para eu usar','pra eu usar','para meu uso','pra meu uso',
+                             'pro meu uso','para meu consumo','pra meu consumo','para uso proprio','para uso pessoal',
+                             'vou usar','eu usar','uso meu'),
     }
     scores = {}
     def affirmative(match):
@@ -48,7 +54,7 @@ def parse_profile(body):
     purposes=(
         ('Consumidor Final',r'\b(?:comprar|compro|compra|comprando|quero)\s+(?:\w+\s+){0,4}(?:para|pra|p)\s+(?:mim|min)\b'),
         ('Consumidor Final',r'\b(?:uso (?:proprio|pessoal|individual)|(?:para|pra) (?:eu (?:usar|vestir)|meu (?:uso|consumo)))\b'),
-        ('Revenda',r'\b(?:quero|vou|pretendo|interesse em|comprar para|comprar pra)\s+(?:revender|revenda)\b'),
+        ('Revenda',r'\b(?:quero|vou|pretendo|interesse em|comprar para|comprar pra)(?: (?:comecar|iniciar|trabalhar|atuar)(?: a| com)?)?\s+(?:revender|revenda)\b'),
         ('Lojista',r'\b(?:comprar|compra|compro)\s+(?:para|pra)\s+(?:(?:a|minha|uma)\s+)?loja\b'),
     )
     for profile,pattern in purposes:
@@ -61,7 +67,7 @@ def parse_profile(body):
 def next_question(profile, pending_city='', pending_state='', variant=0):
     if not profile:
         return (
-            'Você compra para sua loja, para revender ou para uso próprio?\n1 — Lojista\n2 — Revenda\n3 — Consumidor Final',
+            'Você está procurando peças para seu uso, para revender ou para uma loja?',
             'Para eu te direcionar: você tem loja, trabalha com revenda ou procura peças para você?',
             'A compra é para loja, revenda ou uso próprio?',
         )[variant%3]
@@ -99,15 +105,18 @@ def settings(db):
 
 
 def routing_group(profile, state):
+    if profile==LABEL_PROFILE:return 'willian'
     return 'chai' if profile=='Lojista' or (profile=='Revenda' and state in ('RS','SC')) else 'grasi'
 
 
 def cancel_pending(db, cid):
     db.execute("UPDATE messages SET status='cancelled' WHERE contact_id=? AND automation=1 AND status='queued'", (cid,))
-    db.execute('UPDATE qualification_progress SET next_due=0 WHERE contact_id=?',(cid,))
+    db.execute('UPDATE qualification_progress SET next_due=0,label_due=0 WHERE contact_id=?',(cid,))
 
 
 def handover(db, cid, audit, reason):
+    if reason in TECHNICAL_PAUSES:
+        undo_loss_after_failure(db,cid,audit)
     cancel_pending(db, cid)
     db.execute("UPDATE qualification_progress SET closed_reason='paused' WHERE contact_id=?",(cid,))
     db.execute("UPDATE contacts SET qualification_state='human',updated=?,revision=revision+1 WHERE id=?", (time.time(), cid))
@@ -117,6 +126,112 @@ def handover(db, cid, audit, reason):
 def enqueue(db, cid, incoming_id, body, step, kind='question', cycle=''):
     mid = 'bot:' + hashlib.sha256(incoming_id.encode()).hexdigest()
     db.execute("INSERT OR IGNORE INTO messages(id,contact_id,body,direction,created,channel,status,author,automation,automation_step,automation_kind,automation_cycle) VALUES(?,?,?,'out',?,'meta','queued','Assistente Sais Blue',1,?,?,?)", (mid, cid, body, time.time(), step,kind,cycle))
+
+
+def primary_administrator(db):
+    saved=db.execute("SELECT value FROM crm_settings WHERE key='workspace_admin'").fetchone()
+    if saved:
+        return db.execute("SELECT id,name FROM users WHERE id=? AND active=1 AND role='admin'",(saved['value'],)).fetchone()
+    return db.execute("SELECT id,name FROM users WHERE role='admin' AND active=1 ORDER BY created,id LIMIT 1").fetchone()
+
+
+def save_label_details(db, cid, data, audit):
+    progress=db.execute('SELECT label_note FROM qualification_progress WHERE contact_id=?',(cid,)).fetchone()
+    contact=db.execute('SELECT note FROM contacts WHERE id=?',(cid,)).fetchone()
+    block=label_note(data)
+    note=merge_managed_note(contact['note'],progress['label_note'],block)
+    db.execute('UPDATE qualification_progress SET label_data=?,label_note=? WHERE contact_id=?',
+               (json.dumps(data,ensure_ascii=False),block,cid))
+    if note!=contact['note']:
+        db.execute('UPDATE contacts SET note=?,updated=?,revision=revision+1 WHERE id=?',(note,time.time(),cid))
+        audit(db,'Informações de marca própria registradas',cid,{'marca':data.get('brand','Não informada'),'volume_mensal':data.get('volume','Não informado')},actor='Assistente Sais Blue')
+
+
+def finish_label(db, cid, audit, *, missing=False):
+    c=db.execute('SELECT * FROM contacts WHERE id=?',(cid,)).fetchone()
+    p=db.execute('SELECT * FROM qualification_progress WHERE contact_id=?',(cid,)).fetchone()
+    data=json.loads(p['label_data'])
+    if missing:
+        for field in ('brand','volume'):
+            if not data.get(field):data[field+'_declined']=True
+    save_label_details(db,cid,data,audit)
+    cancel_pending(db,cid)
+    db.execute("UPDATE contacts SET qualification_state='completed',updated=?,revision=revision+1 WHERE id=?",(time.time(),cid))
+    db.execute("UPDATE qualification_progress SET closed_reason='completed' WHERE contact_id=?",(cid,))
+    assign_qualified(db,cid,c['owner_id'],settings(db),LABEL_PROFILE,{'state':c['state']},audit)
+
+
+def service_label_timers(db, audit):
+    if not settings(db)['enabled']:return
+    for p in db.execute('SELECT * FROM qualification_progress WHERE label_due>0 AND label_due<=? LIMIT 20',(time.time(),)).fetchall():
+        c=db.execute('SELECT * FROM contacts WHERE id=?',(p['contact_id'],)).fetchone()
+        if not c or c['deleted_at'] or c['manual_origin'] or c['owner_id'] or c['lead_profile']!=LABEL_PROFILE or c['stage']!='Novo contato' or c['qualification_state']!='waiting_label':
+            db.execute('UPDATE qualification_progress SET label_due=0 WHERE contact_id=?',(p['contact_id'],));continue
+        finish_label(db,c['id'],audit,missing=True)
+        # The data are optional. Assign after the question has been sent, even
+        # without a reply; never open an extra WhatsApp window or send after it.
+        last=db.execute("SELECT MAX(created) FROM messages WHERE contact_id=? AND direction='in' AND channel='meta'",(c['id'],)).fetchone()[0]
+        if last and time.time()-last<WINDOW:
+            enqueue(db,c['id'],'label-timeout:'+p['cycle'],COMPLETION,'completed',cycle=p['cycle'])
+
+
+def human_intervention_since(db, cid, since):
+    for event in db.execute("SELECT action,details FROM audit WHERE contact_id=? AND user_id IS NOT NULL AND created>=?",(cid,since)):
+        if event['action'] in ('Nota adicionada','Atendimento assumido','Envio solicitado'):return True
+        if event['action']=='Oportunidade atualizada':
+            changes=json.loads(event['details'])
+            if any(key!='name' for key in changes):return True
+    return False
+
+
+def close_unresponsive(db, audit):
+    if not settings(db)['enabled']:return
+    total=len(REMINDER_OFFSETS)+1
+    rows=db.execute('''SELECT p.* FROM qualification_progress p JOIN contacts c ON c.id=p.contact_id
+        WHERE p.closed_reason='finished' AND p.reminders_sent>=? AND p.anchor<=?
+        AND c.ad_origin=1 AND c.manual_origin=0 AND c.deleted_at=0 AND c.owner_id=''
+        AND c.stage='Novo contato' AND c.qualification_state IN ('waiting_profile','waiting_city') LIMIT 50''',
+        (total,time.time()-WINDOW)).fetchall()
+    for p in rows:
+        cid=p['contact_id']
+        if human_intervention_since(db,cid,p['anchor']):continue
+        last=db.execute("SELECT MAX(created) FROM messages WHERE contact_id=? AND direction='in' AND channel='meta'",(cid,)).fetchone()[0]
+        sends=db.execute("SELECT automation_kind,status FROM messages WHERE contact_id=? AND automation=1 AND automation_cycle=? AND automation_kind IN ('reminder','final')",(cid,p['cycle'])).fetchall()
+        successful=[m for m in sends if m['status'] in ('accepted','sent','delivered','read')]
+        if not last or last>p['anchor']+.01 or len(successful)<total or not any(m['automation_kind']=='final' for m in successful):continue
+        if any(m['status'] in ('failed','uncertain','sending','queued') for m in sends):continue
+        c=db.execute('SELECT * FROM contacts WHERE id=?',(cid,)).fetchone()
+        suffix='' if 'Sem Resposta' in c['note'] else ('\n\n' if c['note'] else '')+'Sem Resposta'
+        db.execute("UPDATE contacts SET stage='Perdido',qualification_state='no_response',note=?,updated=?,revision=revision+1 WHERE id=?",
+                   (c['note']+suffix,time.time(),cid))
+        db.execute("UPDATE qualification_progress SET closed_reason='no_response',next_due=0,auto_lost_at=?,auto_lost_revision=?,auto_lost_note=? WHERE contact_id=?",
+                   (time.time(),c['revision']+1,suffix,cid))
+        audit(db,'Lead encerrado sem resposta',cid,{'motivo':'Sem Resposta','retomadas':total,'janela_horas':24},actor='Assistente Sais Blue')
+
+
+def reopen_auto_lost(db, c, created, audit):
+    if c['qualification_state']!='no_response' or c['stage']!='Perdido' or c['owner_id'] or c['manual_origin'] or c['deleted_at']:return c
+    p=db.execute('SELECT * FROM qualification_progress WHERE contact_id=?',(c['id'],)).fetchone()
+    if not p or not p['auto_lost_at'] or c['revision']!=p['auto_lost_revision']+1 or created<=p['anchor'] or time.time()-created>=WINDOW:return c
+    if human_intervention_since(db,c['id'],p['auto_lost_at']):return c
+    note=c['note']
+    if p['auto_lost_note'] and note.endswith(p['auto_lost_note']):note=note[:-len(p['auto_lost_note'])]
+    step='waiting_city' if c['lead_profile'] else 'waiting_profile'
+    db.execute("UPDATE contacts SET stage='Novo contato',qualification_state=?,note=?,updated=?,revision=revision+1 WHERE id=?",(step,note,time.time(),c['id']))
+    db.execute("UPDATE qualification_progress SET auto_lost_at=0,auto_lost_revision=-1,auto_lost_note='',closed_reason='' WHERE contact_id=?",(c['id'],))
+    audit(db,'Lead reaberto após resposta do cliente',c['id'],{'antes':'Perdido','depois':'Novo contato'},actor='Assistente Sais Blue')
+    return db.execute('SELECT * FROM contacts WHERE id=?',(c['id'],)).fetchone()
+
+
+def undo_loss_after_failure(db, cid, audit):
+    c=db.execute('SELECT * FROM contacts WHERE id=?',(cid,)).fetchone()
+    p=db.execute('SELECT * FROM qualification_progress WHERE contact_id=?',(cid,)).fetchone()
+    if not c or not p or c['qualification_state']!='no_response' or c['stage']!='Perdido' or not p['auto_lost_at'] or c['revision']!=p['auto_lost_revision']:return
+    note=c['note']
+    if p['auto_lost_note'] and note.endswith(p['auto_lost_note']):note=note[:-len(p['auto_lost_note'])]
+    db.execute("UPDATE contacts SET stage='Novo contato',note=?,updated=?,revision=revision+1 WHERE id=?",(note,time.time(),cid))
+    db.execute("UPDATE qualification_progress SET auto_lost_at=0,auto_lost_revision=-1,auto_lost_note='' WHERE contact_id=?",(cid,))
+    audit(db,'Encerramento sem resposta revisto após falha de entrega',cid,{'antes':'Perdido','depois':'Novo contato'},actor='Assistente Sais Blue')
 
 
 TECHNICAL_PAUSES = {
@@ -149,11 +264,20 @@ def can_resume_after_reply(db,c,created,incoming_id=""):
 def process_answer(db, cid, incoming_id, body, created, audit):
     config = settings(db)
     c = db.execute('SELECT * FROM contacts WHERE id=?', (cid,)).fetchone()
+    if not c:return
+    if config['enabled']:c=reopen_auto_lost(db,c,created,audit)
     if config['enabled'] and can_resume_after_reply(db,c,created,incoming_id):
         db.execute("UPDATE contacts SET qualification_state=? WHERE id=?",('waiting_city' if c['lead_profile'] else 'waiting_profile',cid))
         audit(db,'Assistente retomado após nova resposta do cliente',cid,actor='Assistente Sais Blue')
         c=db.execute('SELECT * FROM contacts WHERE id=?',(cid,)).fetchone()
-    if not config['enabled'] or c['deleted_at'] or not c['ad_origin'] or c['qualification_state'] in ('human', 'completed'):
+    if not config['enabled'] or c['deleted_at'] or not c['ad_origin'] or c['manual_origin']:
+        return
+    if c['qualification_state'] in ('human','completed','no_response'):
+        if c['lead_profile']==LABEL_PROFILE and c['qualification_state'] in ('human','completed'):
+            p=db.execute('SELECT label_data FROM qualification_progress WHERE contact_id=?',(cid,)).fetchone()
+            if p:
+                old=json.loads(p['label_data']);data=label_details(body,old)
+                if data!=old:save_label_details(db,cid,data,audit)
         return
     if time.time()-created>=WINDOW or created<c['qualification_last_at']-120:
         return
@@ -166,25 +290,57 @@ def process_answer(db, cid, incoming_id, body, created, audit):
         return
     db.execute('INSERT OR IGNORE INTO qualification_progress(contact_id) VALUES(?)',(cid,))
     progress = db.execute('SELECT * FROM qualification_progress WHERE contact_id=?',(cid,)).fetchone()
-    profile = parse_profile(body) or c['lead_profile']
-    pending_city, pending_state, city = accumulate_location(body,progress['city_text'] or (normalize(c['city']) if c['city_id'] else ''),progress['state_text'] or (c['state'] if c['city_id'] else ''))
+    parsed=parse_profile(body)
+    recent=[m['body'] for m in reversed(db.execute("SELECT body FROM messages WHERE contact_id=? AND direction='in' AND channel='meta' AND created>=? ORDER BY created DESC,rowid DESC LIMIT 4",(cid,created-120)).fetchall())]
+    if not parsed and not c['lead_profile']:
+        for count in range(2,len(recent)+1):
+            joined=' '.join(recent[-count:])
+            if len(joined)<=300:
+                parsed=parse_profile(joined)
+                if parsed:break
+    # A brand can contain words such as "Revenda". Do not interpret a direct
+    # answer to the brand question as an unsolicited change of client profile.
+    label_context=c['lead_profile']==LABEL_PROFILE and c['qualification_state']=='waiting_label'
+    profile=LABEL_PROFILE if label_context else (parsed or c['lead_profile'])
+    pending_city=progress['city_text'] or (normalize(c['city']) if c['city_id'] else '')
+    pending_state=progress['state_text'] or (c['state'] if c['city_id'] else '')
+    city=CITY_LOOKUP.get((pending_city,pending_state))
+    explicit_location=bool(re.search(r'\b(?:sou de|moro|minha cidade|cidade de|meu estado|uf)\b',value))
+    if not label_context or explicit_location:
+        pending_city,pending_state,city=conversation_location(body,pending_city,pending_state)
     if not city and (pending_city,pending_state)==(progress['city_text'],progress['state_text']):
-        fragments=[m['body'] for m in reversed(db.execute("SELECT body FROM messages WHERE contact_id=? AND direction='in' AND channel='meta' AND created>=? ORDER BY created DESC,rowid DESC LIMIT 4",(cid,created-120)).fetchall())]
+        fragments=recent
         for count in range(2,len(fragments)+1):
             joined=' '.join(fragments[-count:])
             if len(joined)>160:
                 continue
-            name,uf,match=accumulate_location(joined,pending_city,pending_state)
+            name,uf,match=conversation_location(joined,pending_city,pending_state)
             if match or (name,uf)!=(pending_city,pending_state):
                 pending_city,pending_state,city=name,uf,match
                 break
 
-    step = 'completed' if profile and city else ('waiting_city' if profile else 'waiting_profile')
-    unchanged=step==c['qualification_state'] and profile==c['lead_profile'] and (pending_city,pending_state)==(progress['city_text'],progress['state_text'])
+    data=json.loads(progress['label_data'])
+    previous_data=dict(data)
+    if profile==LABEL_PROFILE:
+        for fragment in recent:data=label_details(fragment,data)
+        asked_field='volume' if data.get('brand') or data.get('brand_declined') else ('brand' if data.get('volume') or data.get('volume_declined') else 'both')
+        data=label_details(body,data,free_answer=label_context and bool(progress['label_asked_at']),asked_field=asked_field)
+        skip_optional=label_context and answer_intent(body)=='human'
+        if skip_optional or (label_context and data.get('questions',0)>=2 and not label_complete(data) and answer_intent(body) in ('','ack','greeting')):
+            for field in ('brand','volume'):
+                if not data.get(field):data[field+'_declined']=True
+        save_label_details(db,cid,data,audit)
+    step='completed' if profile and city else ('waiting_city' if profile else 'waiting_profile')
+    if step=='completed' and profile==LABEL_PROFILE and not label_complete(data):step='waiting_label'
+    unchanged=step==c['qualification_state'] and profile==c['lead_profile'] and (pending_city,pending_state)==(progress['city_text'],progress['state_text']) and data==previous_data
     asked=db.execute("SELECT created FROM messages WHERE contact_id=? AND automation=1 AND automation_kind='question' AND automation_step=? AND status IN ('accepted','sent','delivered','read','sending','uncertain') ORDER BY created DESC LIMIT 1",(cid,step)).fetchone()
-    suppress=unchanged and asked and time.time()-asked['created']<120
+    intent=answer_intent(body)
+    dialogue=bool(intent and intent!='ack' and (intent!=progress['last_intent'] or time.time()-progress['last_intent_at']>=120))
+    suppress=unchanged and asked and time.time()-asked['created']<120 and not dialogue
     attempt=c['qualification_attempts']+1 if step==c['qualification_state'] else 0
-    reply=next_question(profile,pending_city,pending_state,attempt) if step!='completed' else COMPLETION
+    question=label_question(data) if step=='waiting_label' else next_question(profile,pending_city,pending_state,attempt)
+    introduced=db.execute("SELECT 1 FROM messages WHERE contact_id=? AND automation=1 AND status IN ('accepted','sent','delivered','read','sending','uncertain') LIMIT 1",(cid,)).fetchone()
+    reply,intent=conversational_reply(body,profile,c['lead_profile'],pending_city,pending_state,question,first=not introduced) if step!='completed' else (COMPLETION,'')
     cancel_pending(db, cid)
     db.execute('UPDATE contacts SET lead_profile=?,qualification_state=?,qualification_attempts=?,qualification_last_at=?,updated=?,revision=revision+1 WHERE id=?',
                (profile,step,attempt,created,time.time(),cid))
@@ -197,21 +353,25 @@ def process_answer(db, cid, incoming_id, body, created, audit):
         audit(db, 'Perfil e localização qualificados', cid, {'perfil':profile,'cidade':city['name'],'uf':city['state']}, actor='Assistente Sais Blue')
         assign_qualified(db,cid,c['owner_id'],config,profile,city,audit)
     if suppress:
-        due=next_reminder_due(created,0,time.time())
-        db.execute('UPDATE qualification_progress SET next_due=? WHERE contact_id=?',(due,cid))
+        due=0 if step=='waiting_label' else next_reminder_due(created,0,time.time())
+        db.execute('UPDATE qualification_progress SET next_due=?,label_due=? WHERE contact_id=?',(due,progress['label_due'] if step=='waiting_label' else 0,cid))
         return
-    introduced=db.execute("SELECT 1 FROM messages WHERE contact_id=? AND automation=1 AND status IN ('accepted','sent','delivered','read','sending','uncertain') LIMIT 1",(cid,)).fetchone()
-    if not introduced and step!='completed':
-        reply=WELCOME+reply
+    if step=='waiting_label':
+        data['questions']=data.get('questions',0)+1
+        db.execute('UPDATE qualification_progress SET label_data=? WHERE contact_id=?',(json.dumps(data,ensure_ascii=False),cid))
+    db.execute('UPDATE qualification_progress SET last_intent=?,last_intent_at=? WHERE contact_id=?',(intent,time.time(),cid))
     enqueue(db,cid,incoming_id,reply,step,cycle=incoming_id)
 
 
 
 def assign_qualified(db, cid, previous_owner, config, profile, city, audit):
-    if config['assignment_mode']!='regional':
+    if profile==LABEL_PROFILE:
+        person=primary_administrator(db)
+    elif config['assignment_mode']!='regional':
         return None
-    group=routing_group(profile,city['state'])
-    person=db.execute('SELECT id,name FROM users WHERE id=? AND active=1',(config.get('regional_owners',{}).get(group,''),)).fetchone()
+    else:
+        group=routing_group(profile,city['state'])
+        person=db.execute('SELECT id,name FROM users WHERE id=? AND active=1',(config.get('regional_owners',{}).get(group,''),)).fetchone()
     if person:
         db.execute('UPDATE contacts SET owner=?,owner_id=? WHERE id=?',(person['name'],person['id'],cid))
         notify_assigned(db,cid,previous_owner)
@@ -254,6 +414,21 @@ def repair_waiting_locations(db, audit):
         if not city or (c['city_id'] and profile==c['lead_profile']):
             continue
         name,state=normalize(city['name']),city['state']
+        if profile==LABEL_PROFILE:
+            # Recover data from older conversations without bypassing the new
+            # optional brand question or changing an existing human assignment.
+            db.execute("UPDATE contacts SET city_id=?,city=?,state=?,lead_profile=?,qualification_state='waiting_city',updated=?,revision=revision+1 WHERE id=?",(city['id'],city['name'],city['state'],profile,time.time(),c['id']))
+            db.execute('INSERT OR IGNORE INTO qualification_progress(contact_id) VALUES(?)',(c['id'],))
+            db.execute('UPDATE qualification_progress SET city_text=?,state_text=? WHERE contact_id=?',(name,state,c['id']))
+            if time.time()-history[0]['created']<WINDOW:
+                process_answer(db,c['id'],'recovered-label:'+history[0]['id'],history[0]['body'],history[0]['created'],audit)
+            else:
+                info={}
+                for message in reversed(history):info=label_details(message['body'],info)
+                save_label_details(db,c['id'],info,audit)
+                handover(db,c['id'],audit,'Marca própria identificada no histórico; janela de envio encerrada')
+                assign_qualified(db,c['id'],c['owner_id'],config,LABEL_PROFILE,city,audit)
+            continue
         cancel_pending(db,c['id'])
         step='completed' if profile else 'waiting_profile'
         db.execute('UPDATE contacts SET city_id=?,city=?,state=?,lead_profile=?,qualification_state=?,updated=?,revision=revision+1 WHERE id=?',
@@ -381,6 +556,11 @@ def schedule_after_send(db, row):
     if not progress or (row['automation_cycle'] and row['automation_cycle']!=progress['cycle']):
         return
     c=db.execute('SELECT qualification_state FROM contacts WHERE id=?',(row['contact_id'],)).fetchone()
+    if c['qualification_state']=='waiting_label':
+        if row['automation_step']=='waiting_label':
+            due=min(time.time()+LABEL_WAIT,progress['anchor']+WINDOW-1)
+            db.execute('UPDATE qualification_progress SET label_asked_at=?,label_due=?,next_due=0 WHERE contact_id=?',(time.time(),due,row['contact_id']))
+        return
     if c['qualification_state'] not in ('waiting_profile','waiting_city'):
         return
     total=len(REMINDER_OFFSETS)+1
@@ -404,6 +584,8 @@ def process_outbox(app, connect, transmit, audit):
         migrate_rules(db,audit)
         repair_waiting_locations(db,audit)
         migrate_cadence(db)
+        service_label_timers(db,audit)
+        close_unresponsive(db,audit)
         schedule_reminder(db,audit)
         row = db.execute("SELECT * FROM messages WHERE automation=1 AND status='queued' ORDER BY created,id LIMIT 1").fetchone()
         if not row:
@@ -415,6 +597,9 @@ def process_outbox(app, connect, transmit, audit):
             db.execute("UPDATE messages SET status='cancelled' WHERE id=?", (row['id'],))
             if last and time.time()-last>=WINDOW and current_cycle:
                 db.execute("UPDATE qualification_progress SET next_due=0,closed_reason='window_closed' WHERE contact_id=?",(c['id'],))
+                if c['qualification_state']=='waiting_label' and c['lead_profile']==LABEL_PROFILE:
+                    finish_label(db,c['id'],audit,missing=True)
+                    audit(db,'Marca própria encaminhada com dados disponíveis',c['id'],{'motivo':'Pergunta opcional não enviada antes do encerramento da janela'},actor='Assistente Sais Blue')
             return True
         # Upgrade only unsent automatic confirmations, including older queued
         # messages containing the responsible person's name. Preserve history.

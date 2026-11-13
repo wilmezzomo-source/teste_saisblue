@@ -1,6 +1,8 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.12.1
+## Aplicativo único para atualizar — 2026.11.13.1
+
+**Novo atendimento com contexto, sem API paga:** interpreta intenção e dados da conversa, reconhece uso próprio e início de revenda e faz apenas as perguntas pendentes. White Label, Private Label, PL e WL recebem o perfil Marca própria e são encaminhados ao administrador original (Willian), com marca e volume nas Observações; esses dados são opcionais. Após quatro retomadas sem falha conhecida e 24 horas sem resposta, leads ainda não assumidos podem ser marcados como Perdido com Sem Resposta. Fluxos humanos e falhas de envio são preservados. Veja [ATENDIMENTO-CONTEXTO-E-MARCA-PROPRIA.md](ATENDIMENTO-CONTEXTO-E-MARCA-PROPRIA.md).
 
 **Edição sem bloqueio de localização:** perfil, responsável, valor, observação, Instagram e etapa do funil podem ser alterados mesmo sem cidade/UF. A ficha aceita salvar só a UF e completar a cidade depois. Cards pendentes continuam visíveis; o pin no mapa depende de um município válido. Permissões por responsável e proteção contra alterações simultâneas são preservadas.
 
