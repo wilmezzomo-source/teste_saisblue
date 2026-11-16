@@ -1,8 +1,6 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.16.1
-
-**Retomada local de pendências:** ao iniciar, o servidor revisa mensagens de anúncios já registradas e que ainda não receberam resposta registrada, dentro de 24 horas. Falhas técnicas com rejeição conhecida podem retomar uma vez, aproveitando dados enviados em partes. O administrador acompanha o resultado em **Integrações → Retomar atendimentos pendentes**, sem precisar de acesso externo à tela. Fila, aceite e entrega são mostrados separadamente; atendimentos humanos e envios sem confirmação são preservados. Veja [RETOMAR-ATENDIMENTOS-PENDENTES.md](RETOMAR-ATENDIMENTOS-PENDENTES.md).
+## Aplicativo único para atualizar — 2026.11.13.1
 
 **Novo atendimento com contexto, sem API paga:** interpreta intenção e dados da conversa, reconhece uso próprio e início de revenda e faz apenas as perguntas pendentes. White Label, Private Label, PL e WL recebem o perfil Marca própria e são encaminhados ao administrador original (Willian), com marca e volume nas Observações; esses dados são opcionais. Após quatro retomadas sem falha conhecida e 24 horas sem resposta, leads ainda não assumidos podem ser marcados como Perdido com Sem Resposta. Fluxos humanos e falhas de envio são preservados. Veja [ATENDIMENTO-CONTEXTO-E-MARCA-PROPRIA.md](ATENDIMENTO-CONTEXTO-E-MARCA-PROPRIA.md).
 
@@ -10,7 +8,7 @@
 
 **Atendimento:** “comprar para mim”, “pra mim” e variações de uso próprio identificam Consumidor Final. A finalidade explícita da compra prevalece sobre a profissão declarada; finalidades conflitantes exigem esclarecimento. A confirmação final apenas informa que o atendimento foi registrado e uma consultora entrará em contato, sem nome. A responsável continua registrada internamente no CRM.
 
-Versão 2026.11.16.1 validada em **162 testes no Windows** e no Chromium, incluindo a instalação pelo aplicativo a partir do canal público. Evidências em [VALIDACAO-RETOMADA-LOCAL.md](VALIDACAO-RETOMADA-LOCAL.md). Depois de atualizar o servidor, recarregue a página do CRM nos computadores da equipe.
+Versão 2026.11.13.1 validada em **147 testes no Windows** e no Chromium, incluindo a atualização pelo executável entregue a partir do canal público. Evidências em [VALIDACAO-ATENDIMENTO-CONTEXTO.md](VALIDACAO-ATENDIMENTO-CONTEXTO.md). Depois de atualizar o servidor, recarregue a página do CRM nos computadores da equipe.
 
 No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e confere o pacote, para somente os processos do CRM, faz backup, atualiza e reinicia em segundo plano. Cria um atalho com opções de abrir, iniciar/reconectar e parar. Veja [ATUALIZAR-COM-UM-APLICATIVO.md](ATUALIZAR-COM-UM-APLICATIVO.md). O aplicativo usa o Python e o banco já instalados, sem extrair ZIP manualmente. Inclui os ajustes de qualificação e tags da versão anterior.
 
