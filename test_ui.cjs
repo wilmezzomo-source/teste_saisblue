@@ -85,7 +85,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.16.2"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.16.3"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
   assert.equal(appManifest.display,'standalone');
@@ -643,6 +643,34 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.locator('#close-detail').click();
   await admin.locator('[data-view=reports]').click();
   await admin.locator('[data-profile-summary="Marca própria (PL/WL)"]').waitFor();
+  // The customer's store answer is enough to identify Lojista. The next
+  // question asks only location; Gaspar/SC completes it without another menu.
+  await whatsapp('Estou abrindo uma loja',true,'5547999997333');
+  const storeRow=()=>admin.evaluate(async()=>(await api('/api/contacts')).contacts.find(c=>c.phone==='5547999997333'));
+  let store;
+  for(let attempt=0;attempt<100;attempt++) {
+    store=await storeRow();
+    if(store?.qualification_state==='waiting_city' && store.messages.some(m=>m.direction==='out' && m.status==='accepted')) break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(store.lead_profile,'Lojista');assert.equal(store.qualification_state,'waiting_city');
+  await whatsapp('Gaspar SC',false,'5547999997333');
+  for(let attempt=0;attempt<100;attempt++) {
+    store=await storeRow();
+    if(store?.qualification_state==='completed' && store.messages.filter(m=>m.direction==='out' && m.status==='accepted').length===2) break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(store.city,'Gaspar');assert.equal(store.state,'SC');assert.equal(store.owner_id,'admin-test');
+  assert.equal(store.stage,'Novo contato');assert.equal(store.qualification_state,'completed');
+  const storeReplies=store.messages.filter(m=>m.direction==='out');
+  assert.equal(storeReplies.length,2);
+  assert.equal(storeReplies.some(m=>m.body.includes('para revender ou') || m.body.includes('Pará')),false);
+  assert.match(storeReplies[1].body,/Seu atendimento foi registrado/);
+  await admin.locator('[data-view=pipeline]').click();
+  await admin.locator('#profile-filter').selectOption('Lojista');await admin.evaluate(async()=>load());
+  const storeCard=admin.locator('.card').filter({hasText:'5547999997333'});
+  await storeCard.waitFor();assert.equal(await storeCard.locator('.profile-tag').textContent(),'Lojista');
+  assert.match(await storeCard.textContent(),/Gaspar/);
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({

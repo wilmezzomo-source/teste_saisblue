@@ -32,6 +32,10 @@ def parse_profile(body):
     numbered = re.fullmatch(r'(?:opcao )?([123])', value)
     if numbered:
         return PROFILES[int(numbered[1])-1]
+    # Answers to the purchase-purpose question do not have to say "lojista".
+    # Opening a shop describes the business; an explicit personal-use purpose
+    # below can still take precedence over that description.
+    store_answer=bool(re.fullmatch(r'(?:(?:para|pra|p) )?(?:(?:a|minha|uma|nova) )?(?:loja|lojinha)(?: (?:fisica|online|virtual|nova|de roupas))?',value))
     aliases = {
         'Lojista': ('lojista', 'tenho loja', 'tenho uma loja', 'possuo loja', 'possuo uma loja'),
         'Revenda': ('revenda','revendedor','revendedora','quero revender','revendo','revender'),
@@ -48,20 +52,31 @@ def parse_profile(body):
         for phrase in phrases:
             for match in re.finditer(r'\b'+re.escape(phrase)+r'\b', value):
                 if affirmative(match):scores[profile]=1
+    if store_answer:scores['Lojista']=1
+    opening_store=False
+    for match in re.finditer(r'\b(?:estou|to|estamos|vou|vamos|quero|pretendo|planejo|comecando a)\s+(?:abrir|abrindo|montar|montando|inaugurar|inaugurando)\s+(?:(?:a|minha|uma|nova|propria)\s+){0,3}(?:loja|lojinha)\b',value):
+        if affirmative(match):scores['Lojista']=1;opening_store=True
     # The purpose of this purchase is stronger evidence than occupation alone:
     # "tenho loja, mas quero comprar para mim" is personal use. Conflicting
     # explicit purchase purposes still require clarification instead of a guess.
     purposes=(
         ('Consumidor Final',r'\b(?:comprar|compro|compra|comprando|quero)\s+(?:\w+\s+){0,4}(?:para|pra|p)\s+(?:mim|min)\b'),
         ('Consumidor Final',r'\b(?:uso (?:proprio|pessoal|individual)|(?:para|pra) (?:eu (?:usar|vestir)|meu (?:uso|consumo)))\b'),
+        ('Consumidor Final',r'\b(?:para|pra|p) (?:mim|min)\b'),
         ('Revenda',r'\b(?:quero|vou|pretendo|interesse em|comprar para|comprar pra)(?: (?:comecar|iniciar|trabalhar|atuar)(?: a| com)?)?\s+(?:revender|revenda)\b'),
-        ('Lojista',r'\b(?:comprar|compra|compro)\s+(?:para|pra)\s+(?:(?:a|minha|uma)\s+)?loja\b'),
+        ('Lojista',r'\b(?:(?:comprar|compra|compro|quero|preciso|busco|procuro|e|sao)\s+(?:(?!nao\b|nem\b)\w+\s+){0,3})?(?:para|pra|p)\s+(?:(?:a|minha|uma|nova)\s+){0,3}(?:loja|lojinha)\b'),
     )
     for profile,pattern in purposes:
         if any(affirmative(match) for match in re.finditer(pattern,value)):
             scores[profile]=2
+    if opening_store and scores.get('Revenda') and not scores.get('Consumidor Final'):
+        return 'Lojista'
     matches=[profile for profile,score in scores.items() if score==max(scores.values())] if scores else []
     return matches[0] if len(matches)==1 else None
+
+
+def rejects_profile(body):
+    return bool(re.search(r'\b(?:nao|nem) (?:\w+ ){0,4}(?:loja|lojista|revenda|revender|consumidor|consumidora|uso proprio)\b',normalize(body)))
 
 
 def next_question(profile, pending_city='', pending_state='', variant=0):
@@ -77,8 +92,8 @@ def next_question(profile, pending_city='', pending_state='', variant=0):
                 f'Só falta a UF de {name} para eu te direcionar.',
                 f'{name} fica em qual estado?')[variant%3]
     if pending_state and not pending_city:
-        return (f'Qual é sua cidade em {STATE_NAMES[pending_state]}?',
-                f'Só preciso do nome da cidade em {STATE_NAMES[pending_state]} para continuar.')[variant%2]
+        return (f'Já anotei {STATE_NAMES[pending_state]}. Qual é a sua cidade?',
+                f'Só falta a sua cidade. O estado já está registrado: {STATE_NAMES[pending_state]}.')[variant%2]
     if pending_city and pending_state:
         return (f'Não encontrei {name}/{pending_state}. Pode confirmar a cidade ou o estado?',
                 f'Pode conferir se a cidade é {name} e a UF é {pending_state}?')[variant%2]
@@ -292,11 +307,19 @@ def process_answer(db, cid, incoming_id, body, created, audit):
     progress = db.execute('SELECT * FROM qualification_progress WHERE contact_id=?',(cid,)).fetchone()
     parsed=parse_profile(body)
     recent=[m['body'] for m in reversed(db.execute("SELECT body FROM messages WHERE contact_id=? AND direction='in' AND channel='meta' AND created>=? ORDER BY created DESC,rowid DESC LIMIT 4",(cid,created-120)).fetchall())]
-    if not parsed and not c['lead_profile']:
+    denies_profile=rejects_profile(body)
+    if not parsed and not c['lead_profile'] and not denies_profile:
         for count in range(2,len(recent)+1):
             joined=' '.join(recent[-count:])
             if len(joined)<=300:
                 parsed=parse_profile(joined)
+                if parsed:break
+        if not parsed:
+            # A response can arrive several minutes after the earlier profile
+            # answer. Consult this customer's received history, without starting
+            # a recovery job or changing other conversations.
+            for message in db.execute("SELECT body FROM messages WHERE contact_id=? AND direction='in' AND channel='meta' AND created BETWEEN ? AND ? ORDER BY created DESC,rowid DESC LIMIT 32",(cid,created-WINDOW,created)):
+                parsed=parse_profile(message['body'])
                 if parsed:break
     # A brand can contain words such as "Revenda". Do not interpret a direct
     # answer to the brand question as an unsolicited change of client profile.
@@ -399,7 +422,7 @@ def repair_waiting_locations(db, audit):
         name,state='', ''
         profile=c['lead_profile']
         for message in reversed(history):
-            if not c['lead_profile']:
+            if not c['lead_profile'] and not rejects_profile(history[0]['body']):
                 profile=parse_profile(message['body']) or profile
             name,state,_=accumulate_location(message['body'],name,state)
         city=CITY_LOOKUP.get((normalize(c['city']),c['state'])) if c['city_id'] else CITY_LOOKUP.get((name,state))

@@ -1,7 +1,7 @@
 """Local conversation helpers. No model downloads, API keys or external requests."""
 import re
 
-from qualification_location import normalize, accumulate_location
+from qualification_location import normalize, accumulate_location, STATE_ALIASES
 
 LABEL_PROFILE='Marca própria (PL/WL)'
 LABEL_WAIT=15*60
@@ -22,17 +22,24 @@ def conversation_location(body, pending_city='', pending_state=''):
     original=accumulate_location(body,pending_city,pending_state)
     if original[2] or original[:2]!=(pending_city,pending_state):return original
     raw=normalize(body)
-    candidates=[s.strip() for s in re.split(r'[,.!;?\n]+',body) if s.strip()]
-    for cue in re.finditer(r'\b(?:sou de|moro em|moro no|moro na|minha cidade e|cidade de|estou em|fico em|fica em|em) ',raw):
+    candidates=[(s.strip(),False) for s in re.split(r'[,.!;?\n]+',body) if s.strip()]
+    for cue in re.finditer(r'\b(?:sou de|sou do|sou da|moro em|moro no|moro na|minha cidade e|meu estado e|cidade de|estou em|fico em|fica em|em) ',raw):
         if {'nao','nem'}.intersection(raw[:cue.start()].split()[-2:]):continue
-        candidates.append(raw[cue.end():])
-    for candidate in candidates:
+        candidates.append((raw[cue.end():],True))
+    for candidate,location_cue in candidates:
         words=normalize(candidate).split()
         # Longest prefix first: an explicitly inconsistent UF must never be
         # discarded just to infer a different state from the shortened city.
         for count in range(min(12,len(words)),0,-1):
-            place=accumulate_location(' '.join(words[:count]),pending_city,pending_state)
-            if place[2] or place[:2]!=(pending_city,pending_state):return place
+            prefix=' '.join(words[:count])
+            place=accumulate_location(prefix,pending_city,pending_state)
+            changed=place[:2]!=(pending_city,pending_state)
+            if count<len(words) and not location_cue and prefix in STATE_ALIASES and place[0]==pending_city and place[1]!=pending_state:
+                continue
+            # "Para loja" starts with a preposition, not the state Pará. A
+            # shortened non-geographic clause cannot supply a state on its own.
+            if place[2] or (changed and (count==len(words) or location_cue or place[0]!=pending_city)):
+                return place
     return original
 
 

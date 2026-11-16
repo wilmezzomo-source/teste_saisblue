@@ -91,7 +91,7 @@ def accumulate_location(body,pending_city='',pending_state=''):
     explicit_state=re.sub(r'^(?:meu estado e|o estado e|estado de|estado|uf|sou do|e) ','',raw)
     state_introduced=explicit_state!=raw
     rows=whole_city_candidates(body)
-    is_state=explicit_state in STATE_ALIASES and (state_introduced or (pending_city and not pending_state) or not rows)
+    is_state=explicit_state in STATE_ALIASES and (state_introduced or (pending_city and (not pending_state or STATE_ALIASES[explicit_state]==pending_state)) or not rows)
     if is_state:
         pending_state=STATE_ALIASES[explicit_state]
     elif rows:

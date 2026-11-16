@@ -31,7 +31,7 @@ from phone_numbers import manual_phone, phone_identity, legacy_brazil_variants
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.16.2'
+RELEASE = '2026.11.16.3'
 
 
 class Problem(Exception):
