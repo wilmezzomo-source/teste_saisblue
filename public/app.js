@@ -372,6 +372,8 @@ function ownerInput(c={owner_id:currentUser.id}) {
 function openCreate(sim) {
   simulate = sim;
   $("#create-form").reset();
+  $("#create-form").elements.phone.setCustomValidity("");
+  $("#create-phone-error").hidden=true;
   $("#create-location-fields").innerHTML = locationInputs();
   bindLocationFields($("#create-location-fields"));
   $("#form-title").textContent = sim
@@ -557,10 +559,21 @@ $("#create-form").onsubmit = async (e) => {
     );
     if (!simulate && created.id) detail(created.id);
   } catch (err) {
+    if(!simulate && err.status===409) {
+      const field=e.target.elements.phone;
+      field.setCustomValidity(err.message);
+      $("#create-phone-error").textContent=err.message;
+      $("#create-phone-error").hidden=false;
+      field.focus();
+    }
     toast(err.message);
   } finally {
     button.disabled = false;
   }
+};
+$("#create-form").elements.phone.oninput=()=>{
+  $("#create-form").elements.phone.setCustomValidity("");
+  $("#create-phone-error").hidden=true;
 };
 $("#logout").onclick = async () => {
   try {

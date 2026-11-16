@@ -31,6 +31,7 @@
 .profile-tag.consumidor { background:#e4f6ed; color:#237458; }
 .profile-tag.label { background:#e1f3f4; color:#14666e; }
 .profile-tag.pending { background:#f3f0e7; color:#837043; }
+.field-error { color:#a33838; font-size:14px; margin:0 0 12px; }
 #profile-filter, #owner-filter { max-width:210px; }
 .danger { background:#fff0f0; border:1px solid #f1caca; color:#a33838; padding:10px 14px; border-radius:7px; }
 .contact-actions { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:16px 0; }

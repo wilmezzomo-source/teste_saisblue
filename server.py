@@ -26,11 +26,12 @@ from sqlite_context import connection
 from notifications import notify_created, notify_assigned, notify_restored
 from web_push import public_key as push_public_key, validate_subscription
 from qualification import PROFILES, ACTIVE_STEPS, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
+from phone_numbers import manual_phone, phone_identity, legacy_brazil_variants
 
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.13.1'
+RELEASE = '2026.11.16.2'
 
 
 class Problem(Exception):
@@ -91,6 +92,7 @@ def restrict_administration(db):
 def database(app):
     db = sqlite3.connect(app.config['DATABASE'], timeout=20)
     db.row_factory = sqlite3.Row
+    db.create_function('phone_identity',1,phone_identity,deterministic=True)
     db.execute('PRAGMA foreign_keys=ON')
     try:
         yield db
@@ -125,6 +127,8 @@ def init_db(app):
         CREATE INDEX IF NOT EXISTS audit_contact ON audit(contact_id,id);
         ''')
         # Additive migration preserves the first prototype's data.
+        if not any(r['name']=='phone_format' for r in db.execute('PRAGMA table_info(contacts)')):
+            db.execute("ALTER TABLE contacts ADD COLUMN phone_format TEXT NOT NULL DEFAULT 'legacy'")
         columns = {r['name'] for r in db.execute('PRAGMA table_info(contacts)')}
         migrate_owners = 'owner_id' not in columns
         if 'deleted_at' not in columns:
@@ -176,7 +180,9 @@ def ingest(db, number, name, body, message_id, referral=None, source='WhatsApp',
     if db.execute('SELECT 1 FROM messages WHERE id=? OR external_id=?', (message_id, message_id)).fetchone():
         return False
     number = phone(number)
-    row = db.execute('SELECT id,ad_origin,manual_origin,deleted_at FROM contacts WHERE phone=?', (number,)).fetchone()
+    row = db.execute('''SELECT id,ad_origin,manual_origin,deleted_at FROM contacts
+        WHERE phone_identity(phone)=? ORDER BY (deleted_at=0) DESC,(phone=?) DESC,created,id LIMIT 1''',
+        (phone_identity(number),number)).fetchone()
     if row and row['deleted_at']:
         return False
     ad_origin = is_ad_referral(referral)
@@ -186,8 +192,8 @@ def ingest(db, number, name, body, message_id, referral=None, source='WhatsApp',
         return False
     cid = row['id'] if row else secrets.token_hex(12)
     if not row:
-        db.execute('INSERT INTO contacts(id,name,phone,stage,source,referral,created,updated) VALUES(?,?,?,?,?,?,?,?)',
-                   (cid, name or number, number, STAGES[0], source, json.dumps(referral, ensure_ascii=False) if referral else None, now(), now()))
+        db.execute('INSERT INTO contacts(id,name,phone,stage,source,referral,created,updated,phone_format) VALUES(?,?,?,?,?,?,?,?,?)',
+                   (cid, name or number, number, STAGES[0], source, json.dumps(referral, ensure_ascii=False) if referral else None, now(), now(),'international' if channel=='meta' else 'legacy'))
         audit(db, 'Contato criado', cid, {'source': source})
         user = getattr(g, 'user', None)
         notify_created(db,cid,user['id'] if user else None)
@@ -723,7 +729,11 @@ def create_app(config=None):
     @app.post('/api/contacts')
     def new_contact():
         d = data()
-        name, number = text(d.get('name', ''), 120), phone(d.get('phone', ''))
+        name = text(d.get('name', ''), 120)
+        try:
+            number=manual_phone(d.get('phone',''))
+        except ValueError as exc:
+            raise Problem(str(exc))
         if not name:
             raise Problem('Informe o nome do cliente.')
         place = location_fields(d.get('city_id', ''))
@@ -741,15 +751,18 @@ def create_app(config=None):
         with database(app) as db:
             db.execute('BEGIN IMMEDIATE')
             owner_id, owner = selected_owner(db, d, g.user['id'])
-            existing = db.execute('SELECT deleted_at FROM contacts WHERE phone=?', (number,)).fetchone()
+            national=legacy_brazil_variants(number)
+            legacy_clause=" OR (phone_format='legacy' AND trim(phone) NOT LIKE '+%' AND trim(phone) NOT LIKE '00%' AND phone_identity(phone) IN ("+','.join('?' for _ in national)+'))' if national else ''
+            existing = db.execute('SELECT deleted_at FROM contacts WHERE phone_identity(phone)=?'+legacy_clause+
+                ' ORDER BY deleted_at,created,id LIMIT 1', (phone_identity(number),*national)).fetchone()
             if existing and existing['deleted_at'] and g.user['role'] == 'admin':
                 raise Problem('Este WhatsApp está na lixeira. Restaure o card existente para retomar o atendimento.', 409)
             if existing:
-                raise Problem('Este WhatsApp já está cadastrado. Consulte suas oportunidades ou fale com o administrador.', 409)
+                raise Problem('Já existe uma oportunidade com este número de WhatsApp. Não é permitido cadastrar números duplicados. Consulte suas oportunidades ou fale com o administrador.', 409)
             cid = secrets.token_hex(12)
             db.execute('''INSERT INTO contacts(id,name,phone,stage,value,owner,source,note,created,updated,
-                          city_id,city,state,instagram,manual_origin,lead_profile,qualification_state,owner_id)
-                          VALUES(?,?,?,?,?,?,'Manual',?,?,?,?,?,?,?,1,?,'human',?)''',
+                          city_id,city,state,instagram,manual_origin,lead_profile,qualification_state,owner_id,phone_format)
+                          VALUES(?,?,?,?,?,?,'Manual',?,?,?,?,?,?,?,1,?,'human',?,'international')''',
                        (cid,name,number,stage,value,owner,note,now(),now(),place['city_id'],place['city'],place['state'],instagram,profile,owner_id))
             audit(db, 'Oportunidade criada manualmente', cid, {'origem':'Manual','perfil':profile,'responsável':owner})
             notify_created(db,cid,g.user['id'])
