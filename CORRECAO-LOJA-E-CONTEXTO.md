@@ -8,6 +8,8 @@ O assistente aproveita cidade/UF informadas antes do perfil. Quando falta o perf
 
 Exemplo esperado: **Estou abrindo uma loja → pergunta apenas a cidade; Gaspar SC → Lojista, Gaspar/SC, Chai**. Se Gaspar/SC já estiver registrado, a resposta sobre a loja conclui o encaminhamento sem perguntar a localização outra vez. O card permanece em Novo contato, e a confirmação não divulga o nome da responsável. Após concluir, não continuam os lembretes da qualificação.
 
+Outro exemplo verificado: **Prô meu uso → Consumidor Final; Cláudio Minas Gerais, horas depois → Cláudio/MG, Grasi**. Uma dúvida sobre preço de atacado não altera uma finalidade de uso próprio já informada. A pergunta fica no histórico para a consultora, sem inventar quantidade mínima ou condições comerciais.
+
 Os testes reproduzem esses cenários com dados fictícios e transporte Meta simulado. Só é possível aproveitar mensagens que tenham sido recebidas pelo CRM. Mensagens que ficaram apenas no celular durante uma indisponibilidade e não foram entregues pela Meta não são recuperadas por essa correção. Respostas manuais feitas só pelo celular continuam sem sincronização de eco nesta integração; para registrar a pausa do assistente, a equipe deve assumir o atendimento no CRM.
 
 A proteção de telefones duplicados da versão 2026.11.16.2 é mantida. O código do atualizador e do início do Windows não foi modificado nesta versão.

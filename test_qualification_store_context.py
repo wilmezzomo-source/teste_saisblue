@@ -118,6 +118,31 @@ class StoreConversationTest(unittest.TestCase):
         city,state,place=conversation_location('Goiás',city,state)
         self.assertEqual((place['name'],state),('Cidade Ocidental','GO'))
 
+    def test_screenshot_personal_use_then_claudio_hours_later_keeps_consumer_profile(self):
+        self.enable();anchor=time.time()+1
+        self.send_at(anchor,'Olá, posso ter mais informações?',ad=True)
+        self.send_at(anchor+60,'Prô meu uso')
+        self.assertEqual(self.contact()['lead_profile'],'Consumidor Final')
+        self.assertIn('cidade',self.sent[-1]['text']['body'])
+        self.send_at(anchor+4*3600+42*60,'Cláudio Minas Gerais')
+        c=self.contact()
+        self.assertEqual((c['lead_profile'],c['city'],c['state'],c['owner_id']),('Consumidor Final','Cláudio','MG','grasi'))
+        self.assertEqual(self.sent[-1]['text']['body'],COMPLETION)
+        count=len(self.sent)
+        self.send_at(anchor+4*3600+43*60,'A partir de qtas peças pra sair no valor de atacado')
+        self.assertEqual(self.contact()['lead_profile'],'Consumidor Final');self.assertEqual(len(self.sent),count)
+        self.assertIn('atacado',self.contact()['messages'][-1]['body'])
+
+    def test_personal_use_in_received_history_is_not_forgotten_after_hours_without_automation(self):
+        anchor=time.time()+1
+        self.send_at(anchor,'Olá',ad=True)
+        self.send_at(anchor+60,'Prô meu uso')
+        self.enable();self.drain();self.assertEqual(self.sent,[])
+        self.send_at(anchor+5*3600,'Cláudio Minas Gerais')
+        c=self.contact()
+        self.assertEqual((c['lead_profile'],c['city'],c['state'],c['owner_id']),('Consumidor Final','Cláudio','MG','grasi'))
+        self.assertEqual(len(self.sent),1);self.assertEqual(self.sent[0]['text']['body'],COMPLETION)
+
     def test_store_classification_does_not_admit_organic_contacts(self):
         self.enable();self.receive('Estou abrindo uma loja em Gaspar SC');self.drain()
         self.assertEqual(self.client.get('/api/contacts').json['contacts'],[])
