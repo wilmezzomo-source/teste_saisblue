@@ -2,7 +2,7 @@
 
 ## Aplicativo único para atualizar — 2026.11.16.3
 
-**Loja e contexto da conversa:** reconhece “loja”, “para loja” e abertura de uma loja como Lojista; não confunde a preposição “para” com a UF Pará. Aproveita localização já informada e respostas anteriores recebidas na conversa para perguntar só o dado faltante. Veja [CORRECAO-LOJA-E-CONTEXTO.md](CORRECAO-LOJA-E-CONTEXTO.md). A retomada em lote cancelada e o código de início do Windows permanecem sem alterações.
+**Loja e contexto da conversa:** reconhece “loja”, “para loja” e abertura de uma loja como Lojista; “para uso” e “para uso próprio” como Consumidor Final. Não confunde a preposição “para” com a UF Pará. Aproveita localização já informada e respostas anteriores recebidas na conversa para perguntar só o dado faltante. Veja [CORRECAO-LOJA-E-CONTEXTO.md](CORRECAO-LOJA-E-CONTEXTO.md). A retomada em lote cancelada e o código de início do Windows permanecem sem alterações.
 
 **Cadastro sem telefones duplicados:** o cadastro manual verifica todas as oportunidades, inclusive de outras atendentes e na lixeira, e recusa variações do mesmo número. A comparação considera formatação, DDI brasileiro e celular com/sem nono dígito, preservando o cadastro existente. O formulário mantém o preenchimento e mostra o erro junto ao WhatsApp. Esta correção mantém a reversão das alterações canceladas de 16/11. Leia [NUMEROS-SEM-DUPLICACAO.md](NUMEROS-SEM-DUPLICACAO.md).
 

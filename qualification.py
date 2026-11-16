@@ -36,6 +36,7 @@ def parse_profile(body):
     # Opening a shop describes the business; an explicit personal-use purpose
     # below can still take precedence over that description.
     store_answer=bool(re.fullmatch(r'(?:(?:para|pra|p) )?(?:(?:a|minha|uma|nova) )?(?:loja|lojinha)(?: (?:fisica|online|virtual|nova|de roupas))?',value))
+    personal_answer=bool(re.fullmatch(r'(?:para|pra|p) (?:o |meu )?uso',value))
     aliases = {
         'Lojista': ('lojista', 'tenho loja', 'tenho uma loja', 'possuo loja', 'possuo uma loja'),
         'Revenda': ('revenda','revendedor','revendedora','quero revender','revendo','revender'),
@@ -53,6 +54,7 @@ def parse_profile(body):
             for match in re.finditer(r'\b'+re.escape(phrase)+r'\b', value):
                 if affirmative(match):scores[profile]=1
     if store_answer:scores['Lojista']=1
+    if personal_answer:scores['Consumidor Final']=2
     opening_store=False
     for match in re.finditer(r'\b(?:estou|to|estamos|vou|vamos|quero|pretendo|planejo|comecando a)\s+(?:abrir|abrindo|montar|montando|inaugurar|inaugurando)\s+(?:(?:a|minha|uma|nova|propria)\s+){0,3}(?:loja|lojinha)\b',value):
         if affirmative(match):scores['Lojista']=1;opening_store=True

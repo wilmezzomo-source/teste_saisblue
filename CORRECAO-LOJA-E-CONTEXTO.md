@@ -10,6 +10,8 @@ Exemplo esperado: **Estou abrindo uma loja → pergunta apenas a cidade; Gaspar 
 
 Outro exemplo verificado: **Prô meu uso → Consumidor Final; Cláudio Minas Gerais, horas depois → Cláudio/MG, Grasi**. Uma dúvida sobre preço de atacado não altera uma finalidade de uso próprio já informada. A pergunta fica no histórico para a consultora, sem inventar quantidade mínima ou condições comerciais.
 
+**Para uso → Consumidor Final; Apucarana/Paraná, horas depois → Apucarana/PR, Grasi** também é reconhecido. “Para uso próprio” não volta à pergunta de perfil e, depois de concluído, não dispara outro lembrete de qualificação.
+
 Os testes reproduzem esses cenários com dados fictícios e transporte Meta simulado. Só é possível aproveitar mensagens que tenham sido recebidas pelo CRM. Mensagens que ficaram apenas no celular durante uma indisponibilidade e não foram entregues pela Meta não são recuperadas por essa correção. Respostas manuais feitas só pelo celular continuam sem sincronização de eco nesta integração; para registrar a pausa do assistente, a equipe deve assumir o atendimento no CRM.
 
 A proteção de telefones duplicados da versão 2026.11.16.2 é mantida. O código do atualizador e do início do Windows não foi modificado nesta versão.

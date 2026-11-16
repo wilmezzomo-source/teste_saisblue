@@ -674,24 +674,30 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   // A personal-use answer already received hours earlier must not be asked
   // again when the customer supplies their city, even if automation was off.
   const savedRouting=await admin.evaluate(async()=>(await api('/api/status')).automation);
-  await admin.evaluate(async a=>api('/api/automation',{...a,enabled:false}),savedRouting);
-  await whatsapp('Prô meu uso',true,'5537999997551',Date.now()/1000-5*3600);
-  await admin.evaluate(async a=>api('/api/automation',a),savedRouting);
-  const consumerRow=()=>admin.evaluate(async()=>(await api('/api/contacts')).contacts.find(c=>c.phone==='5537999997551'));
-  assert.equal((await consumerRow()).messages.filter(m=>m.direction==='out').length,0);
-  await whatsapp('Cláudio Minas Gerais',false,'5537999997551');
-  let consumer;
-  for(let attempt=0;attempt<100;attempt++) {
-    consumer=await consumerRow();
-    if(consumer?.qualification_state==='completed' && consumer.messages.some(m=>m.direction==='out' && m.status==='accepted')) break;
-    await new Promise(resolve=>setTimeout(resolve,100));
+  for(const [number,purpose,location,city,uf] of [
+    ['5537999997551','Prô meu uso','Cláudio Minas Gerais','Cláudio','MG'],
+    ['5543999997552','para uso','Apucarana/ Paraná','Apucarana','PR'],
+  ]) {
+    await admin.evaluate(async a=>api('/api/automation',{...a,enabled:false}),savedRouting);
+    await whatsapp(purpose,true,number,Date.now()/1000-5*3600);
+    await admin.evaluate(async a=>api('/api/automation',a),savedRouting);
+    const consumerRow=()=>admin.evaluate(async phone=>(await api('/api/contacts')).contacts.find(c=>c.phone===phone),number);
+    assert.equal((await consumerRow()).messages.filter(m=>m.direction==='out').length,0);
+    await whatsapp(location,false,number);
+    let consumer;
+    for(let attempt=0;attempt<100;attempt++) {
+      consumer=await consumerRow();
+      if(consumer?.qualification_state==='completed' && consumer.messages.some(m=>m.direction==='out' && m.status==='accepted')) break;
+      await new Promise(resolve=>setTimeout(resolve,100));
+    }
+    assert.equal(consumer.lead_profile,'Consumidor Final');assert.equal(consumer.city,city);assert.equal(consumer.state,uf);
+    assert.equal(consumer.owner_id,seller.id);assert.equal(consumer.stage,'Novo contato');
+    assert.equal(consumer.messages.filter(m=>m.direction==='out').length,1);
+    await whatsapp('para uso próprio',false,number);
+    await whatsapp('A partir de qtas peças pra sair no valor de atacado',false,number);
+    consumer=await consumerRow();assert.equal(consumer.lead_profile,'Consumidor Final');
+    assert.equal(consumer.messages.filter(m=>m.direction==='out').length,1);
   }
-  assert.equal(consumer.lead_profile,'Consumidor Final');assert.equal(consumer.city,'Cláudio');assert.equal(consumer.state,'MG');
-  assert.equal(consumer.owner_id,seller.id);assert.equal(consumer.stage,'Novo contato');
-  assert.equal(consumer.messages.filter(m=>m.direction==='out').length,1);
-  await whatsapp('A partir de qtas peças pra sair no valor de atacado',false,'5537999997551');
-  consumer=await consumerRow();assert.equal(consumer.lead_profile,'Consumidor Final');
-  assert.equal(consumer.messages.filter(m=>m.direction==='out').length,1);
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({

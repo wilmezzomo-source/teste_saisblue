@@ -39,6 +39,30 @@ class StoreConversationTest(unittest.TestCase):
         self.assertEqual(parse_profile('Tenho uma loja, mas esta compra é para mim'),'Consumidor Final')
         self.assertIsNone(parse_profile('Quero comprar para minha loja e para meu uso'))
 
+    def test_short_personal_use_answers_are_understood_without_guessing_business_usage(self):
+        for body in ('para uso','Para uso','pra uso','p uso','para o uso','para meu uso',
+                     'para uso próprio','PARA USO PRÓPRIO','Prô meu uso'):
+            with self.subTest(body=body):
+                self.assertEqual(parse_profile(body),'Consumidor Final')
+                self.assertEqual(conversation_location(body),('','',None))
+        for body in ('Não é para uso','Para uso em loja','Para uso na revenda'):
+            self.assertNotEqual(parse_profile(body),'Consumidor Final',body)
+
+    def test_screenshot_para_uso_then_apucarana_hours_later_completes_only_once(self):
+        anchor=time.time()+1
+        self.send_at(anchor,'Olá, posso ter mais informações?',ad=True)
+        self.send_at(anchor+12*60,'para uso')  # Received before automation was enabled.
+        self.enable();self.drain();self.assertEqual(self.sent,[])
+        self.send_at(anchor+4*3600+30*60,'Apucarana/ Paraná')
+        c=self.contact()
+        self.assertEqual((c['lead_profile'],c['city'],c['state'],c['owner_id'],c['stage']),
+                         ('Consumidor Final','Apucarana','PR','grasi','Novo contato'))
+        self.assertEqual(c['qualification_state'],'completed')
+        self.assertEqual(len(self.sent),1);self.assertEqual(self.sent[0]['text']['body'],COMPLETION)
+        self.send_at(anchor+4*3600+52*60,'para uso próprio')
+        with patch('qualification.time.time',return_value=anchor+5*3600+12*60):self.drain()
+        self.assertEqual(len(self.sent),1)
+
     def test_purchase_preposition_does_not_invent_para_or_replace_a_known_state(self):
         for body in ('Para loja','Para loja que estou abrindo','Para meu uso','Para mim','Para revender'):
             self.assertEqual(conversation_location(body),('','',None),body)
