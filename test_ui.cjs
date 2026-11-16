@@ -85,7 +85,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.13.1"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.16.1"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
   assert.equal(appManifest.display,'standalone');
@@ -344,6 +344,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .getByRole("heading", { name: "Primeiro atendimento automático", exact: true })
     .waitFor();
   assert.equal(await member.locator("#automation-form").count(),0);
+  assert.equal(await member.locator("#recover-pending").count(),0);
   if(await admin.locator('#detail-dialog').isVisible()) await admin.locator('#close-detail').click();
   await admin.locator("[data-view=settings]").click();
   await admin.locator('#automation-form [name=enabled]').check();
@@ -628,6 +629,29 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.locator('#close-detail').click();
   await admin.locator('[data-view=reports]').click();
   await admin.locator('[data-profile-summary="Marca própria (PL/WL)"]').waitFor();
+  // A pending ad received with automation unavailable is resumed locally by
+  // the administrator. Delivery remains distinct from Meta acceptance.
+  const routing=await admin.evaluate(async()=>(await api('/api/status')).automation);
+  await admin.evaluate(async routing=>api('/api/automation',{...routing,enabled:false}),routing);
+  await whatsapp('Quero começar a revender',true,'5554999997997');
+  await admin.evaluate(async routing=>api('/api/automation',{...routing,enabled:true}),routing);
+  await admin.locator('[data-view=settings]').click();
+  await admin.getByRole('button',{name:'Retomar pendentes',exact:true}).click();
+  let recoveryDelivery;
+  for(let attempt=0;attempt<100;attempt++) {
+    recoveryDelivery=await admin.evaluate(async()=>(await api('/api/automation/recovery')).recovery);
+    if(recoveryDelivery.sends.accepted===1) break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(recoveryDelivery.sends.accepted,1,JSON.stringify(recoveryDelivery));
+  await admin.getByRole('button',{name:'Atualizar diagnóstico',exact:true}).click();
+  await admin.locator('#recovery-report').filter({hasText:'aceitas pela Meta'}).waitFor();
+  const recovered=await admin.evaluate(async()=>(await api('/api/automation/recovery')).recovery);
+  assert.equal(recovered.sends.accepted,1,JSON.stringify(recovered));
+  const recoveryMessages=await admin.evaluate(async()=>(await api('/api/contacts')).contacts.find(c=>c.phone==='5554999997997').messages.filter(m=>m.direction==='out'));
+  assert.equal(recoveryMessages.length,1,JSON.stringify(recoveryMessages));
+  await admin.getByRole('button',{name:'Retomar pendentes',exact:true}).click();
+  assert.equal(await admin.evaluate(async()=>(await api('/api/automation/recovery')).recovery.sends.accepted),1);
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({

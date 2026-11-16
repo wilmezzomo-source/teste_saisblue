@@ -1,6 +1,8 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.13.1
+## Aplicativo único para atualizar — 2026.11.16.1
+
+**Retomada local de pendências:** ao iniciar, o servidor revisa mensagens de anúncios já registradas e que ainda não receberam resposta registrada, dentro de 24 horas. Falhas técnicas com rejeição conhecida podem retomar uma vez, aproveitando dados enviados em partes. O administrador acompanha o resultado em **Integrações → Retomar atendimentos pendentes**, sem precisar de acesso externo à tela. Fila, aceite e entrega são mostrados separadamente; atendimentos humanos e envios sem confirmação são preservados. Veja [RETOMAR-ATENDIMENTOS-PENDENTES.md](RETOMAR-ATENDIMENTOS-PENDENTES.md).
 
 **Novo atendimento com contexto, sem API paga:** interpreta intenção e dados da conversa, reconhece uso próprio e início de revenda e faz apenas as perguntas pendentes. White Label, Private Label, PL e WL recebem o perfil Marca própria e são encaminhados ao administrador original (Willian), com marca e volume nas Observações; esses dados são opcionais. Após quatro retomadas sem falha conhecida e 24 horas sem resposta, leads ainda não assumidos podem ser marcados como Perdido com Sem Resposta. Fluxos humanos e falhas de envio são preservados. Veja [ATENDIMENTO-CONTEXTO-E-MARCA-PROPRIA.md](ATENDIMENTO-CONTEXTO-E-MARCA-PROPRIA.md).
 

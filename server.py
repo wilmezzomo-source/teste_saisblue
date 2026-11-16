@@ -26,11 +26,12 @@ from sqlite_context import connection
 from notifications import notify_created, notify_assigned, notify_restored
 from web_push import public_key as push_public_key, validate_subscription
 from qualification import PROFILES, ACTIVE_STEPS, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
+from qualification_recovery import recover_pending, recovery_status
 
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.13.1'
+RELEASE = '2026.11.16.1'
 
 
 class Problem(Exception):
@@ -121,6 +122,7 @@ def init_db(app):
         CREATE INDEX IF NOT EXISTS push_due ON push_deliveries(state,next_try);
         CREATE TABLE IF NOT EXISTS qualification_progress(contact_id TEXT PRIMARY KEY REFERENCES contacts(id),city_text TEXT NOT NULL DEFAULT '',state_text TEXT NOT NULL DEFAULT '',cycle TEXT NOT NULL DEFAULT '',anchor REAL NOT NULL DEFAULT 0,reminders_sent INTEGER NOT NULL DEFAULT 0,next_due REAL NOT NULL DEFAULT 0,closed_reason TEXT NOT NULL DEFAULT '');
         CREATE INDEX IF NOT EXISTS qualification_due ON qualification_progress(next_due);
+        CREATE TABLE IF NOT EXISTS qualification_recoveries(contact_id TEXT NOT NULL REFERENCES contacts(id),incoming_id TEXT NOT NULL,message_id TEXT NOT NULL,created REAL NOT NULL,PRIMARY KEY(contact_id,incoming_id));
         CREATE INDEX IF NOT EXISTS messages_contact ON messages(contact_id,created);
         CREATE INDEX IF NOT EXISTS audit_contact ON audit(contact_id,id);
         ''')
@@ -240,6 +242,12 @@ def run_automation_once(app):
 def start_automation_worker(app):
     stop = threading.Event()
     def run():
+        try:
+            with app.app_context(), database(app) as db:
+                db.execute('BEGIN IMMEDIATE')
+                recover_pending(db,audit,credentials_ready=bool(app.config['META_ACCESS_TOKEN'] and app.config['META_PHONE_NUMBER_ID']),trigger='startup')
+        except Exception as exc:
+            app.logger.error('Pending qualification recovery: %s',type(exc).__name__)
         while not stop.is_set():
             try:
                 handled = run_automation_once(app)
@@ -855,9 +863,10 @@ def create_app(config=None):
         sending = bool(receive and app.config['META_ACCESS_TOKEN'])
         with database(app) as db:
             automation = qualification_settings(db)
+            recovery = recovery_status(db) if g.user['role']=='admin' else None
         return jsonify(version=RELEASE, mode='Equipe Sais Blue', webhook_configured=receive, sending_configured=sending,
                        connection_verified=False, simulation=app.config['ALLOW_SIMULATION'] and g.user['role'] == 'admin', ads_only=True,
-                       manual_contacts_enabled=True, automation=automation, lead_profiles=PROFILES,
+                       manual_contacts_enabled=True, automation=automation, automation_recovery=recovery, lead_profiles=PROFILES,
                        own_opportunities_only=g.user['role'] != 'admin', team_url=app.config['APP_URL'] or request.host_url.rstrip('/'))
 
     @app.post('/api/automation')
@@ -881,6 +890,22 @@ def create_app(config=None):
                 db.execute("UPDATE messages SET status='cancelled' WHERE automation=1 AND status='queued'")
             audit(db, 'Configuração do primeiro atendimento alterada', details=config)
         return jsonify(ok=True, automation=config)
+
+    @app.get('/api/automation/recovery')
+    def recovery_diagnostic():
+        admin()
+        with database(app) as db:
+            return jsonify(recovery=recovery_status(db))
+
+    @app.post('/api/automation/recover')
+    def recover_automation():
+        admin()
+        with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            report=recover_pending(db,audit,credentials_ready=bool(app.config['META_ACCESS_TOKEN'] and app.config['META_PHONE_NUMBER_ID']))
+            audit(db,'Retomada de atendimentos solicitada',details=report)
+            recovery=recovery_status(db)
+        return jsonify(ok=True,report=report,recovery=recovery)
 
     @app.get('/webhooks/whatsapp')
     def verify():
