@@ -1314,3 +1314,62 @@ button:disabled {
 .followup-check small { display:block; margin-top:5px; color:var(--muted); font-size:10px; }
 [data-followup-for][hidden] { display:none; }
 @media(max-width:600px) { .followup-item { flex-direction:column; } .followup-when { text-align:left; } .followup-detail { padding:14px; } .followup-tabs button { padding:7px 9px; } }
+
+/* A next call is visible and actionable on each opportunity. */
+.card { font-family:inherit; color:var(--navy); }
+.card:focus-visible { outline:3px solid #a8c8ff; outline-offset:2px; }
+.card.card-overdue { border:1px solid #f0a69e; box-shadow:0 3px 12px #b4231810; }
+.card-next-call { margin-top:14px; }
+.call-bell { display:flex; align-items:center; gap:9px; width:100%; padding:10px 9px; border:1px solid #dde4ef; border-radius:9px; background:#f6f8fc; color:#63728a; text-align:left; font:inherit; cursor:pointer; }
+.call-bell > span:nth-child(2) { flex:1; min-width:0; }
+.call-bell strong { display:block; font-size:10px; line-height:1.45; }
+.call-bell small { display:block; font-size:10px; margin-top:3px; line-height:1.4; }
+.call-bell-icon { display:inline-flex; flex-shrink:0; }
+.call-bell-edit { font-size:22px; opacity:.6; }
+.call-bell.late, .call-summary.late { background:#fff0ee; border-color:#f3b5ad; color:#b42318; }
+.call-bell.today, .call-summary.today { background:#fff6df; border-color:#f4d88e; color:#8a5b00; }
+.call-bell.planned, .call-summary.planned { background:#edf4ff; border-color:#d4e3ff; color:#205daf; }
+.call-bell.review, .call-summary.review { background:#f3edfc; border-color:#dfd0f5; color:#7651a5; }
+.call-bell.reply, .call-summary.reply { background:#e8f7f0; border-color:#bce2cf; color:#187550; }
+.call-bell:focus-visible { outline:3px solid #9abfff; outline-offset:2px; }
+.call-steps { display:flex; gap:9px; flex-wrap:wrap; margin:16px 0; }
+.call-steps.compact { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:3px; margin:9px 0 0; }
+.call-step { display:flex; align-items:center; flex-direction:row; justify-content:center; gap:6px; margin:0; padding:9px; min-height:42px; border:1px solid #e1e6ef; border-radius:7px; background:white; font-size:12px; color:#57657d; cursor:pointer; }
+.call-step input { width:17px; height:17px; margin:0; accent-color:#1269ef; cursor:pointer; }
+.compact .call-step { flex-direction:column; gap:4px; padding:6px 2px; font-size:10px; }
+.compact .call-step input { width:14px; height:14px; }
+.call-step.done { background:#edf6f2; border-color:#cde5d9; color:#277557; }
+.call-step.skipped { opacity:.45; cursor:default; }
+.call-dashboard { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin:18px 0; }
+.call-total { padding:18px; border:1px solid var(--line); border-radius:12px; background:white; text-align:left; color:var(--navy); cursor:pointer; font:inherit; }
+.call-total span { font-size:12px; display:block; }
+.call-total strong { font-size:28px; display:block; margin-top:8px; }
+.call-total.late { background:#fff2f0; border-color:#f5c9c3; color:#b42318; }
+.call-total.today { background:#edf4ff; border-color:#d9e5ff; color:#205daf; }
+.followup-item.overdue { border-left:4px solid #d43b2d; }
+.followup-person { flex:1; min-width:0; }
+.followup-person > small { color:var(--muted); font-size:11px; }
+.followup-task { width:270px; max-width:100%; }
+.followup-task .card-next-call { margin-top:0; }
+#call-dialog { width:min(460px,calc(100vw - 28px)); max-height:90vh; }
+.call-summary { padding:15px; border:1px solid #dce3ee; border-radius:10px; background:#f6f8fc; display:flex; align-items:center; gap:12px; font-size:14px; }
+.call-summary p { margin:4px 0 0; font-size:12px; }
+#call-dialog h3 { font-size:14px; margin:22px 0 10px; }
+#call-date-form { margin-top:22px; border-top:1px solid var(--line); padding-top:18px; }
+.call-date-shortcuts { display:flex; gap:8px; margin:10px 0; }
+.call-open-detail { background:none; border:0; color:#2865b8; padding:12px 0 0; font:inherit; font-size:12px; cursor:pointer; }
+#followup-advanced { margin-top:18px; }
+#followup-advanced summary { cursor:pointer; font-size:12px; color:#52657e; padding:10px 0; }
+#followup-advanced[open] form { margin-top:12px; }
+.clear-call-date { border:0; background:#edf1f8; color:#63728a; border-radius:50%; width:27px; height:27px; cursor:pointer; margin-bottom:6px; font-size:19px; }
+.clear-call-date[hidden], #custom-call-period[hidden] { display:none; }
+@media(max-width:600px) {
+  .call-dashboard { gap:7px; }
+  .call-total { padding:12px 9px; }
+  .call-total span { font-size:10px; }
+  .call-total strong { font-size:24px; }
+  .followup-task { width:100%; }
+}
+.board { grid-template-columns:repeat(var(--board-columns,6),minmax(205px,1fr)); }
+#more-followup-queues { max-width:230px; padding:8px 10px; border-radius:20px; font-size:11px; background:white; }
+.call-bell.late strong { display:inline-flex; padding:3px 6px; border-radius:4px; background:#b42318; color:white; font-size:9px; }

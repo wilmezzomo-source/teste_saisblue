@@ -54,18 +54,19 @@ class FollowupTest(unittest.TestCase):
             self.tick(last)
             state=self.row(c['id'])['followup']
             if state['due_at']>self.current:self.current=state['due_at']+60
-            response=self.save(c,complete='D'+str(last));self.assertEqual(response.status_code,200,response.json)
+            response=self.save(c,action='record_step',step='D'+str(last));self.assertEqual(response.status_code,200,response.json)
             state=response.json['followup'];self.assertEqual(state['queue'],'review' if review else 'closed')
             self.assertEqual(state['due_on'],review)
             if review:self.assertTrue(state['review'])
 
-    def test_missed_attempts_do_not_create_a_burst_and_sequence_expires_without_marking_fake_contacts(self):
+    def test_missed_attempt_stays_overdue_until_a_real_attempt_is_recorded(self):
         c=self.lead();self.save(c,mode='awaiting',last_conversation_on='2026-11-17')
-        self.tick(3);state=self.row(c['id'])['followup'];self.assertEqual(state['next_key'],'D3')
+        self.tick(3);state=self.row(c['id'])['followup'];self.assertEqual(state['next_key'],'D0');self.assertTrue(state['overdue'])
         self.assertEqual(self.save(c,complete='D1').status_code,400)
-        self.save(c,complete='D3');state=self.row(c['id'])['followup']
+        self.save(c,action='record_step',step='D3');state=self.row(c['id'])['followup']
         self.assertEqual(state['progress'],{'D3':'2026-11-20'});self.assertEqual(state['next_key'],'D7')
-        self.tick(15);state=self.row(c['id'])['followup'];self.assertEqual(state['queue'],'review')
+        self.tick(15);state=self.row(c['id'])['followup'];self.assertEqual(state['queue'],'active');self.assertTrue(state['overdue'])
+        self.assertEqual(state['next_key'],'D7')
         self.assertEqual(state['progress'],{'D3':'2026-11-20'})
 
     def test_agreed_date_supersedes_sequence_and_active_negotiation_never_expires_by_age(self):
@@ -86,14 +87,17 @@ class FollowupTest(unittest.TestCase):
         self.assertEqual(self.row(c['id'])['followup']['label'],'Apresentar catálogo')
 
     def test_qualification_pending_after_24h_is_an_internal_lane_without_changing_bot_or_contact_stage(self):
-        c=self.lead('')
+        c=self.lead('',owner='')
         with database(self.app) as db:
             db.execute("UPDATE contacts SET city_id='',city='',state='',ad_origin=1,manual_origin=0,qualification_state='waiting_city',qualification_last_at=? WHERE id=?",(self.current-86401,c['id']))
+            db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel) VALUES('first-pending',?,'Olá','in',?,'meta')",(c['id'],self.current-86401))
+            db.execute("INSERT INTO qualification_progress(contact_id,reminders_sent,closed_reason) VALUES(?,4,'finished')",(c['id'],))
         state=self.row(c['id'])['followup'];self.assertEqual(state['crm_stage'],'Qualificação pendente');self.assertEqual(state['queue'],'qualification_pending')
         with database(self.app) as db:
             row=db.execute('SELECT stage,qualification_state FROM contacts WHERE id=?',(c['id'],)).fetchone()
             self.assertEqual(tuple(row),('Novo contato','waiting_city'))
-        self.assertEqual(self.row(c['id'])['messages'],[])
+        self.assertEqual(len(self.row(c['id'])['messages']),1)
+        for uid in ('chai','grasi'):self.assertFalse(any(row['id']==c['id'] for row in self.rows(uid)))
 
     def test_bought_customers_use_adjustable_cycle_and_exact_reference_bands(self):
         c=self.lead();self.save(c,mode='customer',last_purchase_on='2026-11-17')
@@ -141,9 +145,9 @@ class FollowupTest(unittest.TestCase):
             with database(self.app) as db:f.reminders(db,datetime(2026,11,d,hour,tzinfo=f.LOCAL).timestamp())
         with database(self.app) as db:self.assertEqual(db.execute("SELECT COUNT(*) FROM notifications WHERE kind='followup'").fetchone()[0],0)
         self.current=datetime(2026,11,23,10,tzinfo=f.LOCAL).timestamp()
-        state=self.row(c['id'])['followup'];self.assertEqual(state['next_key'],'D3')
-        self.save(c,complete='D3');state=self.row(c['id'])['followup']
-        self.assertTrue(next(p for p in state['plan'] if p['key']=='D1')['covered'])
+        state=self.row(c['id'])['followup'];self.assertEqual(state['next_key'],'D1')
+        self.save(c,action='record_step',step='D1');state=self.row(c['id'])['followup']
+        self.assertEqual(state['next_key'],'D3');self.assertEqual(state['due_on'],'2026-11-25')
 
     def test_schema_and_checklist_persist_after_restart_without_rewriting_existing_data(self):
         c=self.lead();self.save(c,mode='awaiting',last_conversation_on='2026-11-17');self.save(c,complete='D0')
@@ -162,7 +166,7 @@ class FollowupTest(unittest.TestCase):
             before_message=tuple(db.execute("SELECT * FROM messages WHERE id='existing-bot'").fetchone())
         response=self.save(c,last_conversation_on='2026-11-17')
         self.assertEqual(response.json['followup']['mode'],'awaiting')
-        self.save(c,complete='D0');self.save(c,mode='blocked')
+        self.save(c,complete='D0');self.save(c,action='record_step',step='D3');self.save(c,mode='blocked')
         with database(self.app) as db:
             f.reminders(db,self.current)
             self.assertEqual(tuple(db.execute('SELECT * FROM contacts WHERE id=?',(c['id'],)).fetchone()),before_contact)
@@ -191,6 +195,81 @@ class FollowupTest(unittest.TestCase):
             f.reminders(db,self.current)
             self.assertEqual(db.execute("SELECT COUNT(*) FROM notifications WHERE kind='followup'").fetchone()[0],0)
         response=self.save(c,complete='D0');self.assertEqual(response.status_code,200,response.json)
+
+    def test_direct_d3_checkbox_needs_no_history_and_schedules_the_next_step(self):
+        c=self.lead();response=self.save(c,action='record_step',step='D3')
+        self.assertEqual(response.status_code,200,response.json)
+        state=response.json['followup'];self.assertEqual(state['progress'],{'D3':'2026-11-17'})
+        self.assertEqual((state['next_key'],state['due_on']),('D7','2026-11-23'))
+        self.assertEqual(state['last_conversation_on'],'');self.assertEqual(state['start_step'],3)
+        self.assertFalse(state['overdue'])
+        self.assertTrue(next(p for p in state['plan'] if p['key']=='D0')['before_start'])
+        self.tick(6);response=self.save(c,action='record_step',step='D7')
+        self.assertEqual((response.json['followup']['next_key'],response.json['followup']['due_on']),('D14','2026-11-30'))
+        self.assertEqual(self.save(c,action='record_step',step='D1').status_code,400)
+        self.assertEqual(self.row(c['id'])['messages'],[])
+        response=self.save(c,restart=True)
+        self.assertEqual(response.status_code,200,response.json)
+        self.assertEqual(response.json['followup']['next_key'],'D0')
+        self.assertEqual(response.json['followup']['last_conversation_on'],'')
+
+    def test_late_d3_uses_the_actual_call_day_and_keeps_the_old_start_date(self):
+        c=self.lead();self.save(c,mode='awaiting',last_conversation_on='2026-11-17')
+        self.save(c,complete='D0');self.tick(8)
+        response=self.save(c,action='record_step',step='D3');self.assertEqual(response.status_code,200,response.json)
+        state=response.json['followup'];self.assertEqual(state['anchor_on'],'2026-11-17')
+        self.assertEqual((state['next_key'],state['due_on']),('D7','2026-11-30'));self.assertFalse(state['overdue'])
+
+    def test_same_second_customer_reply_suspends_calls_and_recording_activity_can_resume_them(self):
+        c=self.lead()
+        with database(self.app) as db:
+            db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel) VALUES('before-plan',?,'Quero ver o catálogo','in',?,'meta')",(c['id'],self.current))
+        self.save(c,action='record_step',step='D0')
+        with database(self.app) as db:
+            db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel) VALUES('after-plan',?,'Pode mandar','in',?,'meta')",(c['id'],self.current))
+        self.assertEqual(self.row(c['id'])['followup']['queue'],'conversation')
+        self.save(c,action='record_step',step='D1');self.assertEqual(self.row(c['id'])['followup']['queue'],'active')
+
+    def test_pending_requires_no_profile_no_city_no_owner_and_finished_virtual_attempts(self):
+        c=self.lead('',owner='')
+        with database(self.app) as db:
+            db.execute("UPDATE contacts SET city_id='',city='',state='',ad_origin=1,manual_origin=0,qualification_state='waiting_profile' WHERE id=?",(c['id'],))
+            db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel) VALUES('pending-start',?,'Olá','in',?,'meta')",(c['id'],self.current-90000))
+            db.execute("INSERT INTO qualification_progress(contact_id,reminders_sent,closed_reason) VALUES(?,3,'')",(c['id'],))
+        self.assertNotEqual(self.row(c['id'])['followup']['queue'],'qualification_pending')
+        with database(self.app) as db:db.execute("UPDATE qualification_progress SET reminders_sent=4,closed_reason='finished' WHERE contact_id=?",(c['id'],))
+        self.assertEqual(self.row(c['id'])['followup']['queue'],'qualification_pending')
+        for changes in ({'lead_profile':'Revenda'},{'city_id':'4309407','city':'Guaporé'},{'state':'RS'}, {'owner_id':'grasi','owner':'Grasi'}):
+            with database(self.app) as db:
+                db.execute("UPDATE contacts SET lead_profile='',city_id='',city='',state='',owner_id='',owner='Sem responsável' WHERE id=?",(c['id'],))
+                db.execute('UPDATE contacts SET '+','.join(k+'=?' for k in changes)+' WHERE id=?',(*changes.values(),c['id']))
+            self.assertNotEqual(self.row(c['id'])['followup']['queue'],'qualification_pending',changes)
+
+    def test_pending_uses_first_message_and_does_not_invent_activity_for_the_team(self):
+        c=self.lead('',owner='')
+        with database(self.app) as db:
+            db.execute("UPDATE contacts SET city_id='',city='',state='',ad_origin=1,manual_origin=0,qualification_state='waiting_profile' WHERE id=?",(c['id'],))
+            for mid,stamp in (('first',self.current-90000),('recent',self.current-600)):
+                db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel) VALUES(?,?,'Olá','in',?,'meta')",(mid,c['id'],stamp))
+            db.execute("INSERT INTO qualification_progress(contact_id,reminders_sent,closed_reason) VALUES(?,4,'finished')",(c['id'],))
+        self.assertEqual(self.row(c['id'])['followup']['queue'],'qualification_pending')
+        for uid in ('chai','grasi'):
+            self.assertEqual(self.post(uid,'/api/followups',{'id':c['id'],'version':0,'action':'record_step','step':'D0'}).status_code,404)
+            self.assertNotIn('Qualificação pendente',self.clients[uid][0].get('/api/contacts').json['stages'])
+
+    def test_previous_followup_schema_upgrades_without_losing_history_or_ignoring_a_new_reply(self):
+        c=self.lead()
+        with database(self.app) as db:
+            db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel) VALUES('migration-before',?,'Olá','in',?,'meta')",(c['id'],self.current))
+        self.save(c,action='record_step',step='D0')
+        with database(self.app) as db:
+            db.execute("INSERT INTO messages(id,contact_id,body,direction,created,channel) VALUES('migration-after',?,'Tenho uma dúvida','in',?,'meta')",(c['id'],self.current+1))
+            db.execute('ALTER TABLE followups DROP COLUMN start_step')
+            db.execute('ALTER TABLE followups DROP COLUMN response_rowid')
+        create_app(dict(self.app.config))
+        state=self.row(c['id'])['followup']
+        self.assertEqual(state['progress'],{'D0':'2026-11-17'})
+        self.assertEqual(state['queue'],'conversation')
 
 
 if __name__=='__main__':unittest.main()

@@ -32,7 +32,7 @@ import followups
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Qualificação pendente', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.17.1'
+RELEASE = '2026.11.17.2'
 
 
 class Problem(Exception):
@@ -608,7 +608,7 @@ def create_app(config=None):
                 row['messages'] = [dict(m) for m in db.execute('SELECT * FROM messages WHERE contact_id=? ORDER BY created,rowid', (row['id'],))]
                 row['followup']=followups.snapshot(db,row)
                 row['audit'] = [dict(a) for a in db.execute('SELECT actor,action,details,created FROM audit WHERE contact_id=? ORDER BY id DESC LIMIT 30', (row['id'],))]
-        return jsonify(contacts=rows, stages=STAGES)
+        return jsonify(contacts=rows, stages=STAGES if g.user['role']=='admin' else [s for s in STAGES if s!=followups.PENDING_STAGE])
 
     @app.post('/api/followups')
     def update_followup():

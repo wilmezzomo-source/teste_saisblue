@@ -1,57 +1,62 @@
-# Retornos e lembretes internos — 2026.11.17.1
+# Sino, chamadas e atendimentos — 2026.11.17.2
 
-No menu **Retornos**, a equipe encontra contatos para hoje, atrasados, agendados, revisões, clientes que responderam, qualificação pendente, clientes que já compraram e contatos sem agenda. Perfil, responsável e período podem ser combinados. Atendentes acessam apenas suas próprias oportunidades; o administrador acompanha toda a equipe.
+Cada card mostra um **sino com a próxima chamada**. A equipe pode trabalhar direto no funil ou abrir **Retornos** para consultar as pessoas que precisa chamar.
 
-## Registrar o acompanhamento
+## Marcar o atendimento e calcular a próxima chamada
 
-1. Abra o card e localize **Acompanhamento e lembretes**.
-2. Informe **Data da última conversa**, correspondente à última conversa com resposta do cliente.
-3. Use **Identificado · aguardando resposta** para iniciar a sequência do perfil, ou escolha retorno combinado, conversa ativa/negociação, cliente que já comprou, pausa ou encerramento.
-4. Clique em **Salvar acompanhamento**. O formulário sugere a sequência pelo perfil; para clientes na etapa Ganho, sugere recompra.
-5. Ao realizar uma tentativa, marque a caixinha correspondente. Se a conversa registrada já foi D0, marque D0 como realizado para avançar ao próximo prazo. A marcação salva automaticamente. A última tentativa fica separada da última conversa, e D0 permanece o início da tentativa.
+No card, marque a caixinha do atendimento que realizou hoje: D0, D1, D3, D7 ou D14 para Lojista; D0, D2, D5 ou D10 para Revenda; D0, D1, D3 ou D7 para Consumidor Final.
 
-Para iniciar outra tentativa a partir da mesma data, use **Nova tentativa a partir da última conversa**. Alterar a data da última conversa ao manter a situação de aguardando resposta também inicia uma nova sequência. As mudanças ficam no histórico; marcar uma tentativa não altera a etapa ou responsável do card.
+Não é necessário preencher outro formulário ou registrar etapas anteriores para começar. Marcar **D3** registra o atendimento de hoje e calcula **D7 quatro dias depois**. Para Revenda, marcar D2 calcula D5 três dias depois. Se a data cair no fim de semana, o lembrete fica para o próximo dia útil.
 
-| Situação | Sequência | Depois |
-| --- | --- | --- |
-| Identificação pendente | Primeiras 24 horas | Qualificação pendente; fora da fila ativa de retornos |
-| Lojista | D0, D1, D3, D7, D14 | Pausa e revisão interna em D30 |
-| Revenda | D0, D2, D5, D10 | Pausa e revisão padrão D45, ajustável conforme a janela D30–D60 |
-| Consumidor Final | D0, D1, D3, D7 | Tentativa encerrada; não cria nova abordagem |
-| Data combinada | Data informada pela consultora | Substitui a sequência anterior |
-| Conversa ativa / negociação | Próximo passo e data obrigatórios | Não encerra pela idade do cadastro |
-| Não receber contato | Interrupção dos lembretes comerciais | Sem nova data de abordagem |
+As etapas anteriores sem registro ficam esmaecidas, sem serem marcadas como realizadas. O histórico efetivamente registrado é preservado. Uma tentativa feita com atraso usa a data real do atendimento para calcular o próximo intervalo; não coloca a nova chamada em uma data que já passou.
 
-Os intervalos usam dias corridos. Lembretes de sequência que caem no fim de semana são apresentados no próximo dia útil. Lembretes e revisões são gerados de segunda a sexta, das 9h às 18h, no horário de Brasília. Feriados não são descontados. Uma data expressamente combinada permanece como foi informada; os avisos respeitam o expediente. Uma tentativa realmente feita pode ser registrada antes das 9h no próprio dia, sem antecipar o aviso.
+Se precisar de uma data específica, clique no **sino**, escolha o dia e use **Agendar chamada**. Os atalhos Hoje e Amanhã preenchem a data. Uma data combinada substitui a sequência enquanto estiver em vigor. Ao registrar uma nova etapa realizada, a sequência continua a partir desse atendimento.
 
-Não há acúmulo de tentativas para fazer em uma rajada: ao registrar uma etapa posterior, as etapas anteriores sem registro continuam identificadas como não realizadas. Prazos que caem na mesma data útil são cobertos por um único contato. No fim da sequência, o contato vai para revisão ou encerramento, mesmo que não tenham sido marcadas todas as tentativas. Uma revisão é uma tarefa interna para avaliar contexto, não uma mensagem automática.
+## Hoje e atrasados
 
-Se uma nova resposta do cliente chegar ao CRM durante a sequência, os próximos lembretes ficam suspensos e o contato aparece em **Cliente respondeu**. A equipe registra a conversa e define uma data combinada ou o próximo passo. Conversas feitas somente pelo telefone, sem mensagem recebida pelo CRM, dependem desse registro manual. Um pedido recebido para interromper mensagens também bloqueia novos lembretes internos; a equipe deve manter o registro de não contato.
+- **Amarelo — Chamar hoje:** a chamada é para hoje.
+- **Vermelho — ATRASADO:** mostra o vencimento e quantos dias passaram.
+- **Azul — Próxima chamada:** apresenta a etapa e a data futura.
+- **Verde — Cliente respondeu:** a conversa precisa orientar a próxima ação.
+- **Roxo — Revisão interna:** serve para avaliar o contexto; não dispara mensagem comercial.
+- **Cinza — Agendar chamada:** ainda não existe uma data definida.
 
-## Clientes que já compraram
+Uma etapa não realizada **continua atrasada**. Não é marcada automaticamente nem desaparece da fila por envelhecer. Ela sai desse estado quando a equipe registra o atendimento, combina outra data ou pausa/encerra o acompanhamento.
 
-Escolha **Cliente que já comprou**, preencha a última compra e o ciclo real em dias. O padrão é 30 dias: até 30 no ciclo; 31–45 atenção; 46–60 risco; 61–90 inativo; acima de 90 dormente. Para outro ciclo, os limites são proporcionais: 1, 1,5, 2 e 3 ciclos. Ajuste a referência conforme reposição ou coleção. A etapa Ganho não inventa uma data de compra: ela precisa ser informada.
+Em **Retornos**, os contadores Atrasados, Para hoje e Sem próxima chamada levam à fila correspondente. Os filtros de perfil e responsável continuam valendo. A fila é atualizada ao abrir o menu; os avisos e a atualização periódica continuam disponíveis.
 
-## Filtro de datas
+## Filtro de data simples
 
-Ao lado de perfil e responsável, escolha **Data de**: entrada no CRM, última conversa, próximo retorno/revisão ou última compra. Preencha **De / Até**; os limites são inclusivos e usam o dia de Brasília. Os filtros valem juntos no funil, contatos, atendimento, retornos, mapa e indicadores. Um contato sem a data escolhida fica fora de um intervalo preenchido. **Limpar datas** remove apenas esse intervalo.
+Ao lado de perfil e responsável existe apenas **Próxima chamada**:
 
-## Qualificação pendente e WhatsApp
+- Todas as datas;
+- Chamar hoje;
+- Atrasados;
+- Amanhã;
+- Próximos 7 dias;
+- Sem agendamento;
+- Escolher período.
 
-A nova coluna separa visualmente leads de anúncio sem perfil ou localização após 24 horas sem resposta de identificação. Ela não reabre atendimentos assumidos, cadastros manuais ou perdas manuais. Também pode ser selecionada como etapa pela equipe. Contatos expirados ficam fora dos indicadores de oportunidades ativas e da fila de retornos de hoje.
+Os campos De/Até aparecem somente ao escolher um período. Os limites incluem os dois dias, no horário de Brasília. O botão × limpa a data e mantém perfil e responsável. Os atalhos da agenda trocam a fila sem deixar um período anterior ocultando contatos indevidamente.
 
-A classificação automática dessa coluna é uma exibição interna: não reescreve o estado ou a etapa usados pelo assistente, não reinicia qualificação e não muda os envios existentes. Os arquivos `qualification.py`, `qualification_dialogue.py` e `qualification_location.py` permanecem iguais aos da versão 2026.11.16.3. Os ajustes adicionais de WhatsApp que estavam em preparação não integram esta atualização interna.
+## Qualificação pendente — somente o administrador
 
-Esta agenda não envia WhatsApp. Os avisos aparecem em **Avisos**, com o mesmo controle de acesso e opção de som já existentes. O aviso é criado apenas para a responsável atual, ou para o administrador quando não há responsável. Avisos são deduplicados. Notificações no aparelho usam a configuração Web Push já existente e exigem HTTPS; a atualização não comprova entrega real no iPhone.
+A coluna é exclusiva do administrador e não é compartilhada ou distribuída entre atendentes. Ela reúne leads de anúncio **sem perfil, sem localização e sem responsável**, depois de **24 horas desde a primeira mensagem**, quando as tentativas do assistente virtual já se esgotaram.
 
-## Acesso externo informado
+Um lead que informou perfil ou localização não entra nessa classificação de ausência total de identificação. Os demais controles de acesso são preservados: cada atendente vê apenas suas próprias oportunidades. A coluna automática não é uma etapa para arrastar cards manualmente.
 
-O acesso da equipe e os convites passam a usar **http://200.225.129.156:3001** na instalação HTTP atual. Login e alterações aceitam esse endereço exato, mantendo autenticação, CSRF e restrições por atendente. Outros endereços e portas não são liberados como origem externa. A porta interna atual do serviço permanece igual, preservando o redirecionamento que a empresa já utiliza.
+Essa classificação é da exibição interna. Não reescreve os registros de qualificação usados pelo assistente nem muda envios, responsáveis ou o atendimento do WhatsApp.
 
-Não são alterados roteador, callback, ngrok ou credenciais Meta. O endereço pode ser substituído por `CRM_ACCESS_URL` no `.env`. Uma instalação configurada com HTTPS não é rebaixada para HTTP. O endereço HTTP não permite instalar o app do iPhone nem receber notificações de tela bloqueada; esses recursos continuam dependentes do HTTPS existente em preparação.
+## Revisões e opções adicionais
 
-A consulta ao IP externo a partir deste ambiente foi recusada pelo gateway com `403 Domain forbidden`, portanto a acessibilidade real pela internet não foi confirmada aqui. Os testes do endereço foram feitos no cliente HTTP isolado do CRM.
+Ao registrar a última etapa, Lojista passa à revisão interna de D30; Revenda tem revisão padrão D45, ajustável conforme o contexto de D30–D60; Consumidor Final encerra a tentativa. Os intervalos de revisão partem do atendimento realizado. Uma revisão não significa enviar mensagem automaticamente.
+
+Na ficha, **Mais opções de acompanhamento** mantém data combinada, próximo passo de negociação, pausa, encerramento, não contato, última compra e ciclo de recompra. Negociação ativa não encerra só pela idade. Para recomeçar uma sequência, use **Reiniciar sequência hoje**; a data da última conversa não é inventada.
+
+As faixas de recompra padrão de 30 dias continuam: 31–45 atenção, 46–60 risco, 61–90 inativo e acima de 90 dormente. O ciclo pode ser ajustado conforme reposição ou coleção. A agenda não inventa datas de compras anteriores.
+
+Uma nova resposta recebida pelo CRM suspende a sequência de lembretes até a equipe definir o próximo passo. Pedidos para interromper contato continuam bloqueando novas abordagens. Os avisos internos respeitam dias úteis, das 9h às 18h de Brasília, sem calendário de feriados; a consulta da fila de hoje fica disponível durante o dia todo.
 
 ## Aplicar
 
-No servidor, use **Sais Blue CRM → Atualizar e abrir CRM** e depois recarregue o navegador. As datas antigas não são inventadas: a equipe preenche a última conversa ou compra para iniciar o acompanhamento. O servidor precisa permanecer ligado para gerar os avisos.
+No servidor, use **Sais Blue CRM → Atualizar e abrir CRM** e recarregue o navegador. O banco, as datas e os atendimentos já registrados são preservados. O acesso externo e os convites continuam usando **http://200.225.129.156:3001**, com a porta interna preservada. O WhatsApp não recebe mensagens por estas ações de agenda. Notificações do aparelho continuam dependentes da configuração HTTPS existente.

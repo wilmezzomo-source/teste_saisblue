@@ -86,7 +86,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.17.1"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.17.2"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
   assert.equal(appManifest.display,'standalone');
@@ -145,7 +145,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin
     .locator(".card")
     .filter({ hasText: "Cliente de demonstração" })
-    .click();
+    .locator(".card-top").click();
   await member
     .locator(".card")
     .filter({ hasText: "Cliente de demonstração" })
@@ -388,7 +388,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(await admin.locator('.card .source').count(),0);
   assert.equal(await admin.locator('.card .owner-tag').textContent(),'Admin de demonstração');
   assert.equal(await admin.locator('.card').getByText('Qualificação concluída',{exact:true}).count(),0);
-  await admin.locator('.card').click();
+  await admin.locator('.card .card-top').click();
   assert.equal(await admin.locator('#detail-form [name=lead_profile]').inputValue(),'Revenda');
   assert.equal(await admin.locator('#detail-form [name=city_id]').inputValue(),'4309407');
   assert.equal(await admin.locator('#detail-form [name=owner_id]').inputValue(),'admin-test');
@@ -456,7 +456,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   await member.evaluate(async()=>await load());
   assert.equal(await member.getByText('Sem responsável privado',{exact:true}).count(),0);
-  await member.locator('.card').filter({hasText:'Oportunidade por indicação'}).click();
+  await member.locator('.card').filter({hasText:'Oportunidade por indicação'}).locator('.card-top').click();
   await admin.evaluate(async()=>{
     const row=(await api('/api/contacts')).contacts.find(c=>c.phone==='5554999997666');
     await api('/api/update',{id:row.id,revision:row.revision,owner_id:'admin-test'});
@@ -520,7 +520,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(await admin.locator('#owner-filter').isVisible(),true);
   await admin.screenshot({path:__dirname+'/preview-owner-filter-mobile.png',fullPage:true});
   await admin.setViewportSize({width:1440,height:1000});
-  await admin.locator('.card').filter({hasText:'Oportunidade por indicação'}).click();
+  await admin.locator('.card').filter({hasText:'Oportunidade por indicação'}).locator('.card-top').click();
   admin.once('dialog',dialog=>dialog.dismiss());
   await admin.getByRole('button',{name:'Excluir card',exact:true}).click();
   assert.equal(await admin.locator('#detail-dialog').isVisible(),true);
@@ -537,7 +537,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.locator('[data-view=pipeline]').click();
   assert.equal(await admin.locator('.card').filter({hasText:'Oportunidade por indicação'}).count(),1);
   await member.locator('[data-view=pipeline]').click();
-  await member.locator('.card').filter({hasText:'Cliente com nome confirmado'}).click();
+  await member.locator('.card').filter({hasText:'Cliente com nome confirmado'}).locator('.card-top').click();
   await member.locator('#note-form [name=body]').fill('Rascunho que deve permanecer enquanto chega um aviso');
   const tonesBeforeTyping=await member.evaluate(()=>window.__alertToneStarts);
   await admin.evaluate(async owner_id=>{
@@ -573,7 +573,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await editing.goto(base+'/');
   await editing.locator('body[data-auth=ready]').waitFor();
   const pendingCard=()=>editing.locator(`.card[data-contact="${pendingId}"]`);
-  await pendingCard().click();
+  await pendingCard().locator('.card-top').click();
   assert.equal(await editing.locator('#detail-form [name=state_picker]').getAttribute('required'),null);
   assert.equal(await editing.locator('#detail-form [name=city_id]').getAttribute('required'),null);
   await editing.locator('#detail-form [name=lead_profile]').selectOption('Revenda');
@@ -599,7 +599,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await editing.locator('.column[data-stage="Negociação"]').dispatchEvent('drop',{dataTransfer:dragData});
   await editing.getByRole('status').filter({hasText:'Etapa atualizada.'}).waitFor();
   assert.equal((await pendingRow()).stage,'Negociação');
-  await pendingCard().click();
+  await pendingCard().locator('.card-top').click();
   await editing.locator('#detail-form [name=state_picker]').selectOption('SC');
   await savePending();
   saved=await pendingRow();assert.equal(saved.state,'SC');assert.equal(saved.city_id,'');assert.equal(saved.location_pending,true);
@@ -631,7 +631,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.evaluate(async()=>load());
   assert.equal(await admin.locator('.card').count(),1);
   await admin.locator('.profile-tag.label').waitFor();
-  await admin.locator('.card').click();
+  await admin.locator('.card .card-top').click();
   const labelObservations=await admin.locator('#detail-form [name=note]').inputValue();
   assert.match(labelObservations,/Marca: Urban\.Fit/);assert.match(labelObservations,/Volume mensal: 800/);
   assert.ok(labelObservations.includes('\n'));
@@ -699,60 +699,91 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     consumer=await consumerRow();assert.equal(consumer.lead_profile,'Consumidor Final');
     assert.equal(consumer.messages.filter(m=>m.direction==='out').length,1);
   }
-  // Internal follow-up dates, checklist and inclusive date filters combine
-  // with the existing owner/profile filters without sending WhatsApp.
-  const today=await admin.evaluate(()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()));
-  const nextDate=new Date(today+'T12:00:00Z');nextDate.setUTCDate(nextDate.getUTCDate()+5);
-  const agreedDate=nextDate.toISOString().slice(0,10);
-  const agendaId=await admin.evaluate(async()=>{
-    const result=await api('/api/contacts',{name:'Agenda da consultora',phone:'5554999999666',city_id:'4309407',lead_profile:'Lojista',owner_id:'admin-test'});
+  // The attendant works from the card: check D3, get D7 automatically,
+  // schedule a date through its bell, see an overdue red label, and filter today.
+  const today=await admin.evaluate(()=>followupToday());
+  const agendaId=await admin.evaluate(async owner=>{
+    const result=await api('/api/contacts',{name:'Lembrete da atendente',phone:'5554999999666',city_id:'4309407',lead_profile:'Lojista',owner_id:owner});
     await load();return result.id;
-  });
-  await admin.evaluate(id=>detail(id),agendaId);
-  await admin.locator('#followup-form [name=last_conversation_on]').fill(today);
-  await admin.getByRole('button',{name:'Salvar acompanhamento',exact:true}).click();
-  await admin.getByRole('status').filter({hasText:'Acompanhamento salvo.'}).waitFor();
-  await admin.locator('[data-followup-step=D14]').waitFor();
-  assert.equal(await admin.locator('#followup-form [name=mode]').inputValue(),'awaiting');
-  assert.equal(await admin.locator('[data-followup-step]').count(),5);
-  await admin.locator('#followup-form [name=mode]').selectOption('promised');
-  await admin.locator('#followup-form [name=next_on]').fill(agreedDate);
-  await admin.locator('#followup-form [name=next_step]').fill('Confirmar interesse no catálogo');
-  await admin.getByRole('button',{name:'Salvar acompanhamento',exact:true}).click();
-  await admin.getByRole('status').filter({hasText:'Acompanhamento salvo.'}).waitFor();
-  await admin.locator('#close-detail').click();
+  },seller.id);
+  await member.locator('[data-view=pipeline]').click();
+  await member.locator('#profile-filter').selectOption('');
+  await member.evaluate(async()=>load());
+  while(await member.locator('[data-dismiss-alert]').count())await member.locator('[data-dismiss-alert]').first().click();
+  const agendaCard=member.locator(`.card[data-contact="${agendaId}"]`);
+  await agendaCard.waitFor();
+  assert.equal(await member.locator('.column[data-stage="Qualificação pendente"]').count(),0);
+  await agendaCard.locator('[data-quick-step=D3]').check();
+  const agendaRow=()=>member.evaluate(async id=>(await api('/api/contacts')).contacts.find(c=>c.id===id),agendaId);
+  let agenda;
+  for(let attempt=0;attempt<100;attempt++) {
+    agenda=await agendaRow();if(agenda?.followup.progress.D3)break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.equal(agenda.followup.next_key,'D7');assert.equal(agenda.followup.last_conversation_on,'');
+  assert.deepEqual(Object.keys(agenda.followup.progress),['D3']);
+  assert.equal(await member.locator('#detail-dialog').evaluate(d=>d.open),false);
+  await agendaCard.locator('.call-bell.planned').waitFor();
+  await agendaCard.locator('[data-call-bell]').click();
+  await member.locator('#call-dialog').waitFor({state:'visible'});
+  const yesterday=await member.evaluate(()=>callDatePlus(-1));
+  await member.locator('#call-date-form [name=next_on]').fill(yesterday);
+  await member.getByRole('button',{name:'Agendar chamada',exact:true}).click();
+  await agendaCard.locator('.call-bell.late').waitFor();
+  assert.match(await agendaCard.locator('.call-bell').textContent(),/ATRASADO/);
+  while(await member.locator('[data-dismiss-alert]').count())await member.locator('[data-dismiss-alert]').first().click();
+  await agendaCard.screenshot({path:__dirname+'/preview-call-overdue.png'});
+  await member.locator('#call-date-filter').selectOption('overdue');
+  assert.equal(await member.locator('.card').count(),1);
+  await member.locator('[data-view=followups]').click();
+  await member.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).waitFor();
+  await member.locator('#call-date-filter').selectOption('today');
+  assert.equal(await member.locator('.followup-item').count(),0);
+  await member.locator('#clear-dates').click();
+  await member.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).locator('[data-call-bell]').click();
+  await member.locator('[data-call-days="0"]').click();
+  await member.getByRole('button',{name:'Agendar chamada',exact:true}).click();
+  await member.locator('.followup-item .call-bell.today').waitFor();
+  await member.locator('#call-date-filter').selectOption('today');
+  assert.equal(await member.locator('.followup-item').count(),1);
+  assert.match(await member.locator('.followup-item .call-bell').textContent(),/CHAMAR HOJE/);
+  await member.locator('#call-date-filter').selectOption('range');
+  await member.locator('#date-from').fill(today);await member.locator('#date-to').fill(today);await member.locator('#date-to').blur();
+  assert.equal(await member.locator('.followup-item').count(),1);
+  await member.locator('#date-from').fill('2099-01-01');await member.locator('#date-to').fill('2099-01-02');await member.locator('#date-to').blur();
+  assert.equal(await member.locator('.followup-item').count(),0);
+  await member.locator('#clear-dates').click();
+  assert.equal(await member.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).count(),1);
+  agenda=await agendaRow();assert.equal(agenda.messages.length,0);assert.equal(agenda.stage,'Novo contato');assert.equal(agenda.owner_id,seller.id);
   await admin.locator('[data-view=followups]').click();
   await admin.locator('[data-followup-filter=scheduled]').click();
+  await admin.locator('[data-followup-filter=today]').first().click();
   await admin.locator('#profile-filter').selectOption('Lojista');
-  await admin.locator('#owner-filter').selectOption('admin-test');
-  await admin.locator('#date-basis').selectOption('next');
-  await admin.locator('#date-from').fill(agreedDate);
-  await admin.locator('#date-to').fill(agreedDate);
-  await admin.locator('#date-to').blur();
-  await admin.locator('.followup-item').filter({hasText:'Agenda da consultora'}).waitFor();
-  assert.equal(await admin.locator('.followup-item').count(),1);
-  await admin.locator('#date-from').fill('2099-01-01');await admin.locator('#date-to').fill('2099-01-02');await admin.locator('#date-to').blur();
-  assert.equal(await admin.locator('.followup-item').count(),0);
-  await admin.locator('#clear-dates').click();
-  assert.equal(await admin.locator('.followup-item').filter({hasText:'Agenda da consultora'}).count(),1);
   await admin.locator('#owner-filter').selectOption(seller.id);
-  assert.equal(await admin.locator('.followup-item').filter({hasText:'Agenda da consultora'}).count(),0);
-  await admin.locator('#owner-filter').selectOption('');await admin.locator('#profile-filter').selectOption('');
-  await admin.locator('#date-basis').selectOption('conversation');
-  await admin.locator('#date-from').fill(today);await admin.locator('#date-to').fill(today);await admin.locator('#date-to').blur();
-  assert.equal(await admin.locator('.followup-item').filter({hasText:'Agenda da consultora'}).count(),1);
-  await admin.locator('#clear-dates').click();
-  const agenda=await admin.evaluate(async id=>(await api('/api/contacts')).contacts.find(c=>c.id===id),agendaId);
-  assert.equal(agenda.messages.length,0);assert.equal(agenda.stage,'Novo contato');
+  await admin.locator('#call-date-filter').selectOption('today');
+  assert.equal(await admin.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).count(),1);
+  await admin.locator('#owner-filter').selectOption('admin-test');
+  assert.equal(await admin.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).count(),0);
+  await admin.locator('#owner-filter').selectOption('');await admin.locator('#profile-filter').selectOption('');await admin.locator('#clear-dates').click();
+  // Completing a task preserves an unfinished edit in the lead's main form.
+  await member.locator('[data-view=pipeline]').click();
+  await agendaCard.locator('.card-top').click();
+  await member.locator('#detail-form [name=note]').fill('Rascunho que deve permanecer');
+  await member.locator('#detail [data-quick-step=D7]').check();
+  await member.locator('#detail .call-bell').filter({hasText:'D14'}).waitFor();
+  assert.equal(await member.locator('#detail-form [name=note]').inputValue(),'Rascunho que deve permanecer');
+  agenda=await agendaRow();assert.ok(agenda.followup.progress.D3);assert.ok(agenda.followup.progress.D7);assert.equal(agenda.followup.next_key,'D14');
+  await member.locator('#close-detail').click();
+  await member.locator('[data-view=followups]').click();
+  await member.locator('[data-followup-filter=scheduled]').click();
+  await member.setViewportSize({width:390,height:844});
+  assert.equal(await member.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  while(await member.locator('[data-dismiss-alert]').count())await member.locator('[data-dismiss-alert]').first().click();
+  await member.screenshot({path:__dirname+'/preview-calls-mobile.png',fullPage:true});
+  await member.setViewportSize({width:1440,height:1000});
+  await member.screenshot({path:__dirname+'/preview-calls.png',fullPage:true});
   await admin.locator('[data-view=pipeline]').click();
   await admin.locator('.column[data-stage="Qualificação pendente"]').waitFor();
-  await admin.locator('[data-view=followups]').click();
-  await admin.setViewportSize({width:390,height:844});
-  assert.equal(await admin.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
-  while(await admin.locator('[data-dismiss-alert]').count())await admin.locator('[data-dismiss-alert]').first().click();
-  await admin.screenshot({path:__dirname+'/preview-followups-mobile.png',fullPage:true});
-  await admin.setViewportSize({width:1440,height:1000});
-  await admin.screenshot({path:__dirname+'/preview-followups.png',fullPage:true});
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({
@@ -773,7 +804,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: edição e movimento de cards sem cidade/UF, localização parcial e mapa, editar nome, avisos privados com som e sem perder rascunhos, WhatsApp, filtros combinados, exclusão e restauração, acesso restrito, anúncios, qualificação, distribuição, indicadores e mobile.",
+    "UI OK: sino no card, D3/D7 automáticos, atraso vermelho, filtros rápidos, rascunhos preservados, edição e movimento de cards sem cidade/UF, localização parcial e mapa, editar nome, avisos privados com som e sem perder rascunhos, WhatsApp, filtros combinados, exclusão e restauração, acesso restrito, anúncios, qualificação, distribuição, indicadores e mobile.",
   );
 })()
   .catch((e) => {

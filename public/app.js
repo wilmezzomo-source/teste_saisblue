@@ -19,7 +19,7 @@ const colors = [
 let cities = [],
   profileFilter = "",
   ownerFilter = "",
-  dateBasis = "created",
+  callDateFilter = "all",
   dateFrom = "",
   dateTo = "",
   states = [],
@@ -120,6 +120,10 @@ async function load() {
   try {
     const data = await api("/api/contacts");
     contacts = data.contacts;
+    if(currentCallId&&!contacts.some(c=>c.id===currentCallId)) {
+      $('#call-dialog').close();$('#call-dialog-content').innerHTML='';currentCallId=null;
+      toast('Esta oportunidade não está mais disponível para sua conta.');
+    }
     if(view==="trash" && currentUser.role==="admin") trashContacts=(await api("/api/trash")).contacts;
     if (currentDetailId && !contacts.some(c=>c.id===currentDetailId)) {
       $("#detail-dialog").close();
@@ -181,16 +185,21 @@ function syncOwnerFilter() {
   select.innerHTML='<option value="">Todos os responsáveis</option><option value="__unassigned__">Sem responsável</option>'+[...people].sort((a,b)=>a[1].localeCompare(b[1],"pt-BR")).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join("");
   select.value=ownerFilter;
 }
-function matchesSelection(c) {
+function matchesSelection(c, includeDate=true) {
   const ownerMatches=currentUser.role!=="admin" || !ownerFilter || (ownerFilter==="__unassigned__" ? !c.owner_id : c.owner_id===ownerFilter);
-  return ownerMatches && matchesProfile(c) && matchesDate(c);
+  return ownerMatches && matchesProfile(c) && (!includeDate || matchesDate(c));
 }
 function matchesDate(c) {
-  if(!dateFrom && !dateTo)return true;
-  const localDay=t=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(t*1000));
-  const value=({created:()=>localDay(c.created),conversation:()=>c.followup?.last_conversation_on,next:()=>c.followup?.due_on,purchase:()=>c.followup?.last_purchase_on})[dateBasis]();
-  return Boolean(value && (!dateFrom || value>=dateFrom) && (!dateTo || value<=dateTo));
+  const f=c.followup||{},value=f.due_on;
+  if(callDateFilter==='all')return true;
+  if(callDateFilter==='none')return !value&&!['blocked','closed','qualification_pending'].includes(f.queue);
+  if(callDateFilter==='overdue')return f.queue==='active'&&f.overdue;
+  if(callDateFilter==='today')return f.queue==='active'&&value===followupToday();
+  if(callDateFilter==='tomorrow')return f.queue==='active'&&value===callDatePlus(1);
+  if(callDateFilter==='week')return f.queue==='active'&&value>=followupToday()&&value<=callDatePlus(7);
+  return Boolean(value&&(!dateFrom||value>=dateFrom)&&(!dateTo||value<=dateTo));
 }
+function callDatePlus(days) {const d=new Date(followupToday()+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 function profileTag(profile) {
   const kind=({Lojista:"lojista",Revenda:"revenda","Consumidor Final":"consumidor","Marca própria (PL/WL)":"label"})[profile] || "pending";
   return `<span class="profile-tag ${kind}">${esc(profile || "Perfil pendente")}</span>`;
@@ -253,7 +262,7 @@ function toolbar(title, subtitle = "") {
   return `<div class="toolbar"><div class="toolbar-title">${title}<span>${subtitle}</span></div><input id="search" class="search" aria-label="Buscar contatos" placeholder="⌕  Buscar nome, telefone ou origem" value="${esc(query)}"></div>`;
 }
 function card(c) {
-  return `<button class="card" data-contact="${c.id}" draggable="true"><div class="card-top"><span class="avatar">${esc(initials(c.name))}</span>${esc(c.name)}</div><div class="card-phone">+${esc(c.phone)}</div><div class="card-location ${c.location_pending ? "missing-location" : ""}">${c.location_pending ? "⚑ Cidade/UF pendentes" : "⌖ " + esc(c.city) + " / " + esc(c.state)}</div><div class="card-tags">${profileTag(c.lead_profile)}${ownerTag(c)}</div>${followupCard(c)}<div class="card-bottom"><strong>${money(c.value)}</strong><span>${c.messages.filter((m) => m.direction === "in").length} conversa(s)</span></div></button>`;
+  return `<article class="card ${c.followup?.queue==='active'&&c.followup.overdue?'card-overdue':''}" data-contact="${c.id}" draggable="true" tabindex="0" aria-label="Oportunidade de ${esc(c.name)}"><div class="card-top"><span class="avatar">${esc(initials(c.name))}</span>${esc(c.name)}</div><div class="card-phone">+${esc(c.phone)}</div><div class="card-location ${c.location_pending ? "missing-location" : ""}">${c.location_pending ? "⚑ Cidade/UF pendentes" : "⌖ " + esc(c.city) + " / " + esc(c.state)}</div><div class="card-tags">${profileTag(c.lead_profile)}${ownerTag(c)}</div>${followupCard(c)}<div class="card-bottom"><strong>${money(c.value)}</strong><span>${c.messages.filter((m) => m.direction === "in").length} conversa(s)</span></div></article>`;
 }
 function banner() {
   if (!systemStatus.simulation)
@@ -282,7 +291,7 @@ function render() {
   if (view === "pipeline") {
     html =
       toolbar("Pipeline comercial", "Uma visão clara de cada próxima etapa") +
-      `<div class="board">${stages
+      `<div class="board" style="--board-columns:${stages.length}">${stages
         .map((stage, i) => {
           const rows = list.filter((c) => boardStage(c) === stage);
           return `<section class="column" data-stage="${esc(stage)}" style="--stage:${colors[i]}"><div class="column-head"><span>${esc(stage)}</span><b>${rows.length}</b></div><div class="column-value">${money(rows.reduce((a, c) => a + c.value, 0))}</div>${rows.map(card).join("") || '<div class="empty-column"><span>＋</span>Nenhuma oportunidade<br>nesta etapa</div>'}</section>`;
@@ -340,20 +349,22 @@ function render() {
   });
   document.querySelectorAll("[data-contact]").forEach((b) => {
     b.addEventListener("click", (e) => {
-      if (!e.target.closest("a")) detail(b.dataset.contact);
+      if (!e.target.closest("a, [data-call-bell], .call-step")) detail(b.dataset.contact);
     });
     b.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && b.tagName === "TR") detail(b.dataset.contact);
+      if (e.key === "Enter" && e.target===b && (b.tagName === "TR" || b.matches('.card,.followup-item'))) detail(b.dataset.contact);
     });
   });
   document
     .querySelectorAll(".card")
     .forEach((b) =>
-      b.addEventListener("dragstart", (e) =>
-        e.dataTransfer.setData("text/plain", b.dataset.contact),
-      ),
+      b.addEventListener("dragstart", (e) => {
+        if(e.target.closest('input,button,label')){e.preventDefault();return;}
+        e.dataTransfer.setData("text/plain", b.dataset.contact);
+      }),
     );
   document.querySelectorAll(".column").forEach((col) => {
+    if(col.dataset.stage==='Qualificação pendente')return;
     col.addEventListener("dragover", (e) => e.preventDefault());
     col.addEventListener("drop", async (e) => {
       e.preventDefault();
@@ -375,6 +386,7 @@ function render() {
         }
     });
   });
+  bindCallControls();
 }
 function empty(title, body) {
   return `<div class="panel empty-state"><div class="empty-icon">◌</div><h3>${title}</h3><p>${body}</p>${systemStatus.simulation ? '<button class="secondary" id="empty-simulate">↓ Simular primeiro contato</button>' : ""}</div>`;
@@ -398,7 +410,7 @@ function openCreate(sim) {
   $("#form-description").textContent = sim
     ? "Teste o recebimento de uma mensagem. O telefone identifica o contato e evita duplicações."
     : "Cadastro manual, sem iniciar o assistente. As próximas mensagens desse número aparecerão no CRM. As demais conversas comuns continuam fora.";
-  $("#create-opportunity-fields").innerHTML = sim ? "" : `${profileInput({})}<label>Etapa do funil<select name="stage">${stages.map(s=>`<option>${esc(s)}</option>`).join("")}</select></label>${ownerInput()}<label>Valor da oportunidade (R$)<input type="number" name="value" value="0" min="0" max="1000000000000" step="0.01" required></label><label>Observação<textarea name="note" maxlength="20000" rows="3"></textarea></label>`;
+  $("#create-opportunity-fields").innerHTML = sim ? "" : `${profileInput({})}<label>Etapa do funil<select name="stage">${stages.filter(s=>s!=='Qualificação pendente').map(s=>`<option>${esc(s)}</option>`).join("")}</select></label>${ownerInput()}<label>Valor da oportunidade (R$)<input type="number" name="value" value="0" min="0" max="1000000000000" step="0.01" required></label><label>Observação<textarea name="note" maxlength="20000" rows="3"></textarea></label>`;
   $("#body-field").hidden = !sim;
   $("#create-form").elements.body.required = sim;
   $("#create-dialog").showModal();
@@ -441,7 +453,7 @@ function detail(id) {
     ref = JSON.parse(c.referral);
   } catch {}
   $("#detail").innerHTML =
-    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div>${whatsappAction}<span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Cidade/UF pendentes para o mapa. Você pode editar esta oportunidade e mudar a etapa do funil enquanto completa a localização.</div>' : ""}${qualificationTools(c)}<form id="detail-form"><div class="detail-grid">${profileInput(c)}${locationInputs(c, false)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label>${ownerInput(c)}<label>Observação<textarea name="note" maxlength="20000" rows="3">${esc(c.note)}</textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" id="refresh-detail">Recarregar card</button><button class="primary">Salvar oportunidade</button></div></form>${followupDetail(c)}${ref ? `<div class="referral">↓ Origem do anúncio: ${esc(ref.headline || ref.source_id || "Anúncio Meta")}${ref.ctwa_clid ? "<br>Identificador de clique recebido da Meta." : ""}</div>` : ""}<h3>Histórico do contato</h3><div class="conversation">${c.messages.length ? c.messages.map((m) => `<div class="message ${m.direction === "note" ? "note" : ""}">${esc(m.body)}<small>${esc(m.author || "")}${m.author ? " · " : ""}${m.direction === "note" ? "Nota interna" : m.direction === "out" ? "WhatsApp enviado" : "Mensagem recebida"}${m.channel === "simulation" ? " · Simulação" : ""}${m.direction === "out" ? " · " + esc(statusLabel(m.status)) : ""}${m.error_code ? " · Código " + esc(m.error_code) + ": " + esc(m.error_detail) : ""} · ${date(m.created)}</small></div>`).join("") : "<p>Nenhuma mensagem ou nota registrada.</p>"}</div><form id="note-form"><label>Nova nota interna<textarea name="body" required maxlength="5000" placeholder="Registre o próximo passo ou detalhes do atendimento."></textarea></label><p>Notas ficam no CRM. Não são enviadas pelo WhatsApp.</p><div class="dialog-actions"><button class="secondary">Adicionar nota</button></div></form>${sendView(c)}${auditView(c)}`;
+    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div>${whatsappAction}<span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Cidade/UF pendentes para o mapa. Você pode editar esta oportunidade e mudar a etapa do funil enquanto completa a localização.</div>' : ""}${qualificationTools(c)}<form id="detail-form"><div class="detail-grid">${profileInput(c)}${locationInputs(c, false)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.filter(s=>s!=='Qualificação pendente').map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label>${ownerInput(c)}<label>Observação<textarea name="note" maxlength="20000" rows="3">${esc(c.note)}</textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" id="refresh-detail">Recarregar card</button><button class="primary">Salvar oportunidade</button></div></form>${followupDetail(c)}${ref ? `<div class="referral">↓ Origem do anúncio: ${esc(ref.headline || ref.source_id || "Anúncio Meta")}${ref.ctwa_clid ? "<br>Identificador de clique recebido da Meta." : ""}</div>` : ""}<h3>Histórico do contato</h3><div class="conversation">${c.messages.length ? c.messages.map((m) => `<div class="message ${m.direction === "note" ? "note" : ""}">${esc(m.body)}<small>${esc(m.author || "")}${m.author ? " · " : ""}${m.direction === "note" ? "Nota interna" : m.direction === "out" ? "WhatsApp enviado" : "Mensagem recebida"}${m.channel === "simulation" ? " · Simulação" : ""}${m.direction === "out" ? " · " + esc(statusLabel(m.status)) : ""}${m.error_code ? " · Código " + esc(m.error_code) + ": " + esc(m.error_detail) : ""} · ${date(m.created)}</small></div>`).join("") : "<p>Nenhuma mensagem ou nota registrada.</p>"}</div><form id="note-form"><label>Nova nota interna<textarea name="body" required maxlength="5000" placeholder="Registre o próximo passo ou detalhes do atendimento."></textarea></label><p>Notas ficam no CRM. Não são enviadas pelo WhatsApp.</p><div class="dialog-actions"><button class="secondary">Adicionar nota</button></div></form>${sendView(c)}${auditView(c)}`;
   $("#close-detail").onclick = () => $("#detail-dialog").close();
   $("#refresh-detail").onclick = async () => {
     await load();
@@ -538,10 +550,16 @@ function applyDates() {
   const from=$('#date-from').value,to=$('#date-to').value;
   $('#date-to').setCustomValidity(from && to && from>to?'A data final deve ser igual ou posterior à inicial.':'');
   if(!$('#date-to').reportValidity())return;
-  dateBasis=$('#date-basis').value;dateFrom=from;dateTo=to;render();
+  dateFrom=from;dateTo=to;render();
 }
-for(const id of ['date-from','date-to','date-basis'])$('#'+id).onchange=applyDates;
-$('#clear-dates').onclick=()=>{$('#date-from').value='';$('#date-to').value='';$('#date-to').setCustomValidity('');dateFrom='';dateTo='';render();};
+for(const id of ['date-from','date-to'])$('#'+id).onchange=applyDates;
+$('#call-date-filter').onchange=()=>{
+  if(view==='followups')followupFilter='all';
+  callDateFilter=$('#call-date-filter').value;$('#custom-call-period').hidden=callDateFilter!=='range';$('#clear-dates').hidden=callDateFilter==='all';
+  if(callDateFilter==='range'&&!$('#date-from').value&&!$('#date-to').value){$('#date-from').value=followupToday();$('#date-to').value=followupToday();}
+  $('#date-to').setCustomValidity('');dateFrom=$('#date-from').value;dateTo=$('#date-to').value;render();
+};
+$('#clear-dates').onclick=()=>{$('#call-date-filter').value='all';callDateFilter='all';$('#custom-call-period').hidden=true;$('#clear-dates').hidden=true;$('#date-from').value='';$('#date-to').value='';$('#date-to').setCustomValidity('');dateFrom='';dateTo='';render();};
 $("#new-contact").onclick = () => openCreate(false);
 $("#simulate").onclick = () => openCreate(true);
 document
@@ -555,6 +573,7 @@ document.querySelectorAll("[data-view]").forEach(
       view = b.dataset.view;
       query = "";
       if(view==="trash") { await load(); return; }
+      if(view==="followups") { await load(); return; }
       if (view === "team" || view === "settings") {
         try {
           teamUsers = (await api("/api/team")).users;

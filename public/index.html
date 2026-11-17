@@ -90,10 +90,12 @@
               <option value="__pending__">Perfil pendente</option>
             </select>
             <div id="date-filters" class="date-filters" role="group" aria-label="Filtrar por data">
-              <label>Data de<select id="date-basis"><option value="created">Entrada no CRM</option><option value="conversation">Última conversa</option><option value="next">Próximo retorno / revisão</option><option value="purchase">Última compra</option></select></label>
-              <label>De<input type="date" id="date-from" aria-label="Data inicial"></label>
-              <label>Até<input type="date" id="date-to" aria-label="Data final"></label>
-              <button type="button" id="clear-dates" class="secondary">Limpar datas</button>
+              <label>Próxima chamada<select id="call-date-filter" aria-label="Filtrar próxima chamada"><option value="all">Todas as datas</option><option value="today">Chamar hoje</option><option value="overdue">Atrasados</option><option value="tomorrow">Amanhã</option><option value="week">Próximos 7 dias</option><option value="none">Sem agendamento</option><option value="range">Escolher período…</option></select></label>
+              <div id="custom-call-period" class="date-filters" hidden>
+                <label>De<input type="date" id="date-from" aria-label="Data inicial"></label>
+                <label>Até<input type="date" id="date-to" aria-label="Data final"></label>
+              </div>
+              <button type="button" id="clear-dates" class="clear-call-date" aria-label="Limpar filtro de chamada" hidden>×</button>
             </div>
             <button id="simulate" class="secondary">
               ↓ &nbsp; Simular lead do anúncio</button
@@ -163,6 +165,7 @@
       </form>
     </dialog>
     <dialog id="detail-dialog"><div id="detail"></div></dialog>
+    <dialog id="call-dialog" aria-label="Agendar próxima chamada"><div id="call-dialog-content"></div></dialog>
     <dialog id="notifications-dialog" aria-labelledby="notifications-title">
       <div class="dialog-header"><h2 id="notifications-title">Seus avisos</h2><button type="button" class="close" id="close-notifications" aria-label="Fechar avisos">×</button></div>
       <p>Novas oportunidades e atendimentos atribuídos à sua conta. O som do navegador exige o CRM aberto; as notificações do aparelho podem chegar com o app fechado.</p>
