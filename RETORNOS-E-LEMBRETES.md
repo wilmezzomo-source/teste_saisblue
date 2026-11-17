@@ -7,8 +7,8 @@ No menu **Retornos**, a equipe encontra contatos para hoje, atrasados, agendados
 1. Abra o card e localize **Acompanhamento e lembretes**.
 2. Informe **Data da última conversa**, correspondente à última conversa com resposta do cliente.
 3. Use **Identificado · aguardando resposta** para iniciar a sequência do perfil, ou escolha retorno combinado, conversa ativa/negociação, cliente que já comprou, pausa ou encerramento.
-4. Clique em **Salvar acompanhamento**. O formulário sugere a sequência pelo perfil; para clientes na etapa Ganho, sugere recompra. Apenas informar a data pela API também inicia a sequência pertinente.
-5. Ao realizar uma tentativa, marque a caixinha correspondente. A marcação salva automaticamente. A última tentativa fica separada da última conversa, e D0 permanece o início da tentativa.
+4. Clique em **Salvar acompanhamento**. O formulário sugere a sequência pelo perfil; para clientes na etapa Ganho, sugere recompra.
+5. Ao realizar uma tentativa, marque a caixinha correspondente. Se a conversa registrada já foi D0, marque D0 como realizado para avançar ao próximo prazo. A marcação salva automaticamente. A última tentativa fica separada da última conversa, e D0 permanece o início da tentativa.
 
 Para iniciar outra tentativa a partir da mesma data, use **Nova tentativa a partir da última conversa**. Alterar a data da última conversa ao manter a situação de aguardando resposta também inicia uma nova sequência. As mudanças ficam no histórico; marcar uma tentativa não altera a etapa ou responsável do card.
 
