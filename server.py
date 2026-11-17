@@ -27,11 +27,12 @@ from notifications import notify_created, notify_assigned, notify_restored
 from web_push import public_key as push_public_key, validate_subscription
 from qualification import PROFILES, ACTIVE_STEPS, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
 from phone_numbers import manual_phone, phone_identity, legacy_brazil_variants
+import followups
 
 ROOT = Path(__file__).parent
-STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
+STAGES = ['Novo contato', 'Qualificação pendente', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.16.3'
+RELEASE = '2026.11.17.1'
 
 
 class Problem(Exception):
@@ -161,6 +162,7 @@ def init_db(app):
             db.execute("UPDATE contacts SET stage='Negociação',revision=revision+1,updated=? WHERE id=?", (now(), row['id']))
             db.execute('INSERT INTO audit(contact_id,actor,action,details,created) VALUES(?,?,?,?,?)',
                        (row['id'],'Sistema','Etapa removida do funil',json.dumps({'antes':'Proposta enviada','depois':'Negociação'},ensure_ascii=False),now()))
+        followups.init(db)
         for row in db.execute('SELECT id,referral FROM contacts WHERE ad_origin=0 AND referral IS NOT NULL').fetchall():
             try:
                 referred = is_ad_referral(json.loads(row['referral']))
@@ -246,7 +248,14 @@ def run_automation_once(app):
 def start_automation_worker(app):
     stop = threading.Event()
     def run():
+        next_internal_check=0
         while not stop.is_set():
+            if time.time()>=next_internal_check:
+                try:
+                    with database(app) as db:followups.reminders(db)
+                except Exception as exc:
+                    app.logger.error('Internal follow-up reminders: %s',type(exc).__name__)
+                next_internal_check=time.time()+60
             try:
                 handled = run_automation_once(app)
             except Exception as exc:
@@ -274,6 +283,12 @@ def create_app(config=None):
                       ALLOW_SIMULATION=os.environ.get('ALLOW_SIMULATION', '0') == '1')
     if config:
         app.config.update(config)
+    app.config.setdefault('ACCESS_URL',os.environ.get('CRM_ACCESS_URL','' if app.config['SECURE_COOKIE'] or app.config['TESTING'] else 'http://200.225.129.156:3001').rstrip('/'))
+    access=urlsplit(app.config['ACCESS_URL'])
+    if app.config['ACCESS_URL'] and (access.scheme not in ('http','https') or not access.hostname or access.username or access.password or access.path or access.query or access.fragment):
+        raise RuntimeError('CRM_ACCESS_URL precisa conter somente o endereço de acesso, sem caminho ou credenciais.')
+    if app.config['SECURE_COOKIE'] and access.scheme=='http':
+        raise RuntimeError('A configuração HTTPS exige um endereço externo HTTPS.')
     app.config.setdefault('PUBLIC_URL',os.environ.get('CRM_PUBLIC_URL','https://crm.saisblue.com.br').rstrip('/'))
     app.config.setdefault('PUSH_KEY_FILE',os.environ.get('PUSH_KEY_FILE',str(Path(app.config['DATABASE']).resolve().parent/'webpush-private.pem')))
     app.config.setdefault('PUSH_SUBJECT',os.environ.get('PUSH_SUBJECT','mailto:willian@saisblue.com.br'))
@@ -357,7 +372,9 @@ def create_app(config=None):
             origin = request.headers.get('Origin')
             expected = app.config['APP_URL'] or request.host_url.rstrip('/')
             public = app.config['PUBLIC_URL']
-            if origin and (origin not in (expected,public) or (origin==public and (not request.is_secure or request.host_url.rstrip('/')!=public))):
+            external=app.config['ACCESS_URL']
+            external_match=bool(external and origin==external and request.host_url.rstrip('/')==external)
+            if origin and not external_match and (origin not in (expected,public) or (origin==public and (not request.is_secure or request.host_url.rstrip('/')!=public))):
                 raise Problem('Origem não permitida.', 403)
             if not request.is_json:
                 raise Problem('Envie JSON.', 415)
@@ -409,7 +426,7 @@ def create_app(config=None):
 
     @app.get('/<name>')
     def asset(name):
-        if name not in ('style.css', 'app.js', 'auth.js', 'notifications.js', 'pwa.js'):
+        if name not in ('style.css', 'app.js', 'auth.js', 'notifications.js', 'pwa.js', 'followups.js'):
             raise Problem('Página não encontrada.', 404)
         return send_from_directory(ROOT / 'public', name)
 
@@ -589,8 +606,24 @@ def create_app(config=None):
                 row['qualification_last_send']=dict(last_bot) if last_bot else None
 
                 row['messages'] = [dict(m) for m in db.execute('SELECT * FROM messages WHERE contact_id=? ORDER BY created,rowid', (row['id'],))]
+                row['followup']=followups.snapshot(db,row)
                 row['audit'] = [dict(a) for a in db.execute('SELECT actor,action,details,created FROM audit WHERE contact_id=? ORDER BY id DESC LIMIT 30', (row['id'],))]
         return jsonify(contacts=rows, stages=STAGES)
+
+    @app.post('/api/followups')
+    def update_followup():
+        d=data()
+        with database(app) as db:
+            db.execute('BEGIN IMMEDIATE')
+            c=accessible_contact(db,d.get('id'))
+            try:
+                result=followups.save(db,dict(c),d,g.user['id'])
+            except RuntimeError as exc:raise Problem(str(exc),409) from None
+            except ValueError as exc:raise Problem(str(exc),400) from None
+            audit(db,'Acompanhamento interno atualizado',c['id'],{'situação':result['mode'],'última_conversa':result['last_conversation_on'],
+                  'próxima_data':result['next_on'],'próximo_passo':result['next_step'],'tentativas':json.loads(result['progress'])})
+            result=followups.snapshot(db,dict(c))
+        return jsonify(ok=True,followup=result)
 
     @app.get('/api/trash')
     def trash():
@@ -871,7 +904,7 @@ def create_app(config=None):
         return jsonify(version=RELEASE, mode='Equipe Sais Blue', webhook_configured=receive, sending_configured=sending,
                        connection_verified=False, simulation=app.config['ALLOW_SIMULATION'] and g.user['role'] == 'admin', ads_only=True,
                        manual_contacts_enabled=True, automation=automation, lead_profiles=PROFILES,
-                       own_opportunities_only=g.user['role'] != 'admin', team_url=app.config['APP_URL'] or request.host_url.rstrip('/'))
+                       own_opportunities_only=g.user['role'] != 'admin', team_url=app.config['ACCESS_URL'] or app.config['APP_URL'] or request.host_url.rstrip('/'),access_url=app.config['ACCESS_URL'])
 
     @app.post('/api/automation')
     def configure_automation():

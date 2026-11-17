@@ -29,6 +29,7 @@
           <span>▥</span> Funil de vendas</button
         ><button data-view="inbox">
           <span>◉</span> Atendimento <b id="inbox-count">0</b></button
+        ><button data-view="followups"><span>◷</span> Retornos <b id="followup-count" hidden>0</b></button
         ><button data-view="contacts"><span>♧</span> Contatos</button
         ><button data-view="map"><span>⌖</span> Mapa</button
         ><button data-view="team"><span>♧</span> Equipe</button
@@ -88,6 +89,12 @@
               <option>Marca própria (PL/WL)</option>
               <option value="__pending__">Perfil pendente</option>
             </select>
+            <div id="date-filters" class="date-filters" role="group" aria-label="Filtrar por data">
+              <label>Data de<select id="date-basis"><option value="created">Entrada no CRM</option><option value="conversation">Última conversa</option><option value="next">Próximo retorno / revisão</option><option value="purchase">Última compra</option></select></label>
+              <label>De<input type="date" id="date-from" aria-label="Data inicial"></label>
+              <label>Até<input type="date" id="date-to" aria-label="Data final"></label>
+              <button type="button" id="clear-dates" class="secondary">Limpar datas</button>
+            </div>
             <button id="simulate" class="secondary">
               ↓ &nbsp; Simular lead do anúncio</button
             ><button id="new-contact" class="primary">
@@ -169,6 +176,7 @@
     <script src="/vendor/leaflet/leaflet.js"></script>
     <script src="/pwa.js"></script>
     <script src="/notifications.js"></script>
+    <script src="/followups.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

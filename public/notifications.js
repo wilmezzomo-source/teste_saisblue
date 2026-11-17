@@ -1,6 +1,6 @@
 /* Opportunity alerts do not reload a card while someone is editing it. */
 const crmAlerts={items:[],unread:0,cursor:0,ready:false,busy:false,sound:false,audio:null,timer:null,popups:[]};
-const alertTitle=kind=>({new:"Novo contato no CRM",assigned:"Oportunidade atribuída a você",restored:"Oportunidade restaurada para você"})[kind] || "Nova oportunidade";
+const alertTitle=kind=>({new:"Novo contato no CRM",assigned:"Oportunidade atribuída a você",restored:"Oportunidade restaurada para você",followup:"Lembrete de retorno",review:"Revisão interna de relacionamento"})[kind] || "Nova oportunidade";
 function alertPreference(key,value) {
   const name="saisblue-alerts:"+currentUser.id+":"+key;
   try {

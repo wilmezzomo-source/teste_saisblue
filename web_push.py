@@ -98,9 +98,14 @@ def process_push_once(app, connect):
         row = dict(row)
         permitted = row['enabled'] and row['active'] and row['user_id']==row['subscription_user_id']
         if row['notification_id'] is not None:
-            notice = db.execute('''SELECT n.user_id,n.read_at,c.deleted_at,c.owner_id FROM notifications n
+            notice = db.execute('''SELECT n.user_id,n.read_at,n.kind,c.deleted_at,c.owner_id FROM notifications n
                 JOIN contacts c ON c.id=n.contact_id WHERE n.id=?''',(row['notification_id'],)).fetchone()
             permitted = permitted and notice and notice['user_id']==row['user_id'] and not notice['read_at'] and not notice['deleted_at'] and (row['role']=='admin' or notice['owner_id']==row['user_id'])
+            if permitted and notice['kind'] in ('followup','review'):
+                from followups import snapshot
+                contact=db.execute('SELECT * FROM contacts WHERE id=(SELECT contact_id FROM notifications WHERE id=?)',(row['notification_id'],)).fetchone()
+                state=snapshot(db,dict(contact)) if contact else None
+                permitted=bool(state and state['queue'] in ('active','review','customer') and state['due_at'] and state['due_at']<=time.time())
         if not permitted or not public_key(app):
             db.execute("UPDATE push_deliveries SET state='cancelled',updated=? WHERE id=?",(time.time(),row['id']))
             return True
@@ -110,6 +115,8 @@ def process_push_once(app, connect):
     payload = {'title':'Novo lead no CRM' if nid else 'Teste Sais Blue CRM',
                'body':'Há uma nova oportunidade para acompanhar. Toque para abrir o CRM.' if nid else 'As notificações deste aparelho estão funcionando.',
                'notice':nid,'tag':f'crm-notice:{nid}' if nid else f'crm-test:{row["id"]}'}
+    if nid and notice['kind'] in ('followup','review'):
+        payload.update(title='Lembrete Sais Blue CRM',body='Há um acompanhamento para revisar. Toque para abrir o CRM.')
     topic = hashlib.sha256(f'{row["subscription_id"]}:{nid or "test"}:{row["id"]}'.encode()).hexdigest()[:32]
     state, error, retry, disabled = 'sent','',0,False
     try:

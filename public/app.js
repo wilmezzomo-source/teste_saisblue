@@ -19,6 +19,9 @@ const colors = [
 let cities = [],
   profileFilter = "",
   ownerFilter = "",
+  dateBasis = "created",
+  dateFrom = "",
+  dateTo = "",
   states = [],
   leadMap = null,
   pinLayer = null,
@@ -44,6 +47,7 @@ const titles = {
     "Atendimento",
     "O histórico dos seus relacionamentos, em um só lugar.",
   ],
+  followups: ["Retornos e lembretes", "A próxima ação de cada relacionamento, na data certa."],
   contacts: ["Contatos", "Conheça as pessoas por trás de cada oportunidade."],
   reports: ["Visão geral", "Um olhar sobre o movimento do seu comercial."],
   trash: ["Lixeira", "Recupere oportunidades excluídas por engano."],
@@ -179,7 +183,13 @@ function syncOwnerFilter() {
 }
 function matchesSelection(c) {
   const ownerMatches=currentUser.role!=="admin" || !ownerFilter || (ownerFilter==="__unassigned__" ? !c.owner_id : c.owner_id===ownerFilter);
-  return ownerMatches && matchesProfile(c);
+  return ownerMatches && matchesProfile(c) && matchesDate(c);
+}
+function matchesDate(c) {
+  if(!dateFrom && !dateTo)return true;
+  const localDay=t=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(t*1000));
+  const value=({created:()=>localDay(c.created),conversation:()=>c.followup?.last_conversation_on,next:()=>c.followup?.due_on,purchase:()=>c.followup?.last_purchase_on})[dateBasis]();
+  return Boolean(value && (!dateFrom || value>=dateFrom) && (!dateTo || value<=dateTo));
 }
 function profileTag(profile) {
   const kind=({Lojista:"lojista",Revenda:"revenda","Consumidor Final":"consumidor","Marca própria (PL/WL)":"label"})[profile] || "pending";
@@ -209,7 +219,7 @@ function matches(c) {
 }
 function stats() {
   const selected = contacts.filter(matchesSelection);
-  const open = selected.filter((c) => !["Ganho", "Perdido"].includes(c.stage));
+  const open = selected.filter((c) => !["Ganho", "Perdido", "Qualificação pendente"].includes(boardStage(c)));
   const won = selected.filter((c) => c.stage === "Ganho");
   const withMessages = selected.filter((c) =>
     c.messages.some((m) => m.direction === "in"),
@@ -236,12 +246,14 @@ function stats() {
     )
     .join("");
   $("#inbox-count").textContent = withMessages.length;
+  const due=selected.filter(c=>followupDue(c.followup)).length;
+  $("#followup-count").textContent=due;$("#followup-count").hidden=!due;
 }
 function toolbar(title, subtitle = "") {
   return `<div class="toolbar"><div class="toolbar-title">${title}<span>${subtitle}</span></div><input id="search" class="search" aria-label="Buscar contatos" placeholder="⌕  Buscar nome, telefone ou origem" value="${esc(query)}"></div>`;
 }
 function card(c) {
-  return `<button class="card" data-contact="${c.id}" draggable="true"><div class="card-top"><span class="avatar">${esc(initials(c.name))}</span>${esc(c.name)}</div><div class="card-phone">+${esc(c.phone)}</div><div class="card-location ${c.location_pending ? "missing-location" : ""}">${c.location_pending ? "⚑ Cidade/UF pendentes" : "⌖ " + esc(c.city) + " / " + esc(c.state)}</div><div class="card-tags">${profileTag(c.lead_profile)}${ownerTag(c)}</div><div class="card-bottom"><strong>${money(c.value)}</strong><span>${c.messages.filter((m) => m.direction === "in").length} conversa(s)</span></div></button>`;
+  return `<button class="card" data-contact="${c.id}" draggable="true"><div class="card-top"><span class="avatar">${esc(initials(c.name))}</span>${esc(c.name)}</div><div class="card-phone">+${esc(c.phone)}</div><div class="card-location ${c.location_pending ? "missing-location" : ""}">${c.location_pending ? "⚑ Cidade/UF pendentes" : "⌖ " + esc(c.city) + " / " + esc(c.state)}</div><div class="card-tags">${profileTag(c.lead_profile)}${ownerTag(c)}</div>${followupCard(c)}<div class="card-bottom"><strong>${money(c.value)}</strong><span>${c.messages.filter((m) => m.direction === "in").length} conversa(s)</span></div></button>`;
 }
 function banner() {
   if (!systemStatus.simulation)
@@ -259,6 +271,7 @@ function render() {
   $("#stats").hidden = view==="trash";
   $("#page-title").textContent = titles[view][0];
   $("#profile-filter").hidden = ["team", "settings", "trash"].includes(view);
+  $("#date-filters").hidden = ["team", "settings", "trash"].includes(view);
   $("#breadcrumb-current").textContent = titles[view][0];
   $("#page-subtitle").textContent = titles[view][1];
   document
@@ -271,7 +284,7 @@ function render() {
       toolbar("Pipeline comercial", "Uma visão clara de cada próxima etapa") +
       `<div class="board">${stages
         .map((stage, i) => {
-          const rows = list.filter((c) => c.stage === stage);
+          const rows = list.filter((c) => boardStage(c) === stage);
           return `<section class="column" data-stage="${esc(stage)}" style="--stage:${colors[i]}"><div class="column-head"><span>${esc(stage)}</span><b>${rows.length}</b></div><div class="column-value">${money(rows.reduce((a, c) => a + c.value, 0))}</div>${rows.map(card).join("") || '<div class="empty-column"><span>＋</span>Nenhuma oportunidade<br>nesta etapa</div>'}</section>`;
         })
         .join("")}</div>` +
@@ -283,7 +296,7 @@ function render() {
         `${list.length} contatos encontrados`,
       ) +
       (list.length
-        ? `<div class="table-wrap"><table><thead><tr><th>CONTATO</th><th>WHATSAPP</th><th>CIDADE / UF</th><th>INSTAGRAM</th><th>PERFIL</th><th>ETAPA</th><th>ORIGEM</th><th>RESPONSÁVEL</th></tr></thead><tbody>${list.map((c) => `<tr data-contact="${c.id}" tabindex="0"><td><strong>${esc(c.name)}</strong></td><td>+${esc(c.phone)}</td><td>${c.location_pending ? '<span class="missing-location">Preencher localização</span>' : esc(c.city) + " / " + esc(c.state)}</td><td>${c.instagram ? `<a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">@${esc(c.instagram)}</a>` : "—"}</td><td>${profileTag(c.lead_profile)}</td><td><span class="tag">${esc(c.stage)}</span></td><td>${esc(c.source)}</td><td>${esc(c.owner)}</td></tr>`).join("")}</tbody></table></div>`
+        ? `<div class="table-wrap"><table><thead><tr><th>CONTATO</th><th>WHATSAPP</th><th>CIDADE / UF</th><th>INSTAGRAM</th><th>PERFIL</th><th>ETAPA</th><th>ORIGEM</th><th>RESPONSÁVEL</th></tr></thead><tbody>${list.map((c) => `<tr data-contact="${c.id}" tabindex="0"><td><strong>${esc(c.name)}</strong></td><td>+${esc(c.phone)}</td><td>${c.location_pending ? '<span class="missing-location">Preencher localização</span>' : esc(c.city) + " / " + esc(c.state)}</td><td>${c.instagram ? `<a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">@${esc(c.instagram)}</a>` : "—"}</td><td>${profileTag(c.lead_profile)}</td><td><span class="tag">${esc(boardStage(c))}</span></td><td>${esc(c.source)}</td><td>${esc(c.owner)}</td></tr>`).join("")}</tbody></table></div>`
         : empty(
             "Sua base começa com uma conversa.",
             "Os novos contatos entram pelos anúncios identificados pela Meta.",
@@ -298,6 +311,8 @@ function render() {
             "Pronto para o primeiro oi.",
             "As mensagens dos leads vindos de anúncios aparecerão aqui.",
           ));
+  } else if (view === "followups") {
+    html = followupView(list);
   } else if (view === "reports") {
     html = reportsView();
   } else if (view === "map") {
@@ -314,6 +329,7 @@ function render() {
   if (view === "map") initMap();
   if (view === "settings") bindAutomation();
   if (view === "trash") bindTrash();
+  if (view === "followups") bindFollowupView();
   $("#empty-simulate")?.addEventListener("click", () => openCreate(true));
   $("#search")?.addEventListener("input", (e) => {
     const pos = e.target.selectionStart;
@@ -425,13 +441,14 @@ function detail(id) {
     ref = JSON.parse(c.referral);
   } catch {}
   $("#detail").innerHTML =
-    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div>${whatsappAction}<span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Cidade/UF pendentes para o mapa. Você pode editar esta oportunidade e mudar a etapa do funil enquanto completa a localização.</div>' : ""}${qualificationTools(c)}<form id="detail-form"><div class="detail-grid">${profileInput(c)}${locationInputs(c, false)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label>${ownerInput(c)}<label>Observação<textarea name="note" maxlength="20000" rows="3">${esc(c.note)}</textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" id="refresh-detail">Recarregar card</button><button class="primary">Salvar oportunidade</button></div></form>${ref ? `<div class="referral">↓ Origem do anúncio: ${esc(ref.headline || ref.source_id || "Anúncio Meta")}${ref.ctwa_clid ? "<br>Identificador de clique recebido da Meta." : ""}</div>` : ""}<h3>Histórico do contato</h3><div class="conversation">${c.messages.length ? c.messages.map((m) => `<div class="message ${m.direction === "note" ? "note" : ""}">${esc(m.body)}<small>${esc(m.author || "")}${m.author ? " · " : ""}${m.direction === "note" ? "Nota interna" : m.direction === "out" ? "WhatsApp enviado" : "Mensagem recebida"}${m.channel === "simulation" ? " · Simulação" : ""}${m.direction === "out" ? " · " + esc(statusLabel(m.status)) : ""}${m.error_code ? " · Código " + esc(m.error_code) + ": " + esc(m.error_detail) : ""} · ${date(m.created)}</small></div>`).join("") : "<p>Nenhuma mensagem ou nota registrada.</p>"}</div><form id="note-form"><label>Nova nota interna<textarea name="body" required maxlength="5000" placeholder="Registre o próximo passo ou detalhes do atendimento."></textarea></label><p>Notas ficam no CRM. Não são enviadas pelo WhatsApp.</p><div class="dialog-actions"><button class="secondary">Adicionar nota</button></div></form>${sendView(c)}${auditView(c)}`;
+    `<div class="dialog-header"><div><p class="eyebrow">CONTATO · +${esc(c.phone)}</p><h2>${esc(c.name)}</h2></div><button class="close" id="close-detail" aria-label="Fechar">×</button></div>${whatsappAction}<span class="source">${esc(c.source)}</span>${c.location_pending ? '<div class="location-warning">Cidade/UF pendentes para o mapa. Você pode editar esta oportunidade e mudar a etapa do funil enquanto completa a localização.</div>' : ""}${qualificationTools(c)}<form id="detail-form"><div class="detail-grid">${profileInput(c)}${locationInputs(c, false)}<label>Instagram<input name="instagram" value="${esc(c.instagram || "")}" placeholder="@usuario ou link do perfil" maxlength="180"></label>${c.instagram ? `<div class="instagram-link"><a href="https://www.instagram.com/${esc(c.instagram)}/" target="_blank" rel="noopener noreferrer">Abrir @${esc(c.instagram)} ↗</a></div>` : ""}<label>Etapa do funil<select name="stage">${stages.map((s) => `<option ${c.stage === s ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></label><label>Valor da oportunidade (R$)<input type="number" name="value" value="${c.value}" min="0" max="1000000000000" step="0.01" required></label>${ownerInput(c)}<label>Observação<textarea name="note" maxlength="20000" rows="3">${esc(c.note)}</textarea></label></div><div class="dialog-actions"><button type="button" class="secondary" id="refresh-detail">Recarregar card</button><button class="primary">Salvar oportunidade</button></div></form>${followupDetail(c)}${ref ? `<div class="referral">↓ Origem do anúncio: ${esc(ref.headline || ref.source_id || "Anúncio Meta")}${ref.ctwa_clid ? "<br>Identificador de clique recebido da Meta." : ""}</div>` : ""}<h3>Histórico do contato</h3><div class="conversation">${c.messages.length ? c.messages.map((m) => `<div class="message ${m.direction === "note" ? "note" : ""}">${esc(m.body)}<small>${esc(m.author || "")}${m.author ? " · " : ""}${m.direction === "note" ? "Nota interna" : m.direction === "out" ? "WhatsApp enviado" : "Mensagem recebida"}${m.channel === "simulation" ? " · Simulação" : ""}${m.direction === "out" ? " · " + esc(statusLabel(m.status)) : ""}${m.error_code ? " · Código " + esc(m.error_code) + ": " + esc(m.error_detail) : ""} · ${date(m.created)}</small></div>`).join("") : "<p>Nenhuma mensagem ou nota registrada.</p>"}</div><form id="note-form"><label>Nova nota interna<textarea name="body" required maxlength="5000" placeholder="Registre o próximo passo ou detalhes do atendimento."></textarea></label><p>Notas ficam no CRM. Não são enviadas pelo WhatsApp.</p><div class="dialog-actions"><button class="secondary">Adicionar nota</button></div></form>${sendView(c)}${auditView(c)}`;
   $("#close-detail").onclick = () => $("#detail-dialog").close();
   $("#refresh-detail").onclick = async () => {
     await load();
     detail(id);
   };
   bindLocationFields($("#detail-form"));
+  bindFollowupDetail(c);
   bindSend(c);
   bindQualification(c);
   const nameForm=$("#contact-name-form");
@@ -517,6 +534,14 @@ function detail(id) {
 }
 $("#profile-filter").onchange = (e) => {profileFilter=e.target.value; render();};
 $("#owner-filter").onchange = (e) => {ownerFilter=e.target.value; render();};
+function applyDates() {
+  const from=$('#date-from').value,to=$('#date-to').value;
+  $('#date-to').setCustomValidity(from && to && from>to?'A data final deve ser igual ou posterior à inicial.':'');
+  if(!$('#date-to').reportValidity())return;
+  dateBasis=$('#date-basis').value;dateFrom=from;dateTo=to;render();
+}
+for(const id of ['date-from','date-to','date-basis'])$('#'+id).onchange=applyDates;
+$('#clear-dates').onclick=()=>{$('#date-from').value='';$('#date-to').value='';$('#date-to').setCustomValidity('');dateFrom='';dateTo='';render();};
 $("#new-contact").onclick = () => openCreate(false);
 $("#simulate").onclick = () => openCreate(true);
 document
@@ -681,11 +706,11 @@ function reportsView() {
   const profiles=[...(systemStatus.lead_profiles || ["Lojista","Revenda","Consumidor Final"]),""];
   const profileRows=profiles.filter(p=>!profileFilter || (profileFilter==="__pending__"?!p:p===profileFilter)).map(profile=>{
     const rows=selected.filter(c=>(c.lead_profile || "")===profile);
-    const open=rows.filter(c=>!["Ganho","Perdido"].includes(c.stage));
+    const open=rows.filter(c=>!["Ganho","Perdido","Qualificação pendente"].includes(boardStage(c)));
     const won=rows.filter(c=>c.stage==="Ganho");
     return `<tr data-profile-summary="${esc(profile || "pending")}"><td>${profileTag(profile)}</td><td>${rows.length}</td><td>${open.length}</td><td>${money(open.reduce((sum,c)=>sum+c.value,0))}</td><td>${won.length}</td><td>${money(won.reduce((sum,c)=>sum+c.value,0))}</td></tr>`;
   }).join("");
-  return `<div class="panel"><h3>Resultados por perfil</h3><p>Compare os leads, oportunidades abertas e vendas de cada perfil. Os filtros no topo combinam perfil e responsável no funil, contatos, atendimento, mapa e indicadores.</p><div class="table-wrap"><table><thead><tr><th>PERFIL</th><th>LEADS</th><th>OPORTUNIDADES ABERTAS</th><th>VALOR EM NEGOCIAÇÃO</th><th>VENDAS</th><th>VALOR GANHO</th></tr></thead><tbody>${profileRows}</tbody></table></div></div><div class="grid-two automation-panel"><div class="panel"><h3>Distribuição no funil</h3>${stages.map((stage,i)=>{const count=selected.filter(c=>c.stage===stage).length;return `<div class="report-row"><span>${esc(stage)}</span><div class="bar"><div style="width:${selected.length?count/selected.length*100:0}%;background:${colors[i]}"></div></div><strong>${count}</strong></div>`;}).join("")}</div><div class="panel"><h3>Origem dos contatos</h3>${[...new Set(selected.map(c=>c.source))].map(source=>{const count=selected.filter(c=>c.source===source).length;return `<div class="report-row"><span>${esc(source)}</span><strong>${count}</strong></div>`;}).join("") || "<p>Os dados aparecerão após o primeiro lead.</p>"}</div></div>`;
+  return `<div class="panel"><h3>Resultados por perfil</h3><p>Compare os leads, oportunidades abertas e vendas de cada perfil. Os filtros no topo combinam perfil e responsável no funil, contatos, atendimento, mapa e indicadores.</p><div class="table-wrap"><table><thead><tr><th>PERFIL</th><th>LEADS</th><th>OPORTUNIDADES ABERTAS</th><th>VALOR EM NEGOCIAÇÃO</th><th>VENDAS</th><th>VALOR GANHO</th></tr></thead><tbody>${profileRows}</tbody></table></div></div><div class="grid-two automation-panel"><div class="panel"><h3>Distribuição no funil</h3>${stages.map((stage,i)=>{const count=selected.filter(c=>boardStage(c)===stage).length;return `<div class="report-row"><span>${esc(stage)}</span><div class="bar"><div style="width:${selected.length?count/selected.length*100:0}%;background:${colors[i]}"></div></div><strong>${count}</strong></div>`;}).join("")}</div><div class="panel"><h3>Origem dos contatos</h3>${[...new Set(selected.map(c=>c.source))].map(source=>{const count=selected.filter(c=>c.source===source).length;return `<div class="report-row"><span>${esc(source)}</span><strong>${count}</strong></div>`;}).join("") || "<p>Os dados aparecerão após o primeiro lead.</p>"}</div></div>`;
 }
 function settingsView() {
   const a=systemStatus.automation || {enabled:false,assignment_mode:"regional",regional_owners:{}};
@@ -906,7 +931,7 @@ function mapContacts() {
     (c) =>
       matchesSelection(c) &&
       (!mapState || c.state === mapState) &&
-      (!mapStage || c.stage === mapStage),
+      (!mapStage || boardStage(c) === mapStage),
   );
 }
 function refreshPins(fit = false) {
@@ -954,7 +979,7 @@ function refreshPins(fit = false) {
     for (const contact of rows) {
       const button = document.createElement("button");
       button.className = "popup-lead";
-      button.textContent = contact.name + " · " + contact.stage;
+      button.textContent = contact.name + " · " + boardStage(contact);
       button.onclick = () => detail(contact.id);
       popup.append(button);
     }

@@ -31,6 +31,7 @@ def fake_sender(req,timeout):
  counter+=1
  return io.BytesIO(json.dumps({'messages':[{'id':'fixture-out-'+str(counter)}]}).encode())
 app.config['META_SENDER']=fake_sender
+app.config['ACCESS_URL']=''
 with database(app) as db:
  db.execute('INSERT INTO users VALUES(?,?,?,?,?,1,?)',('admin-test','admin@example.test','Admin de demonstração',password(os.environ['TEST_PASSWORD']),'admin',time.time()))
 start_automation_worker(app)
@@ -85,7 +86,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.16.3"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.17.1"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
   assert.equal(appManifest.display,'standalone');
@@ -698,6 +699,60 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     consumer=await consumerRow();assert.equal(consumer.lead_profile,'Consumidor Final');
     assert.equal(consumer.messages.filter(m=>m.direction==='out').length,1);
   }
+  // Internal follow-up dates, checklist and inclusive date filters combine
+  // with the existing owner/profile filters without sending WhatsApp.
+  const today=await admin.evaluate(()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()));
+  const nextDate=new Date(today+'T12:00:00Z');nextDate.setUTCDate(nextDate.getUTCDate()+5);
+  const agreedDate=nextDate.toISOString().slice(0,10);
+  const agendaId=await admin.evaluate(async()=>{
+    const result=await api('/api/contacts',{name:'Agenda da consultora',phone:'5554999999666',city_id:'4309407',lead_profile:'Lojista',owner_id:'admin-test'});
+    await load();return result.id;
+  });
+  await admin.evaluate(id=>detail(id),agendaId);
+  await admin.locator('#followup-form [name=last_conversation_on]').fill(today);
+  await admin.getByRole('button',{name:'Salvar acompanhamento',exact:true}).click();
+  await admin.getByRole('status').filter({hasText:'Acompanhamento salvo.'}).waitFor();
+  await admin.locator('[data-followup-step=D14]').waitFor();
+  assert.equal(await admin.locator('#followup-form [name=mode]').inputValue(),'awaiting');
+  assert.equal(await admin.locator('[data-followup-step]').count(),5);
+  await admin.locator('#followup-form [name=mode]').selectOption('promised');
+  await admin.locator('#followup-form [name=next_on]').fill(agreedDate);
+  await admin.locator('#followup-form [name=next_step]').fill('Confirmar interesse no catálogo');
+  await admin.getByRole('button',{name:'Salvar acompanhamento',exact:true}).click();
+  await admin.getByRole('status').filter({hasText:'Acompanhamento salvo.'}).waitFor();
+  await admin.locator('#close-detail').click();
+  await admin.locator('[data-view=followups]').click();
+  await admin.locator('[data-followup-filter=scheduled]').click();
+  await admin.locator('#profile-filter').selectOption('Lojista');
+  await admin.locator('#owner-filter').selectOption('admin-test');
+  await admin.locator('#date-basis').selectOption('next');
+  await admin.locator('#date-from').fill(agreedDate);
+  await admin.locator('#date-to').fill(agreedDate);
+  await admin.locator('#date-to').blur();
+  await admin.locator('.followup-item').filter({hasText:'Agenda da consultora'}).waitFor();
+  assert.equal(await admin.locator('.followup-item').count(),1);
+  await admin.locator('#date-from').fill('2099-01-01');await admin.locator('#date-to').fill('2099-01-02');await admin.locator('#date-to').blur();
+  assert.equal(await admin.locator('.followup-item').count(),0);
+  await admin.locator('#clear-dates').click();
+  assert.equal(await admin.locator('.followup-item').filter({hasText:'Agenda da consultora'}).count(),1);
+  await admin.locator('#owner-filter').selectOption(seller.id);
+  assert.equal(await admin.locator('.followup-item').filter({hasText:'Agenda da consultora'}).count(),0);
+  await admin.locator('#owner-filter').selectOption('');await admin.locator('#profile-filter').selectOption('');
+  await admin.locator('#date-basis').selectOption('conversation');
+  await admin.locator('#date-from').fill(today);await admin.locator('#date-to').fill(today);await admin.locator('#date-to').blur();
+  assert.equal(await admin.locator('.followup-item').filter({hasText:'Agenda da consultora'}).count(),1);
+  await admin.locator('#clear-dates').click();
+  const agenda=await admin.evaluate(async id=>(await api('/api/contacts')).contacts.find(c=>c.id===id),agendaId);
+  assert.equal(agenda.messages.length,0);assert.equal(agenda.stage,'Novo contato');
+  await admin.locator('[data-view=pipeline]').click();
+  await admin.locator('.column[data-stage="Qualificação pendente"]').waitFor();
+  await admin.locator('[data-view=followups]').click();
+  await admin.setViewportSize({width:390,height:844});
+  assert.equal(await admin.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  while(await admin.locator('[data-dismiss-alert]').count())await admin.locator('[data-dismiss-alert]').first().click();
+  await admin.screenshot({path:__dirname+'/preview-followups-mobile.png',fullPage:true});
+  await admin.setViewportSize({width:1440,height:1000});
+  await admin.screenshot({path:__dirname+'/preview-followups.png',fullPage:true});
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({

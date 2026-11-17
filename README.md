@@ -1,6 +1,8 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.16.3
+## Aplicativo único para atualizar — 2026.11.17.1
+
+**Retornos e filtros de data:** agenda interna com última conversa, sequência por perfil, caixinhas D0/D1/D3, data combinada, negociação ativa, revisão e recompra conforme ciclo. Nova coluna Qualificação pendente após 24h sem identificação. O filtro De/Até combina data, perfil e responsável. Links da equipe usam o acesso externo informado `http://200.225.129.156:3001`, preservando a porta interna e o WhatsApp. Leia [RETORNOS-E-LEMBRETES.md](RETORNOS-E-LEMBRETES.md).
 
 **Loja e contexto da conversa:** reconhece “loja”, “para loja” e abertura de uma loja como Lojista; “para uso” e “para uso próprio” como Consumidor Final. Não confunde a preposição “para” com a UF Pará. Aproveita localização já informada e respostas anteriores recebidas na conversa para perguntar só o dado faltante. Veja [CORRECAO-LOJA-E-CONTEXTO.md](CORRECAO-LOJA-E-CONTEXTO.md). A retomada em lote cancelada e o código de início do Windows permanecem sem alterações.
 
