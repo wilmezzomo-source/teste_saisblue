@@ -205,7 +205,7 @@ class ContextualQualificationTest(unittest.TestCase):
             with self.subTest(body=body):self.assertNotIn('brand',label_details(body,free_answer=True))
         self.assertNotIn('volume',label_details('Giro 500 reais',free_answer=True))
 
-    def test_lost_only_after_full_cadence_and_24_hours_and_can_resume_on_reply(self):
+    def test_completed_cadence_waits_for_24_hours_and_can_resume_on_reply(self):
         anchor=self.exhausted()
         with database(self.app) as db:db.execute("UPDATE contacts SET note='Cliente indicado pela loja' WHERE id=?",(self.row()['id'],))
         self.tick(anchor+WINDOW-1);self.assertEqual(self.row()['stage'],'Novo contato')
@@ -220,12 +220,55 @@ class ContextualQualificationTest(unittest.TestCase):
         self.assertEqual((c['stage'],c['lead_profile'],c['qualification_state']),('Novo contato','Consumidor Final','waiting_city'))
         self.assertEqual(c['note'],'Cliente indicado pela loja')
 
-    def test_incomplete_or_failed_attempts_are_not_marked_lost(self):
+    def test_failed_attempts_are_not_marked_lost(self):
         anchor=self.exhausted()
         with database(self.app) as db:db.execute("UPDATE messages SET status='failed' WHERE automation_kind='reminder' AND id=(SELECT id FROM messages WHERE automation_kind='reminder' LIMIT 1)")
         self.tick(anchor+WINDOW+1)
         self.assertEqual(self.row()['stage'],'Novo contato')
         self.assertNotIn('Sem Resposta',self.row()['note'])
+
+    def test_24h_without_reply_closes_after_downtime_and_cancels_expired_unsent_messages(self):
+        from qualification import enqueue
+        self.enable();anchor=time.time()+1
+        with patch('qualification.time.time',return_value=anchor):
+            self.receive('Bom dia',ad=True,timestamp=anchor);self.drain()
+        self.assertEqual(len(self.sent),1)
+        with database(self.app) as db:
+            enqueue(db,self.row()['id'],'expired-reminder','Não enviar após a janela','waiting_profile',kind='reminder',cycle=self.progress()['cycle'])
+        self.tick(anchor+WINDOW+1)
+        c=self.row();self.assertEqual((c['stage'],c['qualification_state']),('Perdido','no_response'))
+        self.assertEqual(c['note'].count('Sem Resposta'),1);self.assertEqual(len(self.sent),1)
+        with database(self.app) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM messages WHERE automation=1 AND status='queued'").fetchone()[0],0)
+        self.tick(anchor+WINDOW+2);self.assertEqual(self.row()['note'].count('Sem Resposta'),1)
+
+    def test_never_sent_question_does_not_count_as_no_response(self):
+        self.enable();anchor=time.time()+1
+        with patch('qualification.time.time',return_value=anchor):self.receive('Bom dia',ad=True,timestamp=anchor)
+        self.tick(anchor+WINDOW+1)
+        self.assertEqual(self.row()['stage'],'Novo contato');self.assertEqual(self.sent,[])
+        self.assertNotIn('Sem Resposta',self.row()['note'])
+
+    def test_internal_human_reminder_without_owner_prevents_automatic_loss(self):
+        self.enable();anchor=time.time()+1
+        with patch('qualification.time.time',return_value=anchor):
+            self.receive('Bom dia',ad=True,timestamp=anchor);self.drain()
+            result=self.post('/api/followups',{'id':self.row()['id'],'version':0,'mode':'promised','next_on':'2026-12-01'})
+            self.assertEqual(result.status_code,200,result.json)
+        self.tick(anchor+WINDOW+1)
+        self.assertEqual(self.row()['stage'],'Novo contato');self.assertNotIn('Sem Resposta',self.row()['note'])
+
+    def test_reply_renews_the_24h_window_instead_of_losing_by_first_message_age(self):
+        self.enable();anchor=time.time()+1
+        with patch('qualification.time.time',return_value=anchor):
+            self.receive('Bom dia',ad=True,timestamp=anchor);self.drain()
+        renewed=anchor+WINDOW-60
+        with patch('qualification.time.time',return_value=renewed):
+            self.receive('Para meu uso',timestamp=renewed);self.drain()
+        self.tick(anchor+WINDOW+1)
+        self.assertEqual((self.row()['stage'],self.row()['lead_profile']),('Novo contato','Consumidor Final'))
+        self.tick(renewed+WINDOW+1)
+        self.assertEqual((self.row()['stage'],self.row()['qualification_state']),('Perdido','no_response'))
 
     def test_manual_progress_or_assignment_prevents_lost_even_with_full_attempts(self):
         anchor=self.exhausted()

@@ -30,9 +30,9 @@ from phone_numbers import manual_phone, phone_identity, legacy_brazil_variants
 import followups
 
 ROOT = Path(__file__).parent
-STAGES = ['Novo contato', 'Qualificação pendente', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
+STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.17.2'
+RELEASE = '2026.11.19.1'
 
 
 class Problem(Exception):
@@ -162,6 +162,10 @@ def init_db(app):
             db.execute("UPDATE contacts SET stage='Negociação',revision=revision+1,updated=? WHERE id=?", (now(), row['id']))
             db.execute('INSERT INTO audit(contact_id,actor,action,details,created) VALUES(?,?,?,?,?)',
                        (row['id'],'Sistema','Etapa removida do funil',json.dumps({'antes':'Proposta enviada','depois':'Negociação'},ensure_ascii=False),now()))
+        for row in db.execute("SELECT id FROM contacts WHERE stage='Qualificação pendente'").fetchall():
+            db.execute("UPDATE contacts SET stage='Novo contato',revision=revision+1,updated=? WHERE id=?",(now(),row['id']))
+            db.execute('INSERT INTO audit(contact_id,actor,action,details,created) VALUES(?,?,?,?,?)',
+                       (row['id'],'Sistema','Coluna de qualificação pendente removida',json.dumps({'antes':'Qualificação pendente','depois':'Novo contato'},ensure_ascii=False),now()))
         followups.init(db)
         for row in db.execute('SELECT id,referral FROM contacts WHERE ad_origin=0 AND referral IS NOT NULL').fetchall():
             try:
@@ -608,7 +612,7 @@ def create_app(config=None):
                 row['messages'] = [dict(m) for m in db.execute('SELECT * FROM messages WHERE contact_id=? ORDER BY created,rowid', (row['id'],))]
                 row['followup']=followups.snapshot(db,row)
                 row['audit'] = [dict(a) for a in db.execute('SELECT actor,action,details,created FROM audit WHERE contact_id=? ORDER BY id DESC LIMIT 30', (row['id'],))]
-        return jsonify(contacts=rows, stages=STAGES if g.user['role']=='admin' else [s for s in STAGES if s!=followups.PENDING_STAGE])
+        return jsonify(contacts=rows, stages=STAGES)
 
     @app.post('/api/followups')
     def update_followup():

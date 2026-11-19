@@ -11,7 +11,7 @@ from qualification_location import normalize
 
 LOCAL = timezone(timedelta(hours=-3))
 PENDING_STAGE = 'Qualificação pendente'
-SEQUENCES = {'Lojista': (0,1,3,7,14), 'Revenda': (0,2,5,10), 'Consumidor Final': (0,1,3,7)}
+SEQUENCES = {'Lojista': (0,1,3,7,14,30), 'Revenda': (0,2,5,10,45), 'Consumidor Final': (0,1,3,7,15)}
 MODES = {'unset','identification','awaiting','promised','negotiation','customer','paused','closed','blocked'}
 
 def clock():return time.time()
@@ -86,19 +86,8 @@ def snapshot(db,contact,current=None):
             stopped=True;break
     if mode=='blocked' or stopped:f.update(mode='blocked',queue='blocked',label='Não contatar');return f
     if mode=='closed':f.update(queue='closed',label='Tentativa encerrada');return f
-    p=db.execute('SELECT auto_lost_at,auto_lost_revision,reminders_sent,closed_reason,city_text,state_text FROM qualification_progress WHERE contact_id=?',(cid,)).fetchone()
-    auto_lost=bool(p and p['auto_lost_at'] and p['auto_lost_revision']==contact['revision'])
-    no_identity=not contact['lead_profile'] and not (contact['city_id'] or contact['city'] or contact['state'] or (p and (p['city_text'] or p['state_text'])))
-    exhausted=bool(p and p['reminders_sent']>=4 and p['closed_reason'] in ('finished','no_response','window_closed'))
-    automatic_pending=(mode in ('unset','identification') and contact['ad_origin'] and not contact['manual_origin'] and not contact['owner_id'] and
-        contact['qualification_state'] in ('waiting_profile','waiting_city','no_response') and
-        (contact['stage'] in ('Novo contato',PENDING_STAGE) or auto_lost))
-    first=db.execute("SELECT MIN(created) FROM messages WHERE contact_id=? AND direction='in' AND channel='meta'",(cid,)).fetchone()[0]
-    if no_identity and automatic_pending and exhausted and first and current-first>=86400:
-        f.update(queue='qualification_pending',label='Identificação pendente — sem retorno',crm_stage=PENDING_STAGE)
-        return f
-    if contact['stage']=='Perdido' and not auto_lost:
-        f.update(queue='closed',label='Oportunidade perdida · acompanhamento encerrado');return f
+    if contact['stage']=='Perdido':
+        f.update(queue='closed',label='Perdido · Sem Resposta' if contact['qualification_state']=='no_response' else 'Oportunidade perdida · acompanhamento encerrado');return f
     if contact['stage']=='Ganho' and mode not in ('customer','promised','negotiation'):
         f.update(queue='customer',label='Registrar última compra e ciclo de recompra');return f
     if mode=='unset':return f
@@ -133,14 +122,13 @@ def snapshot(db,contact,current=None):
         base=completed[latest] if latest is not None and offset>latest else start
         delta=offset-latest if latest is not None and offset>latest else offset-start_step
         planned=f['progress'].get(key) or ('' if before_start else working_day(base+timedelta(days=delta)).isoformat())
+        if offset==offsets[-1] and not f['progress'].get(key) and f['review_on']:
+            planned=f['review_on']
         missed=not f['progress'].get(key) and latest is not None and offset<latest
         f['plan'].append(dict(key=key,on=planned,done_on=f['progress'].get(key,''),covered=False,missed=missed,before_start=before_start))
     last=f['plan'][-1]
     if last['done_on']:
-        if contact['lead_profile']=='Consumidor Final':f.update(queue='closed',label='Tentativa encerrada · aguardar novo interesse')
-        else:
-            review=f['review_on'] or (day(last['done_on'])+timedelta(days=(30 if contact['lead_profile']=='Lojista' else 45)-offsets[-1])).isoformat()
-            schedule('review','Sequência pausada · revisão interna',review,review=True)
+        f.update(queue='decision',label='Último retorno realizado · definir Ganho ou Perdido manualmente')
         return f
     remaining=[p for p in f['plan'] if not p['done_on'] and not p['missed'] and not p['before_start']]
     chosen=remaining[0] if remaining else None

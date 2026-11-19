@@ -8,7 +8,7 @@ const followupDue=f=>Boolean(f?.due_on && f.due_on<=followupToday() && f.queue==
 const bellIcon='<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function callState(f) {
   if(f.queue==='blocked')return {tone:'muted',title:'Não contatar',subtitle:'Abordagem interrompida'};
-  if(f.queue==='qualification_pending')return {tone:'muted',title:'Qualificação pendente',subtitle:'Sem perfil e sem cidade'};
+  if(f.queue==='decision')return {tone:'review',title:'Avaliar resultado',subtitle:'Defina Ganho ou Perdido na ficha'};
   if(f.queue==='closed')return {tone:'muted',title:'Acompanhamento encerrado',subtitle:'Sem próxima chamada'};
   if(f.queue==='conversation')return {tone:'reply',title:'Cliente respondeu',subtitle:'Combine a próxima chamada'};
   if(f.review)return {tone:'review',title:f.overdue?'Revisão pendente':'Revisão interna',subtitle:shortDay(f.due_on)};
@@ -22,12 +22,13 @@ function callState(f) {
 }
 function stepControls(c,compact=false) {
   const f=c.followup;
-  if(!f?.available_steps?.length || ['blocked','closed','customer','qualification_pending'].includes(f.queue) || c.stage==='Ganho')return '';
+  if(!f?.available_steps?.length || ['blocked','closed','customer'].includes(f.queue) || c.stage==='Ganho')return '';
   const progress=f.progress||{},completed=Object.keys(progress).filter(k=>f.available_steps.includes(k)).map(k=>Number(k.slice(1)));
   const latest=completed.length?Math.max(...completed):-1;
-  return `<div class="call-steps ${compact?'compact':''}" aria-label="Etapas do atendimento de ${esc(c.name)}">${f.available_steps.map(key=>{
+  return `<div class="call-steps ${compact?'compact':''}" style="--call-step-count:${f.available_steps.length-1}" aria-label="Etapas do atendimento de ${esc(c.name)}">${f.available_steps.map((key,index)=>{
     const done=Boolean(progress[key]),earlier=Number(key.slice(1))<Math.max(latest,f.start_step||0);
-    return `<label class="call-step ${done?'done':''} ${earlier&&!done?'skipped':''}" title="${done?'Realizado em '+shortDay(progress[key]):earlier?'Etapa anterior sem registro':'Registrar '+key+' realizado hoje e agendar a próxima chamada'}"><input type="checkbox" data-quick-step="${key}" data-lead-id="${esc(c.id)}" aria-label="Registrar atendimento ${key} de ${esc(c.name)}" ${done?'checked':''} ${done||earlier?'disabled':''}><span>${key}</span></label>`;
+    const final=index===f.available_steps.length-1;
+    return `<label class="call-step ${final?'final-return':''} ${done?'done':''} ${earlier&&!done?'skipped':''}" title="${done?'Realizado em '+shortDay(progress[key]):earlier?'Etapa anterior sem registro':final?'Registrar o último retorno. O resultado da oportunidade será definido manualmente.':'Registrar '+key+' realizado hoje e agendar a próxima chamada'}"><input type="checkbox" data-quick-step="${key}" data-lead-id="${esc(c.id)}" aria-label="Registrar atendimento ${key} de ${esc(c.name)}" ${done?'checked':''} ${done||earlier?'disabled':''}><span>${key}</span>${final?'<small>Último retorno</small>':''}</label>`;
   }).join('')}</div>`;
 }
 function followupCard(c) {
@@ -36,8 +37,7 @@ function followupCard(c) {
   return `<div class="card-next-call"><button type="button" class="call-bell ${state.tone}" data-call-bell="${esc(c.id)}" aria-label="Próxima chamada de ${esc(c.name)}: ${esc(state.title)}"><span class="call-bell-icon">${bellIcon}</span><span><strong>${esc(state.title)}</strong><small>${esc(state.subtitle)}</small></span><span class="call-bell-edit" aria-hidden="true">›</span></button>${stepControls(c,true)}</div>`;
 }
 function followupView(list) {
-  const filters={all:['Todos',()=>true],work:['Hoje e atrasados',c=>followupDue(c.followup)],today:['Só hoje',c=>c.followup.queue==='active'&&c.followup.due_on===followupToday()],late:['Só atrasados',c=>c.followup.queue==='active'&&c.followup.overdue],scheduled:['Agendados',c=>c.followup.queue==='active'&&!followupDue(c.followup)],unscheduled:['Sem chamada definida',c=>['unscheduled','identification','conversation'].includes(c.followup.queue)],review:['Revisões',c=>c.followup.queue==='review'],qualification_pending:['Qualificação pendente',c=>c.followup.queue==='qualification_pending'],customer:['Recompra',c=>c.followup.queue==='customer'],paused:['Pausados',c=>c.followup.queue==='paused'],closed:['Encerrados',c=>c.followup.queue==='closed'],blocked:['Não contatar',c=>c.followup.queue==='blocked']};
-  if(currentUser.role!=='admin')delete filters.qualification_pending;
+  const filters={all:['Todos',()=>true],work:['Hoje e atrasados',c=>followupDue(c.followup)],today:['Só hoje',c=>c.followup.queue==='active'&&c.followup.due_on===followupToday()],late:['Só atrasados',c=>c.followup.queue==='active'&&c.followup.overdue],scheduled:['Agendados',c=>c.followup.queue==='active'&&!followupDue(c.followup)],unscheduled:['Sem chamada definida',c=>['unscheduled','identification','conversation'].includes(c.followup.queue)],decision:['Avaliar resultado',c=>c.followup.queue==='decision'],review:['Revisões manuais',c=>c.followup.queue==='review'],customer:['Recompra',c=>c.followup.queue==='customer'],paused:['Pausados',c=>c.followup.queue==='paused'],closed:['Encerrados / perdidos',c=>c.followup.queue==='closed'],blocked:['Não contatar',c=>c.followup.queue==='blocked']};
   if(!filters[followupFilter])followupFilter='work';
   const totals=contacts.filter(c=>matchesSelection(c,false));
   const rows=list.filter(filters[followupFilter][1]).sort((a,b)=>(a.followup.due_at||Infinity)-(b.followup.due_at||Infinity));
@@ -79,7 +79,7 @@ function bindCallControls(root=document) {
 function openCallReminder(id) {
   const c=contacts.find(c=>c.id===id);if(!c)return;
   currentCallId=id;
-  const f=c.followup,state=callState(f),locked=['blocked','closed','qualification_pending'].includes(f.queue);
+  const f=c.followup,state=callState(f),locked=['blocked','closed'].includes(f.queue);
   $('#call-dialog-content').innerHTML=`<div class="dialog-header"><div><p class="eyebrow">PRÓXIMA CHAMADA</p><h2>${esc(c.name)}</h2></div><button type="button" id="close-call" class="close" aria-label="Fechar próxima chamada">×</button></div><div class="call-summary ${state.tone}">${bellIcon}<div><strong>${esc(state.title)}</strong><p>${esc(state.subtitle)}</p></div></div>${!locked?`<h3>Qual atendimento você fez hoje?</h3>${stepControls(c)}<p class="followup-help">Marque D3, por exemplo: o CRM registra hoje e agenda D7 pelo intervalo da sequência. Etapas anteriores não são marcadas como realizadas.</p><form id="call-date-form"><label>Ou escolha a próxima chamada<input type="date" name="next_on" value="${esc(f.queue==='active'?f.due_on:'')}" required></label><label>Motivo (opcional)<input name="next_step" maxlength="500" value="${esc(f.next_step)}" placeholder="Ex.: retorno combinado com a cliente"></label><div class="call-date-shortcuts"><button type="button" class="secondary" data-call-days="0">Hoje</button><button type="button" class="secondary" data-call-days="1">Amanhã</button></div><div class="dialog-actions"><button class="primary">Agendar chamada</button></div><p class="field-error" id="call-error" role="alert" hidden></p></form>`:'<p class="followup-help">Revise a situação na ficha antes de agendar uma abordagem.</p>'}<button type="button" class="call-open-detail" id="call-open-detail">Abrir ficha completa</button>`;
   $('#close-call').onclick=()=>$('#call-dialog').close();
   $('#call-dialog').onclose=()=>currentCallId=null;
@@ -109,7 +109,7 @@ function followupDetail(c) {
 function bindFollowupDetail(c) {
   bindCallControls($('#detail'));
   const form=$('#followup-form');if(!form)return;
-  const help={awaiting:'Marque no card a etapa feita hoje para calcular a próxima chamada.',promised:'A data combinada substitui a sequência anterior.',negotiation:'Informe o próximo passo e a data.',customer:'Ajuste o ciclo de recompra à reposição ou coleção.',blocked:'Sem novos lembretes de abordagem comercial.',identification:'Sem perfil, sem cidade e com as tentativas virtuais esgotadas, o pendente fica apenas com o administrador após 24h da primeira mensagem.'};
+  const help={awaiting:'Marque a etapa realizada. O último retorno é D30 para lojista, D45 para revenda e D15 para consumidor. Depois, defina Ganho ou Perdido na ficha.',promised:'A data combinada substitui a sequência anterior.',negotiation:'Informe o próximo passo e a data.',customer:'Ajuste o ciclo de recompra à reposição ou coleção.',blocked:'Sem novos lembretes de abordagem comercial.',identification:'Lead sem resposta à pergunta enviada pelo assistente virtual por 24h vai para Perdido — Sem Resposta, preservando atendimentos humanos e falhas de envio.'};
   const modeChanged=()=>{
     const mode=form.elements.mode.value;
     form.querySelectorAll('[data-followup-for]').forEach(label=>{const show=label.dataset.followupFor.split(' ').includes(mode);label.hidden=!show;label.querySelectorAll('input').forEach(input=>input.disabled=!show);});

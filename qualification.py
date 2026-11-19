@@ -195,6 +195,9 @@ def service_label_timers(db, audit):
 def human_intervention_since(db, cid, since):
     for event in db.execute("SELECT action,details FROM audit WHERE contact_id=? AND user_id IS NOT NULL AND created>=?",(cid,since)):
         if event['action'] in ('Nota adicionada','Atendimento assumido','Envio solicitado'):return True
+        if event['action']=='Acompanhamento interno atualizado':
+            mode=json.loads(event['details']).get('situação','unset')
+            if mode!='unset':return True
         if event['action']=='Oportunidade atualizada':
             changes=json.loads(event['details'])
             if any(key!='name' for key in changes):return True
@@ -205,25 +208,28 @@ def close_unresponsive(db, audit):
     if not settings(db)['enabled']:return
     total=len(REMINDER_OFFSETS)+1
     rows=db.execute('''SELECT p.* FROM qualification_progress p JOIN contacts c ON c.id=p.contact_id
-        WHERE p.closed_reason='finished' AND p.reminders_sent>=? AND p.anchor<=?
+        WHERE p.anchor>0 AND p.anchor<=?
         AND c.ad_origin=1 AND c.manual_origin=0 AND c.deleted_at=0 AND c.owner_id=''
-        AND c.stage='Novo contato' AND c.qualification_state IN ('waiting_profile','waiting_city') LIMIT 50''',
-        (total,time.time()-WINDOW)).fetchall()
+        AND c.stage IN ('Novo contato','Qualificação pendente') AND c.qualification_state IN ('waiting_profile','waiting_city') ORDER BY p.anchor,p.contact_id''',
+        (time.time()-WINDOW,)).fetchall()
     for p in rows:
         cid=p['contact_id']
         if human_intervention_since(db,cid,p['anchor']):continue
         last=db.execute("SELECT MAX(created) FROM messages WHERE contact_id=? AND direction='in' AND channel='meta'",(cid,)).fetchone()[0]
-        sends=db.execute("SELECT automation_kind,status FROM messages WHERE contact_id=? AND automation=1 AND automation_cycle=? AND automation_kind IN ('reminder','final')",(cid,p['cycle'])).fetchall()
+        sends=db.execute("SELECT automation_kind,status FROM messages WHERE contact_id=? AND automation=1 AND automation_cycle=?",(cid,p['cycle'])).fetchall()
         successful=[m for m in sends if m['status'] in ('accepted','sent','delivered','read')]
-        if not last or last>p['anchor']+.01 or len(successful)<total or not any(m['automation_kind']=='final' for m in successful):continue
-        if any(m['status'] in ('failed','uncertain','sending','queued') for m in sends):continue
+        asked=any(m['automation_kind']=='question' for m in successful)
+        completed=len([m for m in successful if m['automation_kind'] in ('reminder','final')])>=total and any(m['automation_kind']=='final' for m in successful)
+        if not last or last>p['anchor']+.01 or not (asked or completed):continue
+        if any(m['status'] in ('failed','uncertain','sending') for m in sends):continue
         c=db.execute('SELECT * FROM contacts WHERE id=?',(cid,)).fetchone()
+        cancel_pending(db,cid)
         suffix='' if 'Sem Resposta' in c['note'] else ('\n\n' if c['note'] else '')+'Sem Resposta'
         db.execute("UPDATE contacts SET stage='Perdido',qualification_state='no_response',note=?,updated=?,revision=revision+1 WHERE id=?",
                    (c['note']+suffix,time.time(),cid))
         db.execute("UPDATE qualification_progress SET closed_reason='no_response',next_due=0,auto_lost_at=?,auto_lost_revision=?,auto_lost_note=? WHERE contact_id=?",
                    (time.time(),c['revision']+1,suffix,cid))
-        audit(db,'Lead encerrado sem resposta',cid,{'motivo':'Sem Resposta','retomadas':total,'janela_horas':24},actor='Assistente Sais Blue')
+        audit(db,'Lead encerrado sem resposta',cid,{'motivo':'Sem Resposta','retomadas':len([m for m in successful if m['automation_kind'] in ('reminder','final')]),'janela_horas':24},actor='Assistente Sais Blue')
 
 
 def reopen_auto_lost(db, c, created, audit):

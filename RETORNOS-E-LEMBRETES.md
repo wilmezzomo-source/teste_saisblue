@@ -1,10 +1,10 @@
-# Sino, chamadas e atendimentos — 2026.11.17.2
+# Sino, chamadas e atendimentos — 2026.11.19.1
 
 Cada card mostra um **sino com a próxima chamada**. A equipe pode trabalhar direto no funil ou abrir **Retornos** para consultar as pessoas que precisa chamar.
 
 ## Marcar o atendimento e calcular a próxima chamada
 
-No card, marque a caixinha do atendimento que realizou hoje: D0, D1, D3, D7 ou D14 para Lojista; D0, D2, D5 ou D10 para Revenda; D0, D1, D3 ou D7 para Consumidor Final.
+No card, marque a caixinha do atendimento que realizou hoje: D0, D1, D3, D7 e D14 para Lojista; D0, D2, D5 e D10 para Revenda; D0, D1, D3 e D7 para Consumidor Final. Depois dessas etapas, há uma caixinha destacada de **Último retorno**: D30, D45 ou D15, respectivamente.
 
 Não é necessário preencher outro formulário ou registrar etapas anteriores para começar. Marcar **D3** registra o atendimento de hoje e calcula **D7 quatro dias depois**. Para Revenda, marcar D2 calcula D5 três dias depois. Se a data cair no fim de semana, o lembrete fica para o próximo dia útil.
 
@@ -18,7 +18,7 @@ Se precisar de uma data específica, clique no **sino**, escolha o dia e use **A
 - **Vermelho — ATRASADO:** mostra o vencimento e quantos dias passaram.
 - **Azul — Próxima chamada:** apresenta a etapa e a data futura.
 - **Verde — Cliente respondeu:** a conversa precisa orientar a próxima ação.
-- **Roxo — Revisão interna:** serve para avaliar o contexto; não dispara mensagem comercial.
+- **Roxo — Avaliar resultado ou revisão interna:** depende de decisão da equipe; não dispara mensagem comercial.
 - **Cinza — Agendar chamada:** ainda não existe uma data definida.
 
 Uma etapa não realizada **continua atrasada**. Não é marcada automaticamente nem desaparece da fila por envelhecer. Ela sai desse estado quando a equipe registra o atendimento, combina outra data ou pausa/encerra o acompanhamento.
@@ -39,17 +39,25 @@ Ao lado de perfil e responsável existe apenas **Próxima chamada**:
 
 Os campos De/Até aparecem somente ao escolher um período. Os limites incluem os dois dias, no horário de Brasília. O botão × limpa a data e mantém perfil e responsável. Os atalhos da agenda trocam a fila sem deixar um período anterior ocultando contatos indevidamente.
 
-## Qualificação pendente — somente o administrador
+## Último retorno e decisão manual
 
-A coluna é exclusiva do administrador e não é compartilhada ou distribuída entre atendentes. Ela reúne leads de anúncio **sem perfil, sem localização e sem responsável**, depois de **24 horas desde a primeira mensagem**, quando as tentativas do assistente virtual já se esgotaram.
+| Perfil | Ao marcar | Próxima chamada |
+| --- | --- | --- |
+| Lojista | D14 | D30 |
+| Revenda | D10 | D45 |
+| Consumidor Final | D7 | D15 |
 
-Um lead que informou perfil ou localização não entra nessa classificação de ausência total de identificação. Os demais controles de acesso são preservados: cada atendente vê apenas suas próprias oportunidades. A coluna automática não é uma etapa para arrastar cards manualmente.
+Os números são marcos da mesma tentativa. Os intervalos são, respectivamente, 16, 35 e 8 dias a partir da data real da chamada registrada. Exemplo: marcar D14 em 19/11 agenda D30 em 05/12; por cair no sábado, o lembrete aparece em 07/12. Datas combinadas manualmente e revisões personalizadas já salvas são preservadas.
 
-Essa classificação é da exibição interna. Não reescreve os registros de qualificação usados pelo assistente nem muda envios, responsáveis ou o atendimento do WhatsApp.
+O último retorno entra na agenda ativa e mostra o sino azul; no dia passa a amarelo e, se não realizado, fica vermelho com atraso. Ele não é somente uma revisão escondida. Marcar D30, D45 ou D15 registra que o retorno foi feito e coloca o card na fila **Retornos → Outras filas → Avaliar resultado**. A oportunidade fica na etapa atual. Se não houver compra, a responsável abre a ficha, escolhe **Perdido** e salva. Se comprar, escolhe **Ganho**. O CRM não decide isso sozinho para atendimentos humanos.
 
-## Revisões e opções adicionais
+## Atendimento virtual sem resposta por 24 horas
 
-Ao registrar a última etapa, Lojista passa à revisão interna de D30; Revenda tem revisão padrão D45, ajustável conforme o contexto de D30–D60; Consumidor Final encerra a tentativa. Os intervalos de revisão partem do atendimento realizado. Uma revisão não significa enviar mensagem automaticamente.
+Leads de anúncio que receberam uma pergunta do assistente, continuam sem resposta por 24 horas desde a última mensagem da cliente e não foram assumidos ou trabalhados pela equipe passam diretamente para **Perdido**, com **Sem Resposta** nas Observações. A coluna automática Qualificação pendente deixa de ser usada. Os sem responsável continuam visíveis apenas ao administrador.
+
+O prazo considera a última mensagem recebida, não a idade do cadastro. Uma nova resposta renova a janela. Perguntas nunca enviadas, falhas de entrega, envios sem confirmação, atendimentos humanos, contatos manuais e oportunidades em outras etapas não são encerrados por essa regra. Se o servidor voltar depois da janela, o encerramento não dispara mensagens atrasadas. As perguntas, textos, intervalos e regras de distribuição do WhatsApp permanecem como estavam; somente a regra de encerramento muda.
+
+## Opções adicionais
 
 Na ficha, **Mais opções de acompanhamento** mantém data combinada, próximo passo de negociação, pausa, encerramento, não contato, última compra e ciclo de recompra. Negociação ativa não encerra só pela idade. Para recomeçar uma sequência, use **Reiniciar sequência hoje**; a data da última conversa não é inventada.
 

@@ -86,7 +86,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.17.2"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.19.1"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
   assert.equal(appManifest.display,'standalone');
@@ -773,6 +773,11 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.locator('#detail .call-bell').filter({hasText:'D14'}).waitFor();
   assert.equal(await member.locator('#detail-form [name=note]').inputValue(),'Rascunho que deve permanecer');
   agenda=await agendaRow();assert.ok(agenda.followup.progress.D3);assert.ok(agenda.followup.progress.D7);assert.equal(agenda.followup.next_key,'D14');
+  await member.locator('#detail [data-quick-step=D14]').check();
+  await member.locator('#detail .call-bell').filter({hasText:'D30'}).waitFor();
+  agenda=await agendaRow();assert.equal(agenda.followup.queue,'active');assert.equal(agenda.followup.next_key,'D30');
+  assert.equal(agenda.stage,'Novo contato');assert.equal(agenda.messages.length,0);
+  assert.equal(await member.locator('#detail-form [name=note]').inputValue(),'Rascunho que deve permanecer');
   await member.locator('#close-detail').click();
   await member.locator('[data-view=followups]').click();
   await member.locator('[data-followup-filter=scheduled]').click();
@@ -783,13 +788,35 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.setViewportSize({width:1440,height:1000});
   await member.screenshot({path:__dirname+'/preview-calls.png',fullPage:true});
   await admin.locator('[data-view=pipeline]').click();
-  await admin.locator('.column[data-stage="Qualificação pendente"]').waitFor();
+  assert.equal(await admin.locator('.column[data-stage="Qualificação pendente"]').count(),0);
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
   await member.screenshot({
     path: __dirname + "/preview-mobile.png",
     fullPage: true,
   });
+  // Consumers get an explicit D15 reminder, then a manual result decision.
+  const finalId=await admin.evaluate(async owner=>(await api('/api/contacts',{name:'Consumidora retorno final',phone:'5554999999667',city_id:'4309407',lead_profile:'Consumidor Final',owner_id:owner})).id,seller.id);
+  await member.evaluate(async()=>load());
+  const finalCard=member.locator(`.card[data-contact="${finalId}"]`);
+  await finalCard.locator('[data-quick-step=D7]').check();
+  await finalCard.locator('.call-bell.planned').filter({hasText:'D15'}).waitFor();
+  await finalCard.locator('[data-quick-step=D15]').check();
+  await finalCard.locator('.call-bell.review').filter({hasText:'Avaliar resultado'}).waitFor();
+  await member.locator('[data-view=followups]').click();
+  await member.locator('#more-followup-queues').selectOption('decision');
+  await member.locator(`.followup-item[data-contact="${finalId}"] .followup-person`).click();
+  assert.equal(await member.locator('#detail-form [name=stage]').inputValue(),'Novo contato');
+  await member.locator('#detail-form [name=stage]').selectOption('Perdido');
+  const savedFinal=member.waitForResponse(r=>r.url().endsWith('/api/update') && r.request().method()==='POST');
+  await member.getByRole('button',{name:'Salvar oportunidade',exact:true}).click();
+  assert.equal((await savedFinal).status(),200);
+  await member.getByRole('status').filter({hasText:'Oportunidade atualizada.'}).waitFor();
+  await member.locator('#close-detail').click();
+  await member.locator('#more-followup-queues').selectOption('closed');
+  await member.locator(`.followup-item[data-contact="${finalId}"]`).waitFor();
+  const finalRow=await member.evaluate(async id=>(await api('/api/contacts')).contacts.find(c=>c.id===id),finalId);
+  assert.equal(finalRow.stage,'Perdido');assert.equal(finalRow.followup.queue,'closed');assert.equal(finalRow.messages.length,0);
   assert.equal(
     await member.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,
@@ -804,7 +831,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: sino no card, D3/D7 automáticos, atraso vermelho, filtros rápidos, rascunhos preservados, edição e movimento de cards sem cidade/UF, localização parcial e mapa, editar nome, avisos privados com som e sem perder rascunhos, WhatsApp, filtros combinados, exclusão e restauração, acesso restrito, anúncios, qualificação, distribuição, indicadores e mobile.",
+    "UI OK: sino no card, D14/D30 e D7/D15 automáticos, decisão manual de Perdido, D3/D7 automáticos, atraso vermelho, filtros rápidos, rascunhos preservados, edição e movimento de cards sem cidade/UF, localização parcial e mapa, editar nome, avisos privados com som e sem perder rascunhos, WhatsApp, filtros combinados, exclusão e restauração, acesso restrito, anúncios, qualificação, distribuição, indicadores e mobile.",
   );
 })()
   .catch((e) => {

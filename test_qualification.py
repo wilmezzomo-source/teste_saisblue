@@ -433,8 +433,10 @@ class QualificationTest(unittest.TestCase):
             self.assertAlmostEqual(self.progress()['next_due'],anchor+6*3600,delta=2)
         with patch('qualification.time.time',return_value=anchor+86401):self.drain()
         self.assertEqual(len(self.sent),2)
-        self.assertEqual(self.progress()['closed_reason'],'window_closed')
-        self.assertEqual(self.contact()['qualification_state'],'waiting_profile')
+        self.assertEqual(self.progress()['closed_reason'],'no_response')
+        self.assertEqual(self.contact()['qualification_state'],'no_response')
+        self.assertEqual(self.contact()['stage'],'Perdido')
+        self.assertIn('Sem Resposta',self.contact()['note'])
         with patch('qualification.time.time',return_value=anchor+86402):
             self.receive('Lojista',timestamp=anchor+86402);self.drain()
             self.client.post('/api/login',json={'email':'admin@example.test','password':'fixture-password-123'})
