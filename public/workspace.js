@@ -8,7 +8,7 @@ function workspaceParams() {
   params.set('pages',JSON.stringify(workspacePages));params.set('page',workspacePage);
   return params;
 }
-function currentContact(id) {return contacts.find(c=>c.id===id) || (detailData?.id===id?detailData:null) || (callData?.id===id?callData:null);}
+function currentContact(id) {return ($('#call-dialog')?.open&&callData?.id===id?callData:null) || contacts.find(c=>c.id===id) || (detailData?.id===id?detailData:null);}
 function workspaceReady() {
   if(workspaceState&&workspaceKey===workspaceParams().toString())return true;
   load();return false;
@@ -55,11 +55,17 @@ function bindWorkspacePages() {
   document.querySelectorAll('[data-page-for]').forEach(button=>button.onclick=async()=>{
     if(button.dataset.pageFor==='list')workspacePage=Number(button.dataset.page);else workspacePages[button.dataset.pageFor]=Number(button.dataset.page);
     button.disabled=true;await load();
+    const target=button.dataset.pageFor==='list'?$('#content .toolbar'):[...document.querySelectorAll('.column')].find(c=>c.dataset.stage===button.dataset.pageFor);
+    target?.scrollIntoView({block:'start',inline:'nearest'});
   });
 }
 function patchWorkspaceContent(html,incremental) {
   const root=$('#content');
-  if(!incremental||view!=='pipeline'||!root.querySelector('.board')){root.innerHTML=html;return;}
+  if(!incremental||view!=='pipeline'||!root.querySelector('.board')){
+    const left=root.querySelector('.board')?.scrollLeft||0;root.innerHTML=html;
+    if(view==='pipeline'&&root.querySelector('.board'))root.querySelector('.board').scrollLeft=left;
+    return;
+  }
   const holder=document.createElement('div');holder.innerHTML=html;
   for(const fresh of holder.querySelectorAll('.column')) {
     const column=[...root.querySelectorAll('.column')].find(c=>c.dataset.stage===fresh.dataset.stage);

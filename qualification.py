@@ -611,10 +611,11 @@ def process_outbox(app, connect, transmit, audit):
     with app.app_context(), connect(app) as db:
         current=time.time();maintenance=app.config['TESTING'] or current>=app.extensions.get('qualification_maintenance_due',0)
         if not maintenance:
+            enabled=settings(db)['enabled']
             queued=db.execute("SELECT 1 FROM messages WHERE automation=1 AND status='queued' LIMIT 1").fetchone()
             stale=db.execute("SELECT 1 FROM messages WHERE automation=1 AND status='sending' AND send_started<? LIMIT 1",(current-120,)).fetchone()
-            due=db.execute('SELECT 1 FROM qualification_progress WHERE next_due>0 AND next_due<=? LIMIT 1',(current,)).fetchone()
-            label=db.execute('SELECT 1 FROM qualification_progress WHERE label_due>0 AND label_due<=? LIMIT 1',(current,)).fetchone()
+            due=db.execute('SELECT 1 FROM qualification_progress WHERE next_due>0 AND next_due<=? LIMIT 1',(current,)).fetchone() if enabled else None
+            label=db.execute('SELECT 1 FROM qualification_progress WHERE label_due>0 AND label_due<=? LIMIT 1',(current,)).fetchone() if enabled else None
             if not (queued or stale or due or label):return False
         db.execute('BEGIN IMMEDIATE')
         stale = db.execute("SELECT * FROM messages WHERE automation=1 AND status='sending' AND send_started<?", (time.time()-120,)).fetchall()

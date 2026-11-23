@@ -157,6 +157,14 @@ class WorkspaceTest(unittest.TestCase):
         result,sql=self.statements(lambda:server.run_automation_once(self.app))
         self.assertFalse(result);self.assertEqual(sql['UPDATE']+sql['INSERT']+sql['DELETE']+sql['BEGIN'],0)
 
+    def test_disabled_automation_ignores_expired_timers_without_taking_a_writer_lock(self):
+        c=self.create('grasi');self.app.config['TESTING']=False
+        server.run_automation_once(self.app)
+        with server.database(self.app) as db:
+            db.execute('INSERT INTO qualification_progress(contact_id,next_due,label_due) VALUES(?,?,?)',(c['id'],server.now()-10,server.now()-10))
+        result,sql=self.statements(lambda:server.run_automation_once(self.app))
+        self.assertFalse(result);self.assertEqual(sql['UPDATE']+sql['INSERT']+sql['DELETE']+sql['BEGIN'],0)
+
     def test_new_release_rebuilds_derived_rules_without_changing_customer_records(self):
         c=self.create('grasi')
         with server.database(self.app) as db:db.execute("UPDATE contacts SET lead_profile='Lojista' WHERE id=?",(c['id'],))

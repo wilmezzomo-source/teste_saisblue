@@ -29,7 +29,7 @@ Os resumos são persistidos e somente contatos alterados são recalculados. Cont
 
 No funil, cards idênticos são mantidos; somente os alterados são substituídos ou movidos. As recargas não se sobrepõem. Abas ocultas deixam de fazer consultas periódicas e conciliam o estado ao voltar. O navegador mantém o trabalho de edição durante atualizações de fundo; durante um salvamento, os campos da ficha aguardam sua conclusão.
 
-Foram acrescentados índices para responsável, etapa, ordenação e mensagens. A autenticação de leitura verifica o administrador original sem executar UPDATEs a cada consulta. O trabalhador do WhatsApp usa uma sondagem de leitura quando está ocioso; verificações amplas de manutenção passam a ser feitas a cada minuto. Envios e temporizadores vencidos continuam acordando o trabalhador, sem aguardar o próximo ciclo de manutenção. Os lembretes internos consultam os resumos e vencimentos, em vez de reler todos os históricos a cada minuto.
+Foram acrescentados índices para responsável, etapa, ordenação e mensagens. A autenticação de leitura verifica o administrador original sem executar UPDATEs a cada consulta. O trabalhador do WhatsApp usa uma sondagem de leitura quando está ocioso; verificações amplas de manutenção passam a ser feitas a cada minuto. Com o assistente desativado, temporizadores antigos não provocam bloqueios de escrita a cada segundo. Envios e temporizadores vencidos continuam acordando o trabalhador, sem aguardar o próximo ciclo de manutenção. Os lembretes internos consultam os resumos e vencimentos, em vez de reler todos os históricos a cada minuto.
 
 ## Medições locais com dados fictícios
 
@@ -50,7 +50,7 @@ A contagem de consultas foi medida separadamente dos tempos. A API usa mediana d
 
 ## Validação
 
-215 testes locais passaram, com os dois testes exclusivos de Windows ignorados no Linux. A cobertura nova inclui paginação, totais completos, buscas fora da página, atualização privada por carteira, transferência/exclusão/restauração, consulta sem gravação, datas que vencem sem mensagem nova, histórico com horários iguais, contadores incrementais, atualização futura do modelo e trabalhador ocioso sem bloqueio de escrita. A matriz de distribuição inclui PR, mantendo consumidores de PR com Grasi e todos os lojistas com Chai.
+216 testes locais passaram, com os dois testes exclusivos de Windows ignorados no Linux. A cobertura nova inclui paginação, totais completos, buscas fora da página, atualização privada por carteira, transferência/exclusão/restauração, consulta sem gravação, datas que vencem sem mensagem nova, histórico com horários iguais, contadores incrementais, atualização futura do modelo e trabalhador ocioso sem bloqueio de escrita. A matriz de distribuição inclui PR, mantendo consumidores de PR com Grasi e todos os lojistas com Chai.
 
 O ensaio Chromium cobre os fluxos existentes e as novas páginas, marcadores condicionais, atualização de outro card sem substituir um card inalterado, acesso à ficha fora da página e mensagens/atividades anteriores sem perder rascunho. A sintaxe JavaScript e os testes de privacidade do service worker são verificados antes da publicação.
 
