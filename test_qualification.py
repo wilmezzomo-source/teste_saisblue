@@ -147,14 +147,14 @@ class QualificationTest(unittest.TestCase):
 
     def test_all_profiles_and_state_routing_with_confirmed_city(self):
         self.enable()
-        for i,(profile,city,state) in enumerate((p,city,uf) for p in ('Lojista','Revenda','Consumidor Final') for city,uf in [('Guaporé','RS'),('Florianópolis','SC'),('São Paulo','SP')]):
+        for i,(profile,city,state) in enumerate((p,city,uf) for p in ('Lojista','Revenda','Consumidor Final') for city,uf in [('Guaporé','RS'),('Florianópolis','SC'),('Curitiba','PR'),('São Paulo','SP')]):
             with self.subTest(profile=profile,state=state):
                 number=f'551199999{1000+i}'
                 self.receive('Vim do anúncio',ad=True,number=number); self.drain()
                 self.receive(profile,number=number); self.drain()
                 self.receive(city+'/'+state,number=number); self.drain()
                 c=self.contact(number)
-                expected='Chai' if profile=='Lojista' or (profile=='Revenda' and state in ('RS','SC')) else 'Grasi'
+                expected='Chai' if profile=='Lojista' or (profile=='Revenda' and state in ('RS','SC','PR')) else 'Grasi'
                 self.assertEqual((c['lead_profile'],c['city'],c['state'],c['owner']),(profile,city,state,expected))
                 self.assertEqual(c['owner_id'],expected.lower())
                 self.assertFalse(c['location_pending'])
@@ -459,8 +459,16 @@ class QualificationTest(unittest.TestCase):
         from qualification import STATE_NAMES
         for state in STATE_NAMES:
             self.assertEqual(routing_group('Lojista',state),'chai')
-            self.assertEqual(routing_group('Revenda',state),'chai' if state in ('RS','SC') else 'grasi')
+            self.assertEqual(routing_group('Revenda',state),'chai' if state in ('RS','SC','PR') else 'grasi')
             self.assertEqual(routing_group('Consumidor Final',state),'grasi')
+
+    def test_production_worker_wakes_for_a_new_message_before_next_maintenance(self):
+        self.enable();self.app.config['TESTING']=False
+        self.drain()  # Starts the maintenance interval with an empty outbox.
+        self.receive('Quero revender, sou de Curitiba PR',ad=True);self.drain()
+        row=self.contact()
+        self.assertEqual((row['lead_profile'],row['state'],row['owner_id']),('Revenda','PR','chai'))
+        self.assertEqual(len(self.sent),1)
 
     def test_migration_reassigns_open_ad_shopkeepers_once_without_changing_columns(self):
         self.enable();self.receive('Oi',ad=True);self.drain()

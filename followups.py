@@ -206,11 +206,17 @@ def persist(db,f,actor,current):
 
 
 def reminders(db,current=None):
+    import workspace
     current=clock() if current is None else current
     local=datetime.fromtimestamp(current,LOCAL)
     if local.weekday()>4 or not 9<=local.hour<18:return
-    for row in db.execute("SELECT c.* FROM contacts c JOIN followups f ON f.contact_id=c.id WHERE c.deleted_at=0").fetchall():
-        c=dict(row);f=snapshot(db,c,current)
+    if not db.in_transaction:db.execute('BEGIN IMMEDIATE')
+    workspace.refresh(db)
+    # Permission/terminal changes must clear old reminders as well as create
+    # due ones. The cached view avoids rescanning every message every minute.
+    db.execute("UPDATE notifications SET read_at=? WHERE read_at=0 AND kind IN ('followup','review') AND contact_id NOT IN (SELECT contact_id FROM workspace_cards WHERE due_at>0 AND due_at<=? AND queue IN ('active','review','customer'))",(current,current))
+    for row in db.execute("SELECT w.* FROM workspace_cards w JOIN contacts c ON c.id=w.contact_id WHERE c.deleted_at=0 AND w.due_at>0 AND w.due_at<=? AND w.queue IN ('active','review','customer')",(current,)).fetchall():
+        c=workspace.serialized(row,current);f=c['followup']
         if not f['due_at'] or f['due_at']>current or f['queue'] not in ('active','review','customer'):
             db.execute("UPDATE notifications SET read_at=? WHERE contact_id=? AND kind IN ('followup','review') AND read_at=0",(current,c['id']))
             continue

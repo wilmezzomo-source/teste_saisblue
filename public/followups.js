@@ -5,6 +5,7 @@ const shortDay=value=>value ? value.split('-').reverse().join('/') : '—';
 const followupToday=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const boardStage=c=>c.followup?.crm_stage || c.stage;
 const followupDue=f=>Boolean(f?.due_on && f.due_on<=followupToday() && f.queue==='active');
+const queueCount=key=>workspaceState?.stats?.queues?.[key]||0;
 const bellIcon='<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function callState(f) {
   if(f.queue==='blocked')return {tone:'muted',title:'Não contatar',subtitle:'Abordagem interrompida'};
@@ -41,13 +42,13 @@ function followupView(list) {
   if(!filters[followupFilter])followupFilter='work';
   const totals=contacts.filter(c=>matchesSelection(c,false));
   const rows=list.filter(filters[followupFilter][1]).sort((a,b)=>(a.followup.due_at||Infinity)-(b.followup.due_at||Infinity));
-  return toolbar('Quem chamar agora','Marque a etapa realizada; a próxima data é calculada automaticamente.')+`<div class="call-dashboard">${[['late','Atrasados'],['today','Para hoje'],['unscheduled','Sem próxima chamada']].map(([key,label])=>`<button type="button" data-followup-filter="${key}" class="call-total ${key}"><span>${label}</span><strong>${totals.filter(filters[key][1]).length}</strong></button>`).join('')}</div>${followupTabs(filters,totals)}${rows.length?`<div class="followup-list">${rows.map(c=>`<article class="followup-item ${c.followup.overdue?'overdue':''}" data-contact="${esc(c.id)}" tabindex="0"><div class="followup-person"><strong>${esc(c.name)}</strong><div class="card-tags">${profileTag(c.lead_profile)}${ownerTag(c)}</div><small>${esc(c.city||'Cidade pendente')}${c.state?' / '+esc(c.state):''}</small></div><div class="followup-task">${followupCard(c)}</div></article>`).join('')}</div>`:'<div class="panel"><p>Nenhum contato nesta fila. Consulte Agendados ou Sem chamada definida.</p></div>'}`;
+  return toolbar('Quem chamar agora','Marque a etapa realizada; a próxima data é calculada automaticamente.')+`<div class="call-dashboard">${[['late','Atrasados'],['today','Para hoje'],['unscheduled','Sem próxima chamada']].map(([key,label])=>`<button type="button" data-followup-filter="${key}" class="call-total ${key}"><span>${label}</span><strong>${queueCount(key)}</strong></button>`).join('')}</div>${followupTabs(filters,totals)}${rows.length?`<div class="followup-list">${rows.map(c=>`<article class="followup-item ${c.followup.overdue?'overdue':''}" data-contact="${esc(c.id)}" tabindex="0"><div class="followup-person"><strong>${esc(c.name)}</strong><div class="card-tags">${profileTag(c.lead_profile)}${ownerTag(c)}</div><small>${esc(c.city||'Cidade pendente')}${c.state?' / '+esc(c.state):''}</small></div><div class="followup-task">${followupCard(c)}</div></article>`).join('')}</div>`:'<div class="panel"><p>Nenhum contato nesta fila. Consulte Agendados ou Sem chamada definida.</p></div>'}`;
 }
 function followupTabs(filters,totals) {
   const primary=['work','scheduled','unscheduled','all'];
-  const buttons=primary.map(key=>{const[label,predicate]=filters[key];return `<button type="button" data-followup-filter="${key}" class="${followupFilter===key?'active':''}">${label} <b>${totals.filter(predicate).length}</b></button>`;}).join('');
+  const buttons=primary.map(key=>{const[label,predicate]=filters[key];return `<button type="button" data-followup-filter="${key}" class="${followupFilter===key?'active':''}">${label} <b>${queueCount(key)}</b></button>`;}).join('');
   const extra=Object.entries(filters).filter(([key])=>!primary.includes(key)&&!['late','today'].includes(key));
-  return `<div class="followup-tabs" aria-label="Filtrar retornos">${buttons}<select id="more-followup-queues" aria-label="Outras filas de acompanhamento"><option value="">Outras filas…</option>${extra.map(([key,[label,predicate]])=>`<option value="${key}" ${followupFilter===key?'selected':''}>${label} (${totals.filter(predicate).length})</option>`).join('')}</select></div>`;
+  return `<div class="followup-tabs" aria-label="Filtrar retornos">${buttons}<select id="more-followup-queues" aria-label="Outras filas de acompanhamento"><option value="">Outras filas…</option>${extra.map(([key,[label,predicate]])=>`<option value="${key}" ${followupFilter===key?'selected':''}>${label} (${queueCount(key)})</option>`).join('')}</select></div>`;
 }
 function activateFollowupFilter(key) {
   followupFilter=key;callDateFilter='all';dateFrom='';dateTo='';
@@ -73,16 +74,29 @@ async function recordCallStep(c,key,input) {
 function bindCallControls(root=document) {
   root.querySelectorAll('[data-call-bell]').forEach(b=>b.onclick=e=>{e.stopPropagation();openCallReminder(b.dataset.callBell);});
   root.querySelectorAll('[data-quick-step]').forEach(input=>input.onchange=e=>{
-    e.stopPropagation();const c=contacts.find(c=>c.id===input.dataset.leadId);if(c)recordCallStep(c,input.dataset.quickStep,input);
+    e.stopPropagation();const c=currentContact(input.dataset.leadId);if(c)recordCallStep(c,input.dataset.quickStep,input);
   });
 }
-function openCallReminder(id) {
-  const c=contacts.find(c=>c.id===id);if(!c)return;
+async function openCallReminder(id) {
+  const serial=++callRequest;
+  currentCallId=id;callData=null;
+  $('#call-dialog-content').innerHTML='<button type="button" class="close" id="close-call" aria-label="Fechar próxima chamada">×</button><p>Carregando a próxima chamada…</p>';
+  $('#close-call').onclick=()=>$('#call-dialog').close();
+  $('#call-dialog').onclose=()=>{currentCallId=null;callData=null;++callRequest;};
+  if(!$('#call-dialog').open)$('#call-dialog').showModal();
+  try {
+    const result=await api('/api/contacts/'+encodeURIComponent(id)+'?summary=1');
+    if(serial!==callRequest)return;
+    callData=result.contact;renderCallReminder(result.contact);
+  }catch(e){if(e.status===404)unavailableContact('call',id);else toast(e.message);}
+}
+function renderCallReminder(c) {
+  const id=c.id;
   currentCallId=id;
   const f=c.followup,state=callState(f),locked=['blocked','closed'].includes(f.queue);
   $('#call-dialog-content').innerHTML=`<div class="dialog-header"><div><p class="eyebrow">PRÓXIMA CHAMADA</p><h2>${esc(c.name)}</h2></div><button type="button" id="close-call" class="close" aria-label="Fechar próxima chamada">×</button></div><div class="call-summary ${state.tone}">${bellIcon}<div><strong>${esc(state.title)}</strong><p>${esc(state.subtitle)}</p></div></div>${!locked?`<h3>Qual atendimento você fez hoje?</h3>${stepControls(c)}<p class="followup-help">Marque D3, por exemplo: o CRM registra hoje e agenda D7 pelo intervalo da sequência. Etapas anteriores não são marcadas como realizadas.</p><form id="call-date-form"><label>Ou escolha a próxima chamada<input type="date" name="next_on" value="${esc(f.queue==='active'?f.due_on:'')}" required></label><label>Motivo (opcional)<input name="next_step" maxlength="500" value="${esc(f.next_step)}" placeholder="Ex.: retorno combinado com a cliente"></label><div class="call-date-shortcuts"><button type="button" class="secondary" data-call-days="0">Hoje</button><button type="button" class="secondary" data-call-days="1">Amanhã</button></div><div class="dialog-actions"><button class="primary">Agendar chamada</button></div><p class="field-error" id="call-error" role="alert" hidden></p></form>`:'<p class="followup-help">Revise a situação na ficha antes de agendar uma abordagem.</p>'}<button type="button" class="call-open-detail" id="call-open-detail">Abrir ficha completa</button>`;
   $('#close-call').onclick=()=>$('#call-dialog').close();
-  $('#call-dialog').onclose=()=>currentCallId=null;
+  $('#call-dialog').onclose=()=>{currentCallId=null;callData=null;++callRequest;};
   $('#call-open-detail').onclick=()=>{$('#call-dialog').close();detail(id);};
   bindCallControls($('#call-dialog'));
   const form=$('#call-date-form');
@@ -96,9 +110,14 @@ function openCallReminder(id) {
   }
   if(!$('#call-dialog').open)$('#call-dialog').showModal();
 }
-function refreshFollowupDetail(id) {
+async function refreshFollowupDetail(id) {
   if(!$('#detail-dialog').open||currentDetailId!==id)return;
-  const c=contacts.find(c=>c.id===id),section=$('#followup-title')?.closest('.followup-detail');
+  let c;
+  try {c=(await api('/api/contacts/'+encodeURIComponent(id)+'?summary=1')).contact;}
+  catch(e){if(e.status===404)unavailableContact('detail',id);return;}
+  if(!$('#detail-dialog').open||currentDetailId!==id)return;
+  if(detailData?.id===id)detailData.followup=c.followup;
+  const section=$('#followup-title')?.closest('.followup-detail');
   if(c&&section){section.outerHTML=followupDetail(c);bindFollowupDetail(c);}
 }
 function followupDetail(c) {

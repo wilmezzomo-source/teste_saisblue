@@ -129,6 +129,12 @@ class AccessControlTest(unittest.TestCase):
         ambiguous = self.create('chai')
         with database(self.app) as db:
             db.execute('INSERT INTO users VALUES(?,?,?,?,?,1,?)',('duplicate','duplicate@example.test','Chai',password('fixture-password-123'),'member',time.time()))
+            # Reconstruct the old schema, before owner-dependent read indexes
+            # and invalidation triggers existed.
+            for trigger in db.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'workspace_%'").fetchall():
+                db.execute('DROP TRIGGER '+trigger['name'])
+            db.execute('DROP INDEX contacts_owner_updated')
+            db.execute('DROP INDEX contacts_qualification')
             db.execute('ALTER TABLE contacts DROP COLUMN owner_id')
         create_app(dict(self.app.config))
         self.assertEqual([row['id'] for row in self.rows('grasi')],[c['id']])

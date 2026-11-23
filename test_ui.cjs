@@ -86,7 +86,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.19.1"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.23.1"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
   assert.equal(appManifest.display,'standalone');
@@ -104,6 +104,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(await admin.locator(".brand-asset img").evaluate(img => img.complete && img.naturalWidth > 0), true);
   assert.match(await admin.evaluate(() => requestKey()), /^[a-f0-9]{32}$/);
   await admin.locator("[data-view=team]").click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator("#invite-form [name=email]").fill("vendas@example.test");
   await admin.getByRole("button", { name: "Gerar convite" }).click();
   await admin.locator("#invite-result:not([hidden])").waitFor();
@@ -122,6 +123,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(initialTones,2);
   await member.getByRole('button',{name:'Fechar avisos',exact:true}).click();
   await admin.locator("[data-view=pipeline]").click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('#owner-filter').isVisible(),true);
   await admin.getByRole("button", { name: "Simular lead do anúncio" }).click();
   await admin.locator("[name=name]").fill("Cliente de demonstração");
@@ -214,7 +216,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .waitFor();
   await admin.getByRole("button", { name: "Recarregar card" }).click();
   await admin.waitForFunction(
-    () => document.querySelector("[name=stage]").value === "Em atendimento",
+    () => document.querySelector("[name=stage]")?.value === "Em atendimento",
   );
   await member
     .locator("#note-form [name=body]")
@@ -240,15 +242,18 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .waitFor();
   await member.screenshot({ path: __dirname + "/preview.png", fullPage: true });
   await member.locator("[data-view=team]").click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member
     .getByText("Você acessa somente suas oportunidades.", { exact: true })
     .waitFor();
   assert.equal(await member.locator("#invite-form").count(), 0);
   await member.locator("[data-view=contacts]").click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member
     .getByRole("cell", { name: "Cliente com nome confirmado", exact: true })
     .waitFor();
   await member.locator("[data-view=inbox]").click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator(".inbox-item").first().waitFor();
   // The map groups clients in the same municipality and keeps unlocated leads visible.
   await admin.evaluate(async () => {
@@ -283,6 +288,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   await member.reload();
   await member.locator("[data-view=map]").click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member
     .locator("#map-count")
     .filter({ hasText: "3 lead(s) em 2 cidade(s)" })
@@ -301,6 +307,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     .getByRole("button", { name: "Segundo cliente de Bento · Novo contato" })
     .waitFor();
   await member.locator("#map-state").selectOption("RS");
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member
     .locator("#map-count")
     .filter({ hasText: "2 lead(s) em 1 cidade(s)" })
@@ -318,6 +325,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(await member.locator(".location-warning").count(), 0);
   await member.locator("#close-detail").click();
   await member.locator("#map-state").selectOption("");
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member
     .locator("#map-count")
     .filter({ hasText: "4 lead(s) em 2 cidade(s)" })
@@ -339,14 +347,17 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   );
   await member.setViewportSize({ width: 1440, height: 1000 });
   await member.locator("[data-view=reports]").click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.getByText("Distribuição no funil", { exact: true }).waitFor();
   await member.locator("[data-view=settings]").click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member
     .getByRole("heading", { name: "Primeiro atendimento automático", exact: true })
     .waitFor();
   assert.equal(await member.locator("#automation-form").count(),0);
   if(await admin.locator('#detail-dialog').isVisible()) await admin.locator('#close-detail').click();
   await admin.locator("[data-view=settings]").click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#automation-form [name=enabled]').check();
   const accounts=await admin.evaluate(async()=> (await api('/api/team')).users);
   const seller=accounts.find(u=>u.email==='vendas@example.test');
@@ -381,8 +392,10 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     return data.contacts.find(c=>c.phone==='5554999997444')?.messages.some(m=>m.automation && m.status==='accepted' && m.body.includes('Seu atendimento foi registrado'));
   });
   await admin.locator('[data-view=pipeline]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('.card').filter({hasText:'Lead qualificado UI'}).waitFor({timeout:15000});
   await admin.locator('#profile-filter').selectOption('Revenda');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.card').count(),1);
   assert.equal(await admin.locator('.profile-tag.revenda').count(),1);
   assert.equal(await admin.locator('.card .source').count(),0);
@@ -396,18 +409,24 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.getByRole('status').filter({hasText:'Assistente pausado'}).waitFor();
   await admin.locator('#close-detail').click();
   await admin.locator('[data-view=reports]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.getByRole('heading',{name:'Resultados por perfil'}).waitFor();
   assert.equal(await admin.locator('[data-profile-summary]').count(),1);
   await admin.locator('#profile-filter').selectOption('');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('[data-profile-summary]').count(),5);
   await admin.screenshot({path:__dirname+'/preview-profiles.png',fullPage:true});
   await admin.locator('#profile-filter').selectOption('Lojista');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('[data-view=map]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#map-count').filter({hasText:'0 lead(s)'}).waitFor();
   await admin.locator('#profile-filter').selectOption('');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   const stored=await admin.evaluate(async()=> (await api('/api/contacts')).contacts);
   assert.equal(stored.some(c=>c.phone==='5554999997555'),false);
   await member.locator('[data-view=pipeline]').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.getByRole('button',{name:'Nova oportunidade'}).click();
   const manual=member.locator('#create-form');
   await manual.locator('[name=name]').fill('Oportunidade por indicação');
@@ -472,8 +491,11 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     await load();
   });
   await admin.locator('[data-view=pipeline]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#owner-filter').selectOption(seller.id);
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#profile-filter').selectOption('Revenda');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('#owner-filter').inputValue(),seller.id);
   assert.equal(await admin.locator('.card').count(),1);
   assert.match(await admin.locator('.card').textContent(),/Cliente com nome confirmado/);
@@ -483,38 +505,53 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal((await admin.locator('.stat-number').first().textContent()).trim(),'1');
   await admin.screenshot({path:__dirname+'/preview-owner-filter.png',fullPage:true});
   await admin.locator('[data-view=contacts]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.getByRole('cell',{name:'Cliente com nome confirmado',exact:true}).count(),1);
   assert.equal(await admin.getByRole('cell',{name:'Lead qualificado UI',exact:true}).count(),0);
   await admin.locator('[data-view=inbox]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.inbox-item').count(),1);
   await admin.locator('[data-view=reports]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('[data-profile-summary=Revenda] td').nth(1).textContent(),'1');
   await admin.locator('[data-view=map]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#map-count').filter({hasText:'1 lead(s) em 1 cidade(s)'}).waitFor();
   assert.equal(await admin.locator('.lead-pin').count(),1);
   await admin.locator('#profile-filter').selectOption('Lojista');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#map-count').filter({hasText:'0 lead(s)'}).waitFor();
   assert.equal(await admin.locator('.lead-pin').count(),0);
   await admin.locator('#owner-filter').selectOption('admin-test');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#map-count').filter({hasText:'1 lead(s) em 1 cidade(s)'}).waitFor();
   await admin.locator('[data-view=pipeline]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.card').count(),1);
   assert.match(await admin.locator('.card').textContent(),/Oportunidade por indicação/);
   await admin.locator('#owner-filter').selectOption('__unassigned__');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.card').count(),0);
   await admin.locator('#profile-filter').selectOption('__pending__');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.card').count(),1);
   assert.match(await admin.locator('.card').textContent(),/Sem responsável privado/);
   await admin.locator('#owner-filter').selectOption(seller.id);
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.card').count(),3);
   await admin.locator('#profile-filter').selectOption('Revenda');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#owner-filter').selectOption('');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('#profile-filter').inputValue(),'Revenda');
   assert.equal(await admin.locator('.card').count(),2);
   await admin.locator('#profile-filter').selectOption('');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('[data-view=team]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#owner-filter').waitFor({state:'hidden'});
   await admin.locator('[data-view=pipeline]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.setViewportSize({width:390,height:844});
   assert.equal(await admin.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.equal(await admin.locator('#owner-filter').isVisible(),true);
@@ -535,8 +572,10 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await admin.getByRole('status').filter({hasText:'Card restaurado.'}).waitFor();
   assert.equal(await admin.locator('tbody tr').filter({hasText:'Oportunidade por indicação'}).count(),0);
   await admin.locator('[data-view=pipeline]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.card').filter({hasText:'Oportunidade por indicação'}).count(),1);
   await member.locator('[data-view=pipeline]').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator('.card').filter({hasText:'Cliente com nome confirmado'}).locator('.card-top').click();
   await member.locator('#note-form [name=body]').fill('Rascunho que deve permanecer enquanto chega um aviso');
   const tonesBeforeTyping=await member.evaluate(()=>window.__alertToneStarts);
@@ -627,7 +666,9 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     return c?.owner_id==='admin-test' && c.qualification_state==='completed';
   });
   await admin.locator('[data-view=pipeline]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#profile-filter').selectOption('Marca própria (PL/WL)');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.evaluate(async()=>load());
   assert.equal(await admin.locator('.card').count(),1);
   await admin.locator('.profile-tag.label').waitFor();
@@ -643,6 +684,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(labelPrivate,false);
   await admin.locator('#close-detail').click();
   await admin.locator('[data-view=reports]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('[data-profile-summary="Marca própria (PL/WL)"]').waitFor();
   // The customer's store answer is enough to identify Lojista. The next
   // question asks only location; Gaspar/SC completes it without another menu.
@@ -668,7 +710,9 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(storeReplies.some(m=>m.body.includes('para revender ou') || m.body.includes('Pará')),false);
   assert.match(storeReplies[1].body,/Seu atendimento foi registrado/);
   await admin.locator('[data-view=pipeline]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#profile-filter').selectOption('Lojista');await admin.evaluate(async()=>load());
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   const storeCard=admin.locator('.card').filter({hasText:'5547999997333'});
   await storeCard.waitFor();assert.equal(await storeCard.locator('.profile-tag').textContent(),'Lojista');
   assert.match(await storeCard.textContent(),/Gaspar/);
@@ -707,7 +751,9 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
     await load();return result.id;
   },seller.id);
   await member.locator('[data-view=pipeline]').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator('#profile-filter').selectOption('');
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.evaluate(async()=>load());
   while(await member.locator('[data-dismiss-alert]').count())await member.locator('[data-dismiss-alert]').first().click();
   const agendaCard=member.locator(`.card[data-contact="${agendaId}"]`);
@@ -734,39 +780,57 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   while(await member.locator('[data-dismiss-alert]').count())await member.locator('[data-dismiss-alert]').first().click();
   await agendaCard.screenshot({path:__dirname+'/preview-call-overdue.png'});
   await member.locator('#call-date-filter').selectOption('overdue');
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await member.locator('.card').count(),1);
   await member.locator('[data-view=followups]').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).waitFor();
   await member.locator('#call-date-filter').selectOption('today');
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await member.locator('.followup-item').count(),0);
   await member.locator('#clear-dates').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).locator('[data-call-bell]').click();
   await member.locator('[data-call-days="0"]').click();
   await member.getByRole('button',{name:'Agendar chamada',exact:true}).click();
   await member.locator('.followup-item .call-bell.today').waitFor();
   await member.locator('#call-date-filter').selectOption('today');
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await member.locator('.followup-item').count(),1);
   assert.match(await member.locator('.followup-item .call-bell').textContent(),/CHAMAR HOJE/);
   await member.locator('#call-date-filter').selectOption('range');
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator('#date-from').fill(today);await member.locator('#date-to').fill(today);await member.locator('#date-to').blur();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await member.locator('.followup-item').count(),1);
   await member.locator('#date-from').fill('2099-01-01');await member.locator('#date-to').fill('2099-01-02');await member.locator('#date-to').blur();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await member.locator('.followup-item').count(),0);
   await member.locator('#clear-dates').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await member.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).count(),1);
   agenda=await agendaRow();assert.equal(agenda.messages.length,0);assert.equal(agenda.stage,'Novo contato');assert.equal(agenda.owner_id,seller.id);
   await admin.locator('[data-view=followups]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('[data-followup-filter=scheduled]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('[data-followup-filter=today]').first().click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#profile-filter').selectOption('Lojista');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#owner-filter').selectOption(seller.id);
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await admin.locator('#call-date-filter').selectOption('today');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).count(),1);
   await admin.locator('#owner-filter').selectOption('admin-test');
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.followup-item').filter({hasText:'Lembrete da atendente'}).count(),0);
   await admin.locator('#owner-filter').selectOption('');await admin.locator('#profile-filter').selectOption('');await admin.locator('#clear-dates').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   // Completing a task preserves an unfinished edit in the lead's main form.
   await member.locator('[data-view=pipeline]').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await agendaCard.locator('.card-top').click();
   await member.locator('#detail-form [name=note]').fill('Rascunho que deve permanecer');
   await member.locator('#detail [data-quick-step=D7]').check();
@@ -780,7 +844,9 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(await member.locator('#detail-form [name=note]').inputValue(),'Rascunho que deve permanecer');
   await member.locator('#close-detail').click();
   await member.locator('[data-view=followups]').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator('[data-followup-filter=scheduled]').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.setViewportSize({width:390,height:844});
   assert.equal(await member.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   while(await member.locator('[data-dismiss-alert]').count())await member.locator('[data-dismiss-alert]').first().click();
@@ -788,9 +854,11 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.setViewportSize({width:1440,height:1000});
   await member.screenshot({path:__dirname+'/preview-calls.png',fullPage:true});
   await admin.locator('[data-view=pipeline]').click();
+  await admin.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   assert.equal(await admin.locator('.column[data-stage="Qualificação pendente"]').count(),0);
   await member.setViewportSize({ width: 390, height: 844 });
   await member.locator("[data-view=pipeline]").click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.screenshot({
     path: __dirname + "/preview-mobile.png",
     fullPage: true,
@@ -804,7 +872,9 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await finalCard.locator('[data-quick-step=D15]').check();
   await finalCard.locator('.call-bell.review').filter({hasText:'Avaliar resultado'}).waitFor();
   await member.locator('[data-view=followups]').click();
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator('#more-followup-queues').selectOption('decision');
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator(`.followup-item[data-contact="${finalId}"] .followup-person`).click();
   assert.equal(await member.locator('#detail-form [name=stage]').inputValue(),'Novo contato');
   await member.locator('#detail-form [name=stage]').selectOption('Perdido');
@@ -814,9 +884,52 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.getByRole('status').filter({hasText:'Oportunidade atualizada.'}).waitFor();
   await member.locator('#close-detail').click();
   await member.locator('#more-followup-queues').selectOption('closed');
+  await member.evaluate(async()=>load()); // Server-side filters and pagination are asynchronous.
   await member.locator(`.followup-item[data-contact="${finalId}"]`).waitFor();
   const finalRow=await member.evaluate(async id=>(await api('/api/contacts')).contacts.find(c=>c.id===id),finalId);
   assert.equal(finalRow.stage,'Perdido');assert.equal(finalRow.followup.queue,'closed');assert.equal(finalRow.messages.length,0);
+  // Real paginated UI: all totals/searches, off-page detail and lazy history.
+  const pagedIds=await admin.evaluate(async owner=>{
+    const ids=[];
+    for(let i=0;i<35;i++)ids.push((await api('/api/contacts',{name:'Teste paginação '+i,phone:String(5554999881000+i),city_id:'4309407',lead_profile:'Lojista',owner_id:owner})).id);
+    return ids;
+  },seller.id);
+  await member.locator('[data-view=pipeline]').click();await member.evaluate(async()=>load());
+  await member.locator('#search').fill('Teste paginação');await member.evaluate(async()=>load());
+  const pagedColumn=member.locator('.column[data-stage="Novo contato"]');
+  assert.equal(await pagedColumn.locator('.card').count(),30);
+  assert.equal(await pagedColumn.locator('.column-head b').textContent(),'35');
+  const incremental=await member.evaluate(async()=>{
+    const first=document.querySelector('.card'),id=first.dataset.contact;
+    const target=currentContact(document.querySelectorAll('.card')[1].dataset.contact);
+    await api('/api/update',{id:target.id,revision:target.revision,name:'Teste paginação atualizado'});
+    await load();
+    return first===document.querySelector(`.card[data-contact="${id}"]`);
+  });
+  assert.equal(incremental,true,'Updating another lead must preserve unchanged cards in place.');
+  await member.evaluate(()=>document.querySelectorAll('[data-dismiss-alert]').forEach(b=>b.click()));
+  await pagedColumn.getByRole('button',{name:'Próximos ›',exact:true}).click();await member.evaluate(async()=>load());
+  assert.equal(await pagedColumn.locator('.card').count(),5);
+  const stable=await member.evaluate(async()=>{const card=document.querySelector('.card');await load();return card===document.querySelector('.card');});
+  assert.equal(stable,true,'An unchanged refresh must preserve the existing cards.');
+  const historyId=await pagedColumn.locator('.card').first().getAttribute('data-contact');
+  assert.ok(pagedIds.includes(historyId));
+  await pagedColumn.locator('.card').first().locator('.card-top').click();
+  await member.locator('#detail-form').waitFor();
+  await member.evaluate(async id=>{
+    for(let i=0;i<105;i++)await api('/api/messages',{id,body:'Histórico paginado '+i});
+  },historyId);
+  await member.locator('#refresh-detail').click();await member.locator('#older-messages').waitFor();
+  assert.equal(await member.locator('.message.note').count(),100);
+  await member.locator('#detail-form [name=note]').fill('Rascunho preservado durante histórico');
+  await member.locator('#older-messages').click();
+  await member.waitForFunction(()=>document.querySelectorAll('.message.note').length===105);
+  assert.equal(await member.locator('#detail-form [name=note]').inputValue(),'Rascunho preservado durante histórico');
+  await member.locator('#older-audit').click();
+  await member.waitForFunction(()=>document.querySelectorAll('#detail .activity>div').length===60);
+  assert.equal(await member.locator('#detail-form [name=note]').inputValue(),'Rascunho preservado durante histórico');
+  await member.locator('#close-detail').click();
+  assert.equal(await member.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.equal(
     await member.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,
@@ -831,7 +944,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: sino no card, D14/D30 e D7/D15 automáticos, decisão manual de Perdido, D3/D7 automáticos, atraso vermelho, filtros rápidos, rascunhos preservados, edição e movimento de cards sem cidade/UF, localização parcial e mapa, editar nome, avisos privados com som e sem perder rascunhos, WhatsApp, filtros combinados, exclusão e restauração, acesso restrito, anúncios, qualificação, distribuição, indicadores e mobile.",
+    "UI OK: paginação, resumos condicionais, cards preservados, histórico e auditoria sob demanda, sino no card, D14/D30 e D7/D15 automáticos, decisão manual de Perdido, D3/D7 automáticos, atraso vermelho, filtros rápidos, rascunhos preservados, edição e movimento de cards sem cidade/UF, localização parcial e mapa, editar nome, avisos privados com som e sem perder rascunhos, WhatsApp, filtros combinados, exclusão e restauração, acesso restrito, anúncios, qualificação, distribuição, indicadores e mobile.",
   );
 })()
   .catch((e) => {

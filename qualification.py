@@ -123,7 +123,7 @@ def settings(db):
 
 def routing_group(profile, state):
     if profile==LABEL_PROFILE:return 'willian'
-    return 'chai' if profile=='Lojista' or (profile=='Revenda' and state in ('RS','SC')) else 'grasi'
+    return 'chai' if profile=='Lojista' or (profile=='Revenda' and state in ('RS','SC','PR')) else 'grasi'
 
 
 def cancel_pending(db, cid):
@@ -549,16 +549,20 @@ def resume_legacy_questions(db, audit):
     db.execute('INSERT INTO crm_settings VALUES(?,?)',(key,'done'))
 
 
-def schedule_reminder(db, audit):
-    """One durable timer per unanswered question; no catch-up message bursts."""
-    if not settings(db)['enabled']:
-        return
-    current=time.time()
+def seed_legacy_timers(db,current):
     db.execute('''INSERT OR IGNORE INTO qualification_progress(contact_id,cycle,anchor,next_due,cadence_version)
         SELECT c.id,'legacy:'||c.id,MAX(m.created),MIN(?,MAX(m.created)+?),2
         FROM contacts c JOIN messages m ON m.contact_id=c.id AND m.direction='in' AND m.channel='meta'
         WHERE NOT EXISTS(SELECT 1 FROM qualification_progress p WHERE p.contact_id=c.id) AND c.ad_origin=1 AND c.manual_origin=0 AND c.deleted_at=0 AND c.qualification_state IN ('waiting_profile','waiting_city')
         GROUP BY c.id''',(current+REMINDER_OFFSETS[0],FINAL_REMINDER_AFTER))
+
+
+def schedule_reminder(db, audit, *, legacy=True):
+    """One durable timer per unanswered question; no catch-up message bursts."""
+    if not settings(db)['enabled']:
+        return
+    current=time.time()
+    if legacy:seed_legacy_timers(db,current)
     progress=db.execute('SELECT * FROM qualification_progress WHERE next_due>0 AND next_due<=? ORDER BY next_due,contact_id LIMIT 1',(current,)).fetchone()
     if not progress:
         return
@@ -605,19 +609,29 @@ def schedule_after_send(db, row):
 def process_outbox(app, connect, transmit, audit):
     """Claim one send durably. Never retry an ambiguous network result."""
     with app.app_context(), connect(app) as db:
+        current=time.time();maintenance=app.config['TESTING'] or current>=app.extensions.get('qualification_maintenance_due',0)
+        if not maintenance:
+            queued=db.execute("SELECT 1 FROM messages WHERE automation=1 AND status='queued' LIMIT 1").fetchone()
+            stale=db.execute("SELECT 1 FROM messages WHERE automation=1 AND status='sending' AND send_started<? LIMIT 1",(current-120,)).fetchone()
+            due=db.execute('SELECT 1 FROM qualification_progress WHERE next_due>0 AND next_due<=? LIMIT 1',(current,)).fetchone()
+            label=db.execute('SELECT 1 FROM qualification_progress WHERE label_due>0 AND label_due<=? LIMIT 1',(current,)).fetchone()
+            if not (queued or stale or due or label):return False
         db.execute('BEGIN IMMEDIATE')
         stale = db.execute("SELECT * FROM messages WHERE automation=1 AND status='sending' AND send_started<?", (time.time()-120,)).fetchall()
         for row in stale:
             db.execute("UPDATE messages SET status='uncertain' WHERE id=?", (row['id'],))
             if not row['automation_cycle'] or db.execute('SELECT 1 FROM qualification_progress WHERE contact_id=? AND cycle=?',(row['contact_id'],row['automation_cycle'])).fetchone():
                 handover(db, row['contact_id'], audit, 'Envio interrompido; conferir histórico antes de reenviar')
-        resume_legacy_questions(db,audit)
-        migrate_rules(db,audit)
-        repair_waiting_locations(db,audit)
-        migrate_cadence(db)
+        if maintenance:
+            resume_legacy_questions(db,audit)
+            migrate_rules(db,audit)
+            repair_waiting_locations(db,audit)
+            migrate_cadence(db)
+            if settings(db)['enabled']:seed_legacy_timers(db,current)
+            close_unresponsive(db,audit)
+            app.extensions['qualification_maintenance_due']=current+60
         service_label_timers(db,audit)
-        close_unresponsive(db,audit)
-        schedule_reminder(db,audit)
+        schedule_reminder(db,audit,legacy=False)
         row = db.execute("SELECT * FROM messages WHERE automation=1 AND status='queued' ORDER BY created,id LIMIT 1").fetchone()
         if not row:
             return False

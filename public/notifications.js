@@ -98,8 +98,7 @@ async function openLeadNotification(id) {
     await load();
     crmAlerts.popups=crmAlerts.popups.filter(item=>item.id!==id);
     $("#notifications-dialog").close();
-    if(contacts.some(c=>c.id===n.contact_id)) detail(n.contact_id);
-    else toast("Esta oportunidade não está mais disponível para sua conta.");
+    await detail(n.contact_id);
     await refreshNotifications();
   } catch(e) {toast(e.message);}
 }
@@ -136,5 +135,5 @@ async function initNotifications() {
       await openLeadNotification(notice);
     } catch(e) {toast(e.message);}
   }
-  setInterval(()=>refreshNotifications(),5000);
+  setInterval(()=>{if(!document.hidden)refreshNotifications();},5000);
 }

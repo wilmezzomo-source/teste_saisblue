@@ -28,11 +28,12 @@ from web_push import public_key as push_public_key, validate_subscription
 from qualification import PROFILES, ACTIVE_STEPS, is_ad_referral, settings as qualification_settings, process_answer, process_outbox, handover
 from phone_numbers import manual_phone, phone_identity, legacy_brazil_variants
 import followups
+import workspace
 
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.19.1'
+RELEASE = '2026.11.23.1'
 
 
 class Problem(Exception):
@@ -94,6 +95,7 @@ def database(app):
     db = sqlite3.connect(app.config['DATABASE'], timeout=20)
     db.row_factory = sqlite3.Row
     db.create_function('phone_identity',1,phone_identity,deterministic=True)
+    db.create_function('casefold',1,lambda value:(value or '').lower(),deterministic=True)
     db.execute('PRAGMA foreign_keys=ON')
     try:
         yield db
@@ -174,6 +176,7 @@ def init_db(app):
                 referred = False
             if referred:
                 db.execute('UPDATE contacts SET ad_origin=1 WHERE id=?', (row['id'],))
+        workspace.init(db,RELEASE)
 
 
 def audit(db, action, cid=None, details=None, actor=None):
@@ -386,11 +389,12 @@ def create_app(config=None):
             return
         token = request.cookies.get('crm_session', '')
         with database(app) as db:
-            restrict_administration(db)
-            row = db.execute('SELECT u.*,s.csrf FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>? AND u.active=1', (digest(token), now())).fetchone()
+            row = db.execute("SELECT u.*,s.csrf,(SELECT value FROM crm_settings WHERE key='workspace_admin') AS primary_admin FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>? AND u.active=1", (digest(token), now())).fetchone()
             if not row:
                 raise Problem('Entre na sua conta para continuar.', 401)
             g.user, g.csrf = dict(row), row['csrf']
+            if row['primary_admin'] and row['id']!=row['primary_admin']:
+                g.user['role']='member'
         if request.method == 'POST' and not hmac.compare_digest(request.headers.get('X-CSRF-Token', ''), g.csrf):
             raise Problem('Sessão inválida. Atualize a página.', 403)
 
@@ -430,7 +434,7 @@ def create_app(config=None):
 
     @app.get('/<name>')
     def asset(name):
-        if name not in ('style.css', 'app.js', 'auth.js', 'notifications.js', 'pwa.js', 'followups.js'):
+        if name not in ('style.css', 'app.js', 'auth.js', 'notifications.js', 'pwa.js', 'followups.js', 'workspace.js'):
             raise Problem('Página não encontrada.', 404)
         return send_from_directory(ROOT / 'public', name)
 
@@ -585,6 +589,60 @@ def create_app(config=None):
             db.execute('INSERT INTO invites VALUES(?,?,?,?,0)', (digest(token), user['email'], user['role'], now() + 3600))
             audit(db, 'Redefinição de senha solicitada', details={'user_id': user['id']})
         return jsonify(path='/login#invite=' + token, expires_in=3600)
+
+    @app.get('/api/workspace')
+    def lightweight_workspace():
+        with database(app) as db:
+            # Unchanged polls perform reads only. Changed pages refresh the
+            # materialized summaries atomically before choosing a version.
+            db.execute('BEGIN')
+            token=workspace.tag(db,g.user,request.args,RELEASE)
+            if request.if_none_match.contains(token):
+                response=app.response_class(status=304);response.set_etag(token);return response
+            if db.execute('SELECT 1 FROM workspace_dirty LIMIT 1').fetchone():
+                db.rollback();db.execute('BEGIN IMMEDIATE');workspace.refresh(db)
+            try:result=workspace.page(db,g.user,request.args)
+            except ValueError as exc:raise Problem(str(exc)) from None
+            token=workspace.tag(db,g.user,request.args,RELEASE)
+            response=jsonify(result);response.set_etag(token);return response
+
+    @app.get('/api/contacts/<cid>')
+    def contact_details(cid):
+        with database(app) as db:
+            db.execute('BEGIN')
+            row=dict(accessible_contact(db,cid));city=CITY_BY_ID.get(row['city_id'])
+            if request.args.get('access')=='1':return jsonify(contact={'id':row['id'],'revision':row['revision']})
+            if request.args.get('summary')=='1':
+                summary={key:row[key] for key in workspace.FIELDS}
+                summary['followup']=followups.snapshot(db,row)
+                return jsonify(contact=summary)
+            row.update(location_pending=city is None,latitude=city['lat'] if city else None,longitude=city['lng'] if city else None)
+            progress=db.execute('SELECT next_due,reminders_sent,closed_reason,label_due FROM qualification_progress WHERE contact_id=?',(cid,)).fetchone()
+            row['qualification_reminders']=dict(progress) if progress else None
+            pause=db.execute("SELECT details FROM audit WHERE contact_id=? AND action='Qualificação encaminhada à equipe' ORDER BY id DESC LIMIT 1",(cid,)).fetchone() if row['qualification_state']=='human' else None
+            try:row['qualification_pause_reason']=json.loads(pause['details']).get('motivo','') if pause else ''
+            except (ValueError,TypeError):row['qualification_pause_reason']='Atendimento automático pausado; confira o histórico.'
+            if row['qualification_state'] in ACTIVE_STEPS and not qualification_settings(db)['enabled']:
+                row['qualification_pause_reason']='Atendimento automático desativado em Integrações.'
+            bot=db.execute('SELECT status,error_code,error_detail FROM messages WHERE contact_id=? AND automation=1 ORDER BY created DESC,rowid DESC LIMIT 1',(cid,)).fetchone()
+            row['qualification_last_send']=dict(bot) if bot else None
+            params=[cid];condition='contact_id=?'
+            if request.args.get('before'):
+                try:
+                    before=json.loads(request.args['before']);stamp=float(before['created']);rid=int(before['rowid'])
+                    if not math.isfinite(stamp) or not 1<=rid<=2**63-1:raise ValueError()
+                except (ValueError,TypeError,KeyError):raise Problem('Histórico inválido.') from None
+                condition+=' AND (created<? OR (created=? AND rowid<?))';params.extend((stamp,stamp,rid))
+            messages=[dict(m) for m in db.execute('SELECT *,rowid AS history_rowid FROM messages WHERE '+condition+' ORDER BY created DESC,rowid DESC LIMIT 101',params)]
+            cursor=messages[99] if len(messages)>100 else None
+            row['history_cursor']={'created':cursor['created'],'rowid':cursor['history_rowid']} if cursor else None
+            row['messages']=list(reversed(messages[:100]))
+            row['latest_incoming_at']=db.execute("SELECT COALESCE(MAX(created),0) FROM messages WHERE contact_id=? AND direction='in' AND channel='meta'",(cid,)).fetchone()[0]
+            row['followup']=followups.snapshot(db,row)
+            audit_before=workspace.integer(request.args.get('audit_before'),maximum=2**63-1)
+            events=[dict(a) for a in db.execute('SELECT id,actor,action,details,created FROM audit WHERE contact_id=?'+(' AND id<?' if audit_before else '')+' ORDER BY id DESC LIMIT 31',(cid,audit_before) if audit_before else (cid,))]
+            row['audit_cursor']=events[29]['id'] if len(events)>30 else None;row['audit']=events[:30]
+        return jsonify(contact=row)
 
     @app.get('/api/contacts')
     def contacts():

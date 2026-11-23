@@ -1,6 +1,10 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.19.1
+## Aplicativo único para atualizar — 2026.11.23.1
+
+**Desempenho:** o funil carrega 30 cards por coluna e o histórico é buscado ao abrir a ficha, em páginas de 100 mensagens. Atualizações sem mudanças não baixam cards nem refazem a tela; no funil, cards inalterados permanecem no lugar. Filtros e totais consideram toda a base autorizada. No teste com 5.000 contatos, a lista passou de 71 MB para cerca de 229 KB. Veja [DESEMPENHO-CRM.md](DESEMPENHO-CRM.md).
+
+**Distribuição:** todo Lojista e Revenda de RS, SC e PR vão para Chai. Demais Revendas e todo Consumidor Final vão para Grasi; marca própria continua com Willian. Cadastros e atribuições manuais são preservados.
 
 **Sino e próxima chamada no card:** marque a caixinha do atendimento realizado, como D3, e a próxima data é calculada automaticamente. Chamadas vencidas recebem destaque vermelho e continuam na fila. O filtro de data foi simplificado para Hoje, Atrasados, Amanhã, 7 dias ou período. Ao marcar D14, D10 ou D7, o lembrete final fica em D30 para Lojista, D45 para Revenda ou D15 para Consumidor Final. Depois do último retorno, Ganho/Perdido é definido manualmente. Leads de anúncio sem resposta ao assistente por 24h passam diretamente a Perdido com Sem Resposta; falhas de envio e atendimentos humanos são preservados. Acesso externo e WhatsApp preservados. Leia [RETORNOS-E-LEMBRETES.md](RETORNOS-E-LEMBRETES.md).
 
@@ -14,7 +18,7 @@
 
 **Atendimento:** “comprar para mim”, “pra mim” e variações de uso próprio identificam Consumidor Final. A finalidade explícita da compra prevalece sobre a profissão declarada; finalidades conflitantes exigem esclarecimento. A confirmação final apenas informa que o atendimento foi registrado e uma consultora entrará em contato, sem nome. A responsável continua registrada internamente no CRM.
 
-Versão 2026.11.19.1 validada em **203 testes no Windows** e no Chromium, incluindo instalação pelo aplicativo a partir do canal público. Evidências em [VALIDACAO-RETORNOS-FINAIS.md](VALIDACAO-RETORNOS-FINAIS.md). Depois de atualizar o servidor, recarregue a página do CRM nos computadores da equipe.
+A versão anterior foi validada em **203 testes no Windows**. A validação e as medições desta atualização estão descritas em [DESEMPENHO-CRM.md](DESEMPENHO-CRM.md). Depois de atualizar o servidor, recarregue a página do CRM nos computadores da equipe.
 
 No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e confere o pacote, para somente os processos do CRM, faz backup, atualiza e reinicia em segundo plano. Cria um atalho com opções de abrir, iniciar/reconectar e parar. Veja [ATUALIZAR-COM-UM-APLICATIVO.md](ATUALIZAR-COM-UM-APLICATIVO.md). O aplicativo usa o Python e o banco já instalados, sem extrair ZIP manualmente. Inclui os ajustes de qualificação e tags da versão anterior.
 
@@ -30,7 +34,7 @@ Versão própria para funil comercial e atendimento. O administrador original v�
 
 ## Qualificação e retomadas — 2026.11.10.1
 
-Sem opção ATENDENTE ou limite de duas respostas. Perfil, cidade e UF são acumulados entre mensagens, mantendo o card na coluna atual ao qualificar, atribuir ou assumir. Cidade Ocidental/GO e nomes que começam com Cidade são preservados. A UF é preenchida quando o nome do município tem uma única correspondência no Brasil; homônimos exigem confirmação de estado. Dados válidos do catálogo alimentam a localização e o perfil. Todo Lojista vai para Chai; Revenda de RS/SC também. Demais Revendas e todo Consumidor Final vão para Grasi.
+Sem opção ATENDENTE ou limite de duas respostas. Perfil, cidade e UF são acumulados entre mensagens, mantendo o card na coluna atual ao qualificar, atribuir ou assumir. Cidade Ocidental/GO e nomes que começam com Cidade são preservados. A UF é preenchida quando o nome do município tem uma única correspondência no Brasil; homônimos exigem confirmação de estado. Dados válidos do catálogo alimentam a localização e o perfil. Todo Lojista vai para Chai; Revenda de RS/SC/PR também. Demais Revendas e todo Consumidor Final vão para Grasi.
 
 Até quatro retomadas: 20 minutos, 3 horas, 8 horas e 23h50 após a última mensagem do cliente, com textos diferentes e apenas o dado pendente. A apresentação não é repetida em mensagens de continuação. O prazo usa o horário assinado da mensagem recebida; sair/reiniciar o servidor não zera os registros. Sem template ou envio após 24h. Leia [QUALIFICACAO-E-RETOMADAS.md](QUALIFICACAO-E-RETOMADAS.md) e [VALIDACAO-ATENDIMENTO.md](VALIDACAO-ATENDIMENTO.md).
 
@@ -54,7 +58,7 @@ Consulte [ATUALIZACAO-ANUNCIOS-E-QUALIFICACAO.md](ATUALIZACAO-ANUNCIOS-E-QUALIFI
 
 - Novos contatos somente com origem de anúncio identificada pela Meta; continuações dos leads admitidos permanecem no histórico. Cadastros anteriores são preservados. Nova oportunidade permite inclusão manual explícita, com origem Manual e sem iniciar o robô. Apenas as próximas mensagens desse telefone são admitidas, além dos leads de anúncios.
 - Roteiro fixo opcional no WhatsApp para Lojista/Revenda/Consumidor Final e cidade/UF, com respostas persistidas, fila durável e pausa para atendimento humano. Ativar em Integrações após escolher as contas ativas da equipe.
-- Todo Lojista e Revenda de RS/SC → Chai. Revenda dos demais estados e todo Consumidor Final → Grasi.
+- Todo Lojista e Revenda de RS/SC/PR → Chai. Revenda dos demais estados e todo Consumidor Final → Grasi.
 - Tag de perfil, filtro compartilhado entre as visões e resultados separados por perfil. Assumir/encaminhar atendimento pausa o roteiro.
 - Etapa Proposta enviada removida; cards antigos nela migram para Negociação com auditoria.
 

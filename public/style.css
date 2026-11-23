@@ -1376,3 +1376,9 @@ button:disabled {
 .board { grid-template-columns:repeat(var(--board-columns,6),minmax(205px,1fr)); }
 #more-followup-queues { max-width:230px; padding:8px 10px; border-radius:20px; font-size:11px; background:white; }
 .call-bell.late strong { display:inline-flex; padding:3px 6px; border-radius:4px; background:#b42318; color:white; font-size:9px; }
+
+.workspace-pager { display:flex; align-items:center; justify-content:space-between; gap:6px; margin:12px 0; padding:8px 0; }
+.workspace-pager small { font-size:10px; color:var(--muted); white-space:nowrap; }
+.workspace-pager button { font-size:11px; padding:8px 9px; min-height:38px; }
+.workspace-pager button:disabled { opacity:.45; cursor:default; }
+.column>.workspace-pager { margin:12px 0 0; }
