@@ -18,6 +18,7 @@ const colors = [
 ];
 let cities = [],
   profileFilter = "",
+  stageFilter = "",
   ownerFilter = "",
   callDateFilter = "all",
   dateFrom = "",
@@ -25,7 +26,6 @@ let cities = [],
   states = [],
   leadMap = null,
   pinLayer = null,
-  mapStage = "",
   mapState = "",
   boundaryData = null,
   mapSignature = "",
@@ -161,6 +161,17 @@ function syncOwnerFilter() {
   select.innerHTML='<option value="">Todos os responsáveis</option><option value="__unassigned__">Sem responsável</option>'+[...people].sort((a,b)=>a[1].localeCompare(b[1],"pt-BR")).map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join("");
   select.value=ownerFilter;
 }
+function syncStageFilter() {
+  const select=$('#stage-filter');
+  select.hidden=!['contacts','map'].includes(view);
+  const signature=JSON.stringify(stages);
+  if(select.dataset.stages!==signature){
+    select.innerHTML='<option value="">Todas as etapas</option>'+stages.map(stage=>`<option value="${esc(stage)}">${esc(stage)}</option>`).join('');
+    select.dataset.stages=signature;
+  }
+  if(stageFilter&&!stages.includes(stageFilter))stageFilter='';
+  select.value=stageFilter;
+}
 function matchesSelection(c, includeDate=true) {
   const ownerMatches=currentUser.role!=="admin" || !ownerFilter || (ownerFilter==="__unassigned__" ? !c.owner_id : c.owner_id===ownerFilter);
   return ownerMatches && matchesProfile(c) && (!includeDate || matchesDate(c));
@@ -243,6 +254,7 @@ function banner() {
 }
 function render(incremental=false) {
   syncOwnerFilter();
+  syncStageFilter();
   $('#profile-filter').hidden=['team','settings','trash'].includes(view);
   $('#date-filters').hidden=['team','settings','trash'].includes(view);
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
@@ -541,6 +553,7 @@ function renderDetail(c) {
   if (!$("#detail-dialog").open) $("#detail-dialog").showModal();
 }
 $("#profile-filter").onchange = (e) => {profileFilter=e.target.value; render();};
+$("#stage-filter").onchange = (e) => {stageFilter=e.target.value; render();};
 $("#owner-filter").onchange = (e) => {ownerFilter=e.target.value; render();};
 function applyDates() {
   const from=$('#date-from').value,to=$('#date-to').value;
@@ -853,7 +866,7 @@ function bindLocationFields(container) {
   };
 }
 function mapView() {
-  return `<div class="toolbar map-toolbar"><div class="toolbar-title">Onde estão seus clientes<span>Pins na sede do município; não representam o endereço exato.</span></div><div class="map-filters"><select id="map-state" aria-label="Filtrar mapa por estado"><option value="">Todos os estados</option>${states.map((s) => `<option ${s === mapState ? "selected" : ""}>${s}</option>`).join("")}</select><select id="map-stage" aria-label="Filtrar mapa por etapa"><option value="">Todas as etapas</option>${stages.map((s) => `<option ${s === mapStage ? "selected" : ""}>${esc(s)}</option>`).join("")}</select><button class="secondary" id="fit-map">Enquadrar pins</button></div></div><div class="map-layout"><section class="map-canvas-wrap"><div id="lead-map" aria-label="Mapa geográfico dos leads"></div><div id="map-status" role="status">Mapa por município · carregando cartografia</div></section><section class="panel map-summary"><p class="eyebrow">COBERTURA COMERCIAL</p><h3 id="map-count">Localizando clientes</h3><p id="map-pending-count"></p><div id="map-city-list"></div><div id="map-pending-list"></div></section></div><p class="map-footnote">A cidade é selecionada de um catálogo de municípios brasileiros. Contatos e nomes não são enviados a serviços de geocodificação. O mapa inicia com cartografia local. Para ver ruas, use o seletor de camadas no canto superior direito; essa opção depende do OpenStreetMap e de internet.</p>`;
+  return `<div class="toolbar map-toolbar"><div class="toolbar-title">Onde estão seus clientes<span>Pins na sede do município; não representam o endereço exato.</span></div><div class="map-filters"><select id="map-state" aria-label="Filtrar mapa por estado"><option value="">Todos os estados</option>${states.map((s) => `<option ${s === mapState ? "selected" : ""}>${s}</option>`).join("")}</select><button class="secondary" id="fit-map">Enquadrar pins</button></div></div><div class="map-layout"><section class="map-canvas-wrap"><div id="lead-map" aria-label="Mapa geográfico dos leads"></div><div id="map-status" role="status">Mapa por município · carregando cartografia</div></section><section class="panel map-summary"><p class="eyebrow">COBERTURA COMERCIAL</p><h3 id="map-count">Localizando clientes</h3><p id="map-pending-count"></p><div id="map-city-list"></div><div id="map-pending-list"></div></section></div><p class="map-footnote">A cidade é selecionada de um catálogo de municípios brasileiros. Contatos e nomes não são enviados a serviços de geocodificação. O mapa inicia com cartografia local. Para ver ruas, use o seletor de camadas no canto superior direito; essa opção depende do OpenStreetMap e de internet.</p>`;
 }
 async function initMap() {
   if (!window.L) {
@@ -934,25 +947,13 @@ async function initMap() {
     mapState = e.target.value;
     refreshPins(true);
   };
-  $("#map-stage").onchange = (e) => {
-    mapStage = e.target.value;
-    refreshPins(true);
-  };
   $("#fit-map").onclick = () => refreshPins(true);
   refreshPins(true);
   requestAnimationFrame(() => instance.invalidateSize());
 }
-function mapContacts() {
-  return contacts.filter(
-    (c) =>
-      matchesSelection(c) &&
-      (!mapState || c.state === mapState) &&
-      (!mapStage || boardStage(c) === mapStage),
-  );
-}
 function refreshPins(fit = false) {
   if(!workspaceReady()||!leadMap||!pinLayer)return;
-  const signature=JSON.stringify([workspaceETag,mapState,mapStage,ownerFilter,profileFilter]);
+  const signature=JSON.stringify([workspaceETag,mapState,stageFilter,ownerFilter,profileFilter]);
   if(!fit&&signature===mapSignature)return;
   mapSignature=signature;pinLayer.clearLayers();
   const groups=new Map((workspaceState.map_groups||[]).map(c=>[c.city_id,c])),bounds=[];
@@ -967,7 +968,7 @@ function refreshPins(fit = false) {
     const show=async(page=0)=>{
       members.textContent='Carregando contatos…';
       try {
-        const params=workspaceParams();params.set('view','contacts');params.set('city',c.city_id);params.set('filter_stage',mapStage);params.set('page',page);
+        const params=workspaceParams();params.set('view','contacts');params.set('city',c.city_id);params.set('page',page);
         const data=await api('/api/workspace?'+params);members.innerHTML='';
         for(const contact of data.contacts){const button=document.createElement('button');button.className='popup-lead';button.textContent=contact.name+' · '+boardStage(contact);button.onclick=()=>detail(contact.id);members.append(button);}
         const pagination=data.pages.list;

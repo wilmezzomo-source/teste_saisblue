@@ -137,7 +137,8 @@ def conditions(user,args,*,date=True,search=False):
     owner=args.get('owner','')
     if owner:sql.append('c.owner_id=?');values.append('' if owner=='__unassigned__' else owner)
     if args.get('city'):sql.append('c.city_id=?');values.append(args['city'])
-    if args.get('filter_stage') in STAGES:sql.append('c.stage=?');values.append(args['filter_stage'])
+    selected_stage=args.get('filter_stage') or (args.get('stage') if args.get('view')=='map' else '')
+    if selected_stage in STAGES:sql.append('c.stage=?');values.append(selected_stage)
     today=followups.local_day(followups.clock());kind=args.get('date','all')
     if date:
         if kind=='none':sql.append("w.due_on='' AND w.queue NOT IN ('blocked','closed','decision')")
@@ -205,7 +206,7 @@ def page(db,user,args):
             result['contacts'].extend(serialized(r) for r in rows)
     elif view=='map':
         map_sql=where;map_values=list(values)
-        for key,col in (('state','state'),('stage','stage')):
+        for key,col in (('state','state'),):
             if args.get(key):map_sql+=' AND c.'+col+'=?';map_values.append(args[key])
         groups=[dict(r) for r in db.execute('SELECT c.city_id,c.city,c.state,COUNT(*) AS total'+FROM+map_sql+" AND json_extract(w.summary,'$.location_pending')=0 GROUP BY c.city_id,c.city,c.state ORDER BY total DESC,c.city",map_values)]
         result['map_groups']=[]

@@ -1,6 +1,8 @@
 # Sais Blue CRM — equipe e WhatsApp
 
-## Aplicativo único para atualizar — 2026.11.23.1
+## Aplicativo único para atualizar — 2026.11.23.2
+
+**Filtrar por etapa:** em **Mapa** e **Contatos**, o seletor Todas as etapas fica no topo, junto de perfil, responsável e próxima chamada. O filtro combina com os demais, considera todas as páginas e atualiza os totais; no mapa, também filtra contatos sem localização. Veja [FILTRO-POR-ETAPA.md](FILTRO-POR-ETAPA.md).
 
 **Desempenho:** o funil carrega 30 cards por coluna e o histórico é buscado ao abrir a ficha, em páginas de 100 mensagens. Atualizações sem mudanças não baixam cards nem refazem a tela; no funil, cards inalterados permanecem no lugar. Filtros e totais consideram toda a base autorizada. No teste com 5.000 contatos, a lista passou de 71 MB para cerca de 229 KB. Veja [DESEMPENHO-CRM.md](DESEMPENHO-CRM.md).
 

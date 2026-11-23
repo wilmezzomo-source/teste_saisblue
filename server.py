@@ -33,7 +33,7 @@ import workspace
 ROOT = Path(__file__).parent
 STAGES = ['Novo contato', 'Em atendimento', 'Negociação', 'Ganho', 'Perdido']
 SESSION_TTL = 12 * 3600
-RELEASE = '2026.11.23.1'
+RELEASE = '2026.11.23.2'
 
 
 class Problem(Exception):

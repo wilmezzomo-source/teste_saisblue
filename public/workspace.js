@@ -2,7 +2,7 @@
 let workspaceState=null,workspaceKey='',workspaceETag='',workspaceFlight=null,workspaceAgain=false;
 let workspacePages={},workspacePage=0,workspaceBase='',detailData=null,callData=null,detailRequest=0,callRequest=0;
 function workspaceParams() {
-  const params=new URLSearchParams({view,profile:profileFilter,owner:ownerFilter,date:callDateFilter,from:dateFrom,to:dateTo,q:query,queue:followupFilter,state:mapState,stage:mapStage});
+  const params=new URLSearchParams({view,profile:profileFilter,owner:ownerFilter,date:callDateFilter,from:dateFrom,to:dateTo,q:query,queue:followupFilter,state:mapState,filter_stage:['contacts','map'].includes(view)?stageFilter:''});
   const base=params.toString();
   if(base!==workspaceBase){workspacePages={};workspacePage=0;workspaceBase=base;}
   params.set('pages',JSON.stringify(workspacePages));params.set('page',workspacePage);

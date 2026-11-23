@@ -89,6 +89,9 @@
               <option>Marca própria (PL/WL)</option>
               <option value="__pending__">Perfil pendente</option>
             </select>
+            <select id="stage-filter" aria-label="Filtrar por etapa" hidden>
+              <option value="">Todas as etapas</option>
+            </select>
             <div id="date-filters" class="date-filters" role="group" aria-label="Filtrar por data">
               <label>Próxima chamada<select id="call-date-filter" aria-label="Filtrar próxima chamada"><option value="all">Todas as datas</option><option value="today">Chamar hoje</option><option value="overdue">Atrasados</option><option value="tomorrow">Amanhã</option><option value="week">Próximos 7 dias</option><option value="none">Sem agendamento</option><option value="range">Escolher período…</option></select></label>
               <div id="custom-call-period" class="date-filters" hidden>

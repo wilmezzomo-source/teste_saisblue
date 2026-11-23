@@ -86,7 +86,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   await member.goto(base + "/");
   await member.waitForURL(url=>url.pathname==="/login");
   await login(admin, "admin@example.test", secret);
-  await admin.locator("#release-version").filter({hasText:"2026.11.23.1"}).waitFor();
+  await admin.locator("#release-version").filter({hasText:"2026.11.23.2"}).waitFor();
   assert.equal(await admin.locator("#new-contact").isVisible(), true);
   const appManifest=await admin.evaluate(async()=>(await fetch('/manifest.webmanifest')).json());
   assert.equal(appManifest.display,'standalone');
@@ -930,6 +930,33 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   assert.equal(await member.locator('#detail-form [name=note]').inputValue(),'Rascunho preservado durante histórico');
   await member.locator('#close-detail').click();
   assert.equal(await member.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  // The stage selector is shared by Contacts and Map, with scoped totals.
+  await admin.locator('[data-view=contacts]').click();await admin.evaluate(async()=>load());
+  await admin.locator('#profile-filter').selectOption('Consumidor Final');await admin.evaluate(async()=>load());
+  await admin.locator('#owner-filter').selectOption(seller.id);await admin.evaluate(async()=>load());
+  await admin.locator('#stage-filter').selectOption('Perdido');await admin.evaluate(async()=>load());
+  assert.equal(await admin.locator('.table-wrap tbody tr').count(),1);
+  assert.equal(await admin.locator(`tr[data-contact="${finalId}"]`).count(),1);
+  assert.equal(await admin.evaluate(()=>workspaceState.stats.total),1);
+  await admin.locator('[data-view=map]').click();await admin.evaluate(async()=>load());
+  assert.equal(await admin.locator('#stage-filter').inputValue(),'Perdido');
+  assert.match(await admin.locator('#map-count').textContent(),/^1 lead\(s\) em 1 cidade/);
+  assert.equal(await admin.locator('#map-stage').count(),0);
+  await admin.locator('#profile-filter').selectOption('Lojista');await admin.evaluate(async()=>load());
+  assert.match(await admin.locator('#map-count').textContent(),/^0 lead/);
+  await admin.locator('#stage-filter').selectOption('Novo contato');await admin.evaluate(async()=>load());
+  assert.ok(await admin.evaluate(()=>workspaceState.map_total>=35));
+  await admin.locator('#profile-filter').selectOption('');await admin.evaluate(async()=>load());
+  await admin.locator('[data-view=pipeline]').click();await admin.evaluate(async()=>load());
+  assert.equal(await admin.locator('#stage-filter').isHidden(),true);
+  assert.equal(await admin.evaluate(()=>workspaceParams().get('filter_stage')),'');
+  assert.equal(await admin.evaluate(()=>stageFilter),'Novo contato');
+  assert.equal(await admin.locator(`.column[data-stage="Perdido"] .card[data-contact="${finalId}"]`).count(),1);
+  await member.locator('[data-view=contacts]').click();await member.evaluate(async()=>load());
+  await member.locator('#stage-filter').selectOption('Novo contato');await member.evaluate(async()=>load());
+  assert.equal(await member.locator('#owner-filter').isHidden(),true);
+  assert.equal(await member.evaluate(()=>workspaceState.contacts.every(c=>c.stage==='Novo contato'&&c.owner_id===currentUser.id)),true);
+  assert.equal(await member.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.equal(
     await member.evaluate(
       () => document.documentElement.scrollWidth > innerWidth,
@@ -944,7 +971,7 @@ serve(app,host='127.0.0.1',port=3001,threads=4)
   });
   assert.deepEqual(errors, []);
   console.log(
-    "UI OK: paginação, resumos condicionais, cards preservados, histórico e auditoria sob demanda, sino no card, D14/D30 e D7/D15 automáticos, decisão manual de Perdido, D3/D7 automáticos, atraso vermelho, filtros rápidos, rascunhos preservados, edição e movimento de cards sem cidade/UF, localização parcial e mapa, editar nome, avisos privados com som e sem perder rascunhos, WhatsApp, filtros combinados, exclusão e restauração, acesso restrito, anúncios, qualificação, distribuição, indicadores e mobile.",
+    "UI OK: filtro de etapa em Mapa e Contatos, paginação, resumos condicionais, cards preservados, histórico e auditoria sob demanda, sino no card, D14/D30 e D7/D15 automáticos, decisão manual de Perdido, D3/D7 automáticos, atraso vermelho, filtros rápidos, rascunhos preservados, edição e movimento de cards sem cidade/UF, localização parcial e mapa, editar nome, avisos privados com som e sem perder rascunhos, WhatsApp, filtros combinados, exclusão e restauração, acesso restrito, anúncios, qualificação, distribuição, indicadores e mobile.",
   );
 })()
   .catch((e) => {

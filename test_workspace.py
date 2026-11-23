@@ -132,6 +132,29 @@ class WorkspaceTest(unittest.TestCase):
         scoped=self.get('chai',view='map').json;self.assertEqual(scoped['map_total'],0)
         self.assertEqual(self.get('grasi',view='contacts',city='4309407').json['pages']['list']['total'],74)
 
+    def test_stage_filter_combines_with_profile_owner_and_date_before_pagination(self):
+        self.bulk(65);other=self.create('chai')
+        with server.database(self.app) as db:
+            db.execute("UPDATE contacts SET stage='Negociação' WHERE id IN ('bulk-63','bulk-64','bulk-65')")
+            db.execute("UPDATE contacts SET city_id='4309407',city='Guaporé',state='RS' WHERE id IN ('bulk-63','bulk-64')")
+            db.execute("UPDATE contacts SET stage='Negociação',lead_profile='Lojista' WHERE id=?",(other['id'],))
+        filters={'profile':'Lojista','owner':'grasi'}
+        first=self.get(view='contacts',**filters).json
+        self.assertNotIn('bulk-65',{row['id'] for row in first['contacts']})
+        selected=self.get(view='contacts',filter_stage='Negociação',**filters).json
+        self.assertEqual({row['id'] for row in selected['contacts']},{'bulk-63','bulk-64','bulk-65'})
+        self.assertEqual((selected['pages']['list']['total'],selected['stats']['total']),(3,3))
+        mapped=self.get(view='map',filter_stage='Negociação',**filters).json
+        self.assertEqual((mapped['map_total'],mapped['pending_total'],mapped['stats']['total']),(2,1,3))
+        legacy=self.get(view='map',stage='Negociação',**filters).json
+        self.assertEqual((legacy['map_total'],legacy['pending_total']),(2,1))
+        self.assertEqual(self.get('grasi',view='contacts',filter_stage='Negociação',owner='chai').json['stats']['total'],0)
+        self.post('grasi','/api/followups',{'id':'bulk-65','version':0,'mode':'promised','next_on':'2026-12-10'})
+        combined={**filters,'filter_stage':'Negociação','date':'range','from':'2026-12-10','to':'2026-12-10'}
+        self.assertEqual([row['id'] for row in self.get(view='contacts',**combined).json['contacts']],['bulk-65'])
+        mapped=self.get(view='map',**combined).json
+        self.assertEqual((mapped['map_total'],mapped['pending_total'],mapped['stats']['total']),(0,1,1))
+
     def test_activity_counts_follow_insert_edit_move_and_delete_without_rescanning_history(self):
         first=self.create('grasi');second=self.create('chai')
         with server.database(self.app) as db:
@@ -171,7 +194,8 @@ class WorkspaceTest(unittest.TestCase):
         self.post('grasi','/api/followups',{'id':c['id'],'version':0,'action':'record_step','step':'D3'})
         previous=self.get('grasi');self.assertEqual(previous.json['contacts'][0]['followup']['next_key'],'D7')
         with server.database(self.app) as db:original=tuple(db.execute('SELECT * FROM contacts WHERE id=?',(c['id'],)).fetchone())
-        with patch('server.RELEASE','2026.11.23.2'),patch.dict(followups.SEQUENCES,{'Lojista':(0,1,3,8,14,30)}):
+        next_revision=server.RELEASE.rsplit('.',1)[0]+'.'+str(int(server.RELEASE.rsplit('.',1)[1])+1)
+        with patch('server.RELEASE',next_revision),patch.dict(followups.SEQUENCES,{'Lojista':(0,1,3,8,14,30)}):
             server.create_app(dict(self.app.config))
             current=self.get('grasi',headers={'If-None-Match':previous.headers['ETag']})
             self.assertEqual(current.status_code,200)
