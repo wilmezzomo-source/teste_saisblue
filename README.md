@@ -20,7 +20,7 @@
 
 **Atendimento:** “comprar para mim”, “pra mim” e variações de uso próprio identificam Consumidor Final. A finalidade explícita da compra prevalece sobre a profissão declarada; finalidades conflitantes exigem esclarecimento. A confirmação final apenas informa que o atendimento foi registrado e uma consultora entrará em contato, sem nome. A responsável continua registrada internamente no CRM.
 
-Versão 2026.11.23.1 validada em **216 testes no Windows** e no Chromium, incluindo a instalação pelo aplicativo a partir do canal público. Evidências em [VALIDACAO-DESEMPENHO-CRM.md](VALIDACAO-DESEMPENHO-CRM.md) e medições em [DESEMPENHO-CRM.md](DESEMPENHO-CRM.md). Depois de atualizar o servidor, recarregue a página do CRM nos computadores da equipe.
+Código da versão 2026.11.23.2 validado em **217 testes no Windows** e no Chromium. O canal público e a integridade do pacote foram conferidos. Evidências do filtro em [VALIDACAO-FILTRO-POR-ETAPA.md](VALIDACAO-FILTRO-POR-ETAPA.md); medições de desempenho em [DESEMPENHO-CRM.md](DESEMPENHO-CRM.md). Depois de atualizar o servidor, recarregue a página do CRM nos computadores da equipe.
 
 No Windows, use **SaisBlue-Atualizador.exe**: detecta a instalação, baixa e confere o pacote, para somente os processos do CRM, faz backup, atualiza e reinicia em segundo plano. Cria um atalho com opções de abrir, iniciar/reconectar e parar. Veja [ATUALIZAR-COM-UM-APLICATIVO.md](ATUALIZAR-COM-UM-APLICATIVO.md). O aplicativo usa o Python e o banco já instalados, sem extrair ZIP manualmente. Inclui os ajustes de qualificação e tags da versão anterior.
 

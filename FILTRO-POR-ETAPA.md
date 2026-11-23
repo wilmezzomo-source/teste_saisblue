@@ -12,7 +12,7 @@ Cada atendente continua acessando apenas a própria carteira. O administrador or
 
 O teste de API usa contatos localizados e sem cidade, em etapas diferentes e de responsáveis diferentes. Confere uma etapa cujos registros estão fora da primeira página, soma correta, combinação com perfil/responsável/data e compatibilidade com o parâmetro anterior do mapa. O teste de navegador verifica o mesmo seletor nas duas abas, manutenção da seleção ao alternar entre elas, totais/pins, acesso restrito da atendente, ausência de filtro oculto no funil e tela de 390px.
 
-A validação Windows e a identificação do pacote são registradas na publicação do canal do atualizador.
+O código passou em 217 testes no Windows, na interface Chromium e nas verificações do service worker. O pacote e o canal público foram conferidos. Veja [VALIDACAO-FILTRO-POR-ETAPA.md](VALIDACAO-FILTRO-POR-ETAPA.md) para as evidências e os limites dessa validação.
 
 ## Aplicar
 
