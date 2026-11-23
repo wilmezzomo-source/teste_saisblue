@@ -54,7 +54,7 @@ A contagem de consultas foi medida separadamente dos tempos. A API usa mediana d
 
 O ensaio Chromium cobre os fluxos existentes e as novas páginas, marcadores condicionais, atualização de outro card sem substituir um card inalterado, acesso à ficha fora da página e mensagens/atividades anteriores sem perder rascunho. A sintaxe JavaScript e os testes de privacidade do service worker são verificados antes da publicação.
 
-A validação Windows e o pacote imutável serão registrados junto da ativação do canal. Os dados de clientes reais e os recursos de CPU/RAM/disco/rede do servidor da empresa não foram acessados neste ambiente. Não houve contato com leads reais ou alterações nas credenciais Meta.
+Os 216 testes também passaram no Windows, incluindo a instalação do pacote pelo aplicativo. As execuções, o commit imutável e a integridade estão em [VALIDACAO-DESEMPENHO-CRM.md](VALIDACAO-DESEMPENHO-CRM.md). Os dados de clientes reais e os recursos de CPU/RAM/disco/rede do servidor da empresa não foram acessados neste ambiente. Não houve contato com leads reais ou alterações nas credenciais Meta.
 
 ## Aplicar no servidor
 
